@@ -1,0 +1,158 @@
+#pragma once
+
+// =============================================================================
+// MANTLE - Game Configuration (from GDD v1.0)
+// =============================================================================
+
+#include "platform/platform.h"
+
+namespace Config {
+
+// =============================================================================
+// Render
+// =============================================================================
+// World/UI coordinates are in "game units" (320x180). The render target is RENDER_SCALE
+// times larger (1280x720) and sprite sheets / tileset hold ASSET_SCALE texels per unit,
+// so gameplay, HUD layout and tile logic never see the resolution change.
+constexpr int GAME_WIDTH     = 320;   // Logical resolution (game units)
+constexpr int GAME_HEIGHT    = 180;   // 16:9 aspect ratio
+constexpr int RENDER_SCALE   = 4;     // Render-target pixels per game unit (1280x720 target)
+constexpr int ASSET_SCALE    = 4;     // Texels per game unit in sprite sheets / tileset (128 px frames, 64 px tiles)
+constexpr int WINDOW_SCALE   = 4;     // Default window = 1280x720
+constexpr int WINDOW_WIDTH   = GAME_WIDTH * WINDOW_SCALE;
+constexpr int WINDOW_HEIGHT  = GAME_HEIGHT * WINDOW_SCALE;
+constexpr int TARGET_FPS     = 60;
+constexpr float FIXED_DT     = 1.0f / TARGET_FPS;
+constexpr int MIN_FPS        = 30;
+
+// =============================================================================
+// Player - Elias
+// =============================================================================
+constexpr float ELIAS_HP          = 80.0f;
+constexpr float ELIAS_SPEED       = 100.0f;  // pixels/sec at base resolution
+constexpr float ELIAS_DAMAGE      = 12.0f;
+constexpr int   ELIAS_MIRACLE_SLOTS = 1;     // 2 from chapter 4+
+
+// =============================================================================
+// Player - Eliseo
+// =============================================================================
+constexpr float ELISEO_HP         = 100.0f;
+constexpr float ELISEO_SPEED      = 100.0f;
+constexpr float ELISEO_DAMAGE     = 10.0f;
+constexpr int   ELISEO_MIRACLE_SLOTS = 2;    // "Doble Porcion" from start
+
+// =============================================================================
+// Faith System - "El Celo del Senor"
+// =============================================================================
+constexpr float FAITH_MAX         = 100.0f;
+constexpr float FAITH_INITIAL     = 50.0f;   // Start at "Siervo Fiel"
+
+// Thresholds
+constexpr float FAITH_LEVEL_0     = 0.0f;    // Bajo la Retama: -30% dmg, no miracles
+constexpr float FAITH_LEVEL_1     = 10.0f;   // En el Desierto: -15% dmg, Tier 1 only
+constexpr float FAITH_LEVEL_2     = 25.0f;   // Fe Vacilante: normal, Tier 1-2
+constexpr float FAITH_LEVEL_3     = 50.0f;   // Siervo Fiel: +10% dmg, Tier 1-3
+constexpr float FAITH_LEVEL_4     = 75.0f;   // Profeta Ungido: +25% dmg, Tier 1-4
+constexpr float FAITH_LEVEL_5     = 90.0f;   // Fuego del Cielo: +40% dmg, powered miracles
+
+// Faith gain
+constexpr float FAITH_DESTROY_ALTAR   = 8.0f;
+constexpr float FAITH_KILL_PROPHET    = 3.0f;
+constexpr float FAITH_ROOM_NO_DAMAGE  = 2.0f;
+constexpr float FAITH_PRAY_ALTAR      = 10.0f;
+constexpr float FAITH_HELP_WIDOW      = 5.0f;
+constexpr float FAITH_DEFEAT_BOSS     = 15.0f;
+
+// Faith loss
+constexpr float FAITH_TAKE_DAMAGE     = -1.0f;  // per hit
+constexpr float FAITH_FLEE            = -5.0f;
+constexpr float FAITH_INACTIVITY_RATE = -0.5f;   // per 10 seconds
+
+// =============================================================================
+// Combat
+// =============================================================================
+constexpr float DASH_DURATION     = 0.15f;   // seconds
+constexpr float DASH_SPEED        = 500.0f;
+constexpr float DASH_COOLDOWN     = 0.8f;
+constexpr float IFRAMES_DURATION  = 0.3f;    // invulnerability after dash
+
+constexpr float PROJECTILE_SPEED  = 280.0f;
+constexpr float PROJECTILE_RANGE  = 120.0f;  // Max distance in pixels before despawn
+constexpr float ATTACK_COOLDOWN   = 0.25f;
+
+// =============================================================================
+// Enemies - Act I (from GDD)
+// =============================================================================
+// Soldado de Acab
+constexpr float ENEMY_SOLDIER_HP     = 20.0f;
+constexpr float ENEMY_SOLDIER_DMG    = 8.0f;
+
+// Arquero Real
+constexpr float ENEMY_ARCHER_HP      = 15.0f;
+constexpr float ENEMY_ARCHER_DMG     = 10.0f;
+
+// Profeta de Baal
+constexpr float ENEMY_PROPHET_HP     = 35.0f;
+constexpr float ENEMY_PROPHET_DMG    = 12.0f;
+
+// Leon del Desierto
+constexpr float ENEMY_LION_HP        = 40.0f;
+constexpr float ENEMY_LION_DMG       = 18.0f;
+
+// =============================================================================
+// Enemies - Act II
+// =============================================================================
+constexpr float ENEMY_SYRIAN_HP      = 25.0f;
+constexpr float ENEMY_SYRIAN_DMG     = 10.0f;
+
+constexpr float ENEMY_GENERAL_HP     = 60.0f;
+constexpr float ENEMY_GENERAL_DMG    = 18.0f;
+
+constexpr float ENEMY_LEPER_HP       = 20.0f;
+constexpr float ENEMY_LEPER_DMG      = 8.0f;
+
+constexpr float ENEMY_WATER_HP       = 35.0f;
+constexpr float ENEMY_WATER_DMG      = 10.0f;
+
+// =============================================================================
+// Rooms
+// =============================================================================
+constexpr int ROOM_WIDTH          = GAME_WIDTH;
+constexpr int ROOM_HEIGHT         = GAME_HEIGHT;
+constexpr int TILE_SIZE           = 16;
+constexpr int ROOM_TILES_X        = GAME_WIDTH / TILE_SIZE;   // 20
+constexpr int ROOM_TILES_Y        = GAME_HEIGHT / TILE_SIZE;  // 11 (+ remainder)
+constexpr int MAX_ENEMIES_PER_ROOM = 12;
+
+// =============================================================================
+// Run / Session
+// =============================================================================
+constexpr float RUN_DURATION_MIN  = 20.0f * 60.0f;  // 20 min in seconds
+constexpr float RUN_DURATION_MAX  = 35.0f * 60.0f;  // 35 min in seconds
+constexpr int   CHAPTERS_ACT_I   = 5;
+constexpr int   CHAPTERS_ACT_II  = 5;
+
+// =============================================================================
+// Mobile-specific
+// =============================================================================
+constexpr float MOBILE_ENEMY_SPEED_MULT  = 0.9f;   // -10% enemy speed on mobile
+constexpr float WATER_SPEED_MULT         = 0.6f;   // Wading through a shallow-water tile
+constexpr float MOBILE_AUTOAIM_RANGE     = 80.0f;   // pixels
+constexpr float MOBILE_SAVE_TIMEOUT_H    = 48.0f;   // hours before run expires
+constexpr float MOBILE_ABANDONED_REWARD  = 0.5f;    // 50% offerings from abandoned runs
+
+// =============================================================================
+// Inheritance (Elias -> Eliseo transition)
+// =============================================================================
+constexpr float INHERITANCE_FAITH_RATIO  = 0.5f;    // 50% of accumulated faith
+constexpr float INHERITED_MIRACLE_POWER  = 0.7f;    // Elias miracles at 70% power for Eliseo
+
+// =============================================================================
+// Sprite sizes (in pixels, base resolution)
+// =============================================================================
+constexpr int SPRITE_CHAR_SIZE  = 32;  // Characters: 32x32
+constexpr int SPRITE_ENEMY_SIZE = 32;  // Enemies: 32x32
+constexpr int SPRITE_TILE_SIZE  = 16;  // Tiles: 16x16
+constexpr int SPRITE_ITEM_SIZE  = 16;  // Items: 16x16
+
+} // namespace Config
