@@ -52,27 +52,27 @@ inline MiracleDef get_miracle_def(MiracleID id) {
     switch (id) {
         // Elias
         case MiracleID::CuervosDeQuerit:
-            return {"Cuervos de Querit", "Los cuervos traen sanacion", 5, 1, Prophet::Elias, 8.0f, 0};
+            return {"Cuervos de Querit", "Los cuervos traen sanación", 5, 1, Prophet::Elias, 8.0f, 0};
         case MiracleID::PalabraDeSequia:
-            return {"Palabra de Sequia", "Ralentiza enemigos 50%", 8, 1, Prophet::Elias, 12.0f, 5.0f};
+            return {"Palabra de Sequía", "Ralentiza enemigos 50%", 8, 1, Prophet::Elias, 12.0f, 5.0f};
         case MiracleID::FuegoDelCielo:
-            return {"Fuego del Cielo", "Fuego divino AOE", 20, 3, Prophet::Elias, 20.0f, 0};
+            return {"Fuego del Cielo", "Fuego divino en área", 20, 3, Prophet::Elias, 20.0f, 0};
         case MiracleID::CarroDeFuego:
-            return {"Carro de Fuego", "Dash devastador", 25, 3, Prophet::Elias, 25.0f, 0};
+            return {"Carro de Fuego", "Embestida devastadora", 25, 3, Prophet::Elias, 25.0f, 0};
         case MiracleID::AltarConsumido:
             return {"Altar Consumido", "Destruye toda la pantalla", 30, 4, Prophet::Elias, 45.0f, 0};
 
         // Eliseo
         case MiracleID::SanarAguas:
-            return {"Sanar Aguas", "Zona de curacion 5 HP/s", 5, 1, Prophet::Eliseo, 10.0f, 6.0f};
+            return {"Sanar Aguas", "Zona de curación 5 HP/s", 5, 1, Prophet::Eliseo, 10.0f, 6.0f};
         case MiracleID::AceiteInagotable:
-            return {"Aceite Inagotable", "Consumibles duplicados", 12, 2, Prophet::Eliseo, 30.0f, 15.0f};
+            return {"Aceite Inagotable", "+2 usos del consumible", 12, 2, Prophet::Eliseo, 30.0f, 15.0f};
         case MiracleID::OjosAbiertos:
-            return {"Ojos Abiertos", "Revela objetos y trampas ocultas", 15, 2, Prophet::Eliseo, 20.0f, 10.0f};
+            return {"Ojos Abiertos", "Revela el mapa del capítulo", 15, 2, Prophet::Eliseo, 20.0f, 10.0f};
         case MiracleID::EjercitoCelestial:
-            return {"Ejercito Celestial", "Invoca 3 guerreros celestiales", 22, 3, Prophet::Eliseo, 35.0f, 10.0f};
+            return {"Ejército Celestial", "Invoca 3 guerreros celestiales", 22, 3, Prophet::Eliseo, 35.0f, 10.0f};
         case MiracleID::DoblePorcion:
-            return {"Doble Porcion", "Duplica stats por 15 segundos", 30, 4, Prophet::Eliseo, 60.0f, 15.0f};
+            return {"Doble Porción", "Duplica tus fuerzas 15 segundos", 30, 4, Prophet::Eliseo, 60.0f, 15.0f};
 
         default:
             return {"???", "???", 0, 0, Prophet::Elias, 0, 0};

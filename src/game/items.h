@@ -27,6 +27,17 @@ enum class ItemRarity : u8 {
     Legendary  // Relics are always legendary
 };
 
+// Color de rareza: lo usan el HUD (marcos de las cartas y de la fila de objetos) y el
+// Codice. Vive aqui para que las dos pantallas no se desincronicen.
+inline Color item_rarity_color(ItemRarity r) {
+    switch (r) {
+        case ItemRarity::Common:    return {200, 195, 185, 255};
+        case ItemRarity::Uncommon:  return {120, 210, 120, 255};
+        case ItemRarity::Rare:      return {110, 175, 245, 255};
+        default:                    return {245, 205, 90, 255};   // Legendary (reliquias)
+    }
+}
+
 // =============================================================================
 // Item Definition
 // =============================================================================
@@ -44,6 +55,10 @@ struct ItemDef {
     f32 speed_bonus;
     f32 faith_bonus;
     f32 attack_speed_bonus;  // Negative = faster
+
+    // Ultimo a proposito: los inicializadores de arriba lo dejan en false sin tocarlos.
+    // true = solo se gana en un encuentro biblico, nunca sale en las cartas de eleccion.
+    bool event_only;
 };
 
 // =============================================================================
@@ -58,24 +73,24 @@ struct ItemRegistry {
             "Ataque a distancia secundario", ItemCategory::Weapon,
             ItemRarity::Common, false, 0, 5, 0, 0, 0});
 
-        items.push_back({1, "Vara de Aaron",
-            "Ataque melee con alcance extra", ItemCategory::Weapon,
+        items.push_back({1, "Vara de Aarón",
+            "Ataque cuerpo a cuerpo de largo alcance", ItemCategory::Weapon,
             ItemRarity::Uncommon, false, 0, 8, 0, 0, -0.05f});
 
         // === PASSIVES ===
-        items.push_back({2, "Pan de Cada Dia",
-            "+10 HP maximo", ItemCategory::Passive,
+        items.push_back({2, "Pan de Cada Día",
+            "+10 HP máximo", ItemCategory::Passive,
             ItemRarity::Common, false, 10, 0, 0, 0, 0});
 
-        items.push_back({3, "Aceite de la Uncion",
-            "+5% dano, +5 Fe", ItemCategory::Passive,
+        items.push_back({3, "Aceite de la Unción",
+            "+5% daño, +5 Fe", ItemCategory::Passive,
             ItemRarity::Uncommon, false, 0, 2, 0, 5, 0});
 
         items.push_back({4, "Sandalias del Profeta",
             "+15% velocidad", ItemCategory::Passive,
             ItemRarity::Common, false, 0, 0, 30, 0, 0});
 
-        items.push_back({5, "Mana del Cielo",
+        items.push_back({5, "Maná del Cielo",
             "+20 HP, +3 Fe", ItemCategory::Passive,
             ItemRarity::Rare, false, 20, 0, 0, 3, 0});
 
@@ -85,21 +100,21 @@ struct ItemRegistry {
             ItemRarity::Legendary, false, 0, 0, 0, 0, 0});
 
         items.push_back({7, "Arca del Pacto",
-            "+50% dano de milagros", ItemCategory::Relic,
+            "+50% daño de milagros", ItemCategory::Relic,
             ItemRarity::Legendary, false, 0, 0, 0, 0, 0});
 
         // === CONSUMABLES ===
         items.push_back({8, "Vino Nuevo",
-            "+25% dano por 30s", ItemCategory::Consumable,
+            "+25% daño por 30s", ItemCategory::Consumable,
             ItemRarity::Common, false, 0, 0, 0, 0, 0});
 
-        items.push_back({9, "Agua del Jordan",
+        items.push_back({9, "Agua del Jordán",
             "Cura 30 HP", ItemCategory::Consumable,
             ItemRarity::Common, false, 0, 0, 0, 0, 0});
 
         // === HEREDABLES ===
         items.push_back({10, "Antorcha del Altar",
-            "+3 dano (pasa a Eliseo)", ItemCategory::Passive,
+            "+3 daño (pasa a Eliseo)", ItemCategory::Passive,
             ItemRarity::Uncommon, true, 0, 3, 0, 0, 0});
 
         items.push_back({11, "Piedra del Memorial",
@@ -109,6 +124,15 @@ struct ItemRegistry {
         items.push_back({12, "Ceniza del Carmelo",
             "+8 Fe inicial (pasa a Eliseo)", ItemCategory::Passive,
             ItemRarity::Rare, true, 0, 0, 0, 8, 0});
+
+        // === SOLO DE ENCUENTRO (game/events.h) — no entran en el sorteo de cartas ===
+        items.push_back({13, "Tinaja de Harina",
+            "+15 HP máximo (pasa a Eliseo)", ItemCategory::Passive,
+            ItemRarity::Rare, true, 15, 0, 0, 0, 0, true});
+
+        items.push_back({14, "Vasija de Aceite",
+            "+4 daño (pasa a Eliseo)", ItemCategory::Passive,
+            ItemRarity::Rare, true, 0, 4, 0, 0, 0, true});
     }
 
     const ItemDef* get(u32 id) const {
@@ -148,6 +172,7 @@ struct ItemRegistry {
         std::vector<int> weights;
         int total = 0;
         for (auto& it : items) {
+            if (it.event_only) continue;   // se ganan hablando, no eligiendo
             if (std::find(owned.begin(), owned.end(), it.id) != owned.end()) continue;
             pool.push_back(it.id);
             int w = weight(it.rarity);

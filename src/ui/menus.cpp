@@ -19,7 +19,6 @@ void MenuSystem::render(Renderer& renderer) {
         case MenuScreen::Title:     render_title(renderer); break;
         case MenuScreen::PauseMenu: render_pause(renderer); break;
         case MenuScreen::GameOver:  render_game_over(renderer); break;
-        case MenuScreen::Ascension: render_ascension(renderer); break;
         case MenuScreen::Victory:   render_victory(renderer); break;
         case MenuScreen::Settings:  render_settings(renderer); break;
         case MenuScreen::Controls:  render_controls(renderer); break;
@@ -49,11 +48,12 @@ void MenuSystem::render_title(Renderer& renderer) {
 
     // Subtitle
     renderer.draw_text_centered("El Manto del Profeta", 56, {180, 160, 120, 200});
-    renderer.draw_text_centered("Desafia reyes. Destruye altares. Hereda el manto.", 70, {120, 105, 80, 200}, 0.75f);
+    renderer.draw_text_centered("Desafía reyes. Destruye altares. Hereda el manto.", 70, {120, 105, 80, 200}, 0.75f);
 
     // Menu options
-    option_count = 4;
-    const char* options[] = {"Nueva Partida", "Continuar", "Opciones", "Controles"};
+    option_count = 6;
+    const char* options[] = {"Nueva Partida", "Continuar", "El Santuario", "El Códice",
+                             "Opciones", "Controles"};
 
     for (int i = 0; i < option_count; i++) {
         Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 130, 120, 255};
@@ -67,10 +67,16 @@ void MenuSystem::render_title(Renderer& renderer) {
 
         char buf[64];
         snprintf(buf, sizeof(buf), "%s%s", prefix, options[i]);
-        renderer.draw_text_centered(buf, 95.0f + i * 14.0f, c);
+        renderer.draw_text_centered(buf, 90.0f + i * 11.0f, c, 0.95f);
     }
 
-    renderer.draw_text_centered("[ENTER] Seleccionar", 162, {100, 90, 80, 180});
+    // Ofrendas acumuladas: es lo que se gasta en El Santuario
+    if (offerings > 0) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "%d ofrendas", offerings);
+        renderer.draw_text_centered(buf, 158, {200, 175, 115, 220}, 0.75f);
+    }
+    renderer.draw_text_centered("[ENTER] Seleccionar", 168, {100, 90, 80, 180}, 0.8f);
 }
 
 void MenuSystem::render_pause(Renderer& renderer) {
@@ -81,8 +87,8 @@ void MenuSystem::render_pause(Renderer& renderer) {
 
     renderer.draw_text_centered("PAUSA", 50, Color::white(), 2);
 
-    option_count = 3;
-    const char* options[] = {"Reanudar", "Opciones", "Salir"};
+    option_count = 4;
+    const char* options[] = {"Reanudar", "El Códice", "Opciones", "Salir"};
 
     for (int i = 0; i < option_count; i++) {
         Color c = (i == selected_option) ? Color::elias_gold() : Color{180, 180, 180, 255};
@@ -95,26 +101,28 @@ void MenuSystem::render_pause(Renderer& renderer) {
 void MenuSystem::render_game_over(Renderer& renderer) {
     renderer.clear({15, 8, 8, 255});
 
-    renderer.draw_text_centered("DERROTA", 50, {192, 57, 43, 255}, 2);
-    renderer.draw_text_centered("El profeta ha caido", 80, {160, 120, 120, 255});
+    renderer.draw_text_centered("DERROTA", 44, {192, 57, 43, 255}, 2);
+    renderer.draw_text_centered("El profeta ha caído", 72, {160, 120, 120, 255});
 
-    char buf[64];
-    snprintf(buf, sizeof(buf), "Capitulo %d  -  %d enemigos  -  %d:%02d",
+    char buf[80];
+    snprintf(buf, sizeof(buf), "Capítulo %d  ·  %d enemigos  ·  %d:%02d",
              stats_chapter, stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
-    renderer.draw_text_centered(buf, 100, {170, 150, 130, 255}, 0.9f);
-    renderer.draw_text_centered("[R] Reintentar capitulo", 128, {220, 190, 120, 230});
-    renderer.draw_text_centered("[ENTER] Volver al menu", 144, {100, 90, 80, 200});
-}
+    renderer.draw_text_centered(buf, 92, {170, 150, 130, 255}, 0.9f);
 
-void MenuSystem::render_ascension(Renderer& renderer) {
-    renderer.clear({255, 240, 200, 255});
+    // Menu de verdad: morir y volver al menu por error costaba la partida entera
+    option_count = 2;
+    const char* options[] = {"Reintentar capítulo", "Volver al menú"};
+    for (int i = 0; i < option_count; i++) {
+        Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 122, 112, 255};
+        char line[64];
+        snprintf(line, sizeof(line), "%s%s", (i == selected_option) ? "> " : "  ", options[i]);
+        renderer.draw_text_centered(line, 118.0f + i * 14.0f, c);
+    }
 
-    renderer.draw_text_centered("LA ASCENSION", 34, Color::elias_gold(), 2);
-    renderer.draw_text_centered("Elias sube al cielo en un carro de fuego.", 66, {120, 100, 60, 255}, 0.9f);
-    renderer.draw_text_centered("El manto cae sobre Eliseo.", 80, {120, 100, 60, 255});
-    renderer.draw_text_centered("\"Doble porcion de tu espiritu\"", 96, {120, 100, 60, 200});
-    renderer.draw_text_centered("Heredas la mitad de la fe y dos milagros", 116, {130, 110, 70, 220}, 0.75f);
-    renderer.draw_text_centered("[ENTER] Continuar como Eliseo", 150, {120, 100, 60, 220});
+    renderer.draw_text_centered("Tu partida sigue guardada al principio del capítulo",
+                                152, {125, 110, 98, 210}, 0.7f);
+    renderer.draw_text_centered("[W/S] elegir   [ENTER] aceptar   [R] reintentar",
+                                168, {100, 90, 80, 190}, 0.75f);
 }
 
 void MenuSystem::render_victory(Renderer& renderer) {
@@ -122,13 +130,13 @@ void MenuSystem::render_victory(Renderer& renderer) {
 
     renderer.draw_text_centered("EL LEGADO", 40, {245, 225, 150, 255}, 2);
     renderer.draw_text_centered("Israel ha visto la mano de Dios", 72, {200, 200, 220, 255});
-    renderer.draw_text_centered("Elias y Eliseo cumplieron su llamado", 86, {160, 170, 200, 220});
+    renderer.draw_text_centered("Elías y Eliseo cumplieron su llamado", 86, {160, 170, 200, 220});
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "%d enemigos  -  tiempo %d:%02d",
+    snprintf(buf, sizeof(buf), "%d enemigos  ·  tiempo %d:%02d",
              stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
     renderer.draw_text_centered(buf, 110, {170, 180, 200, 255}, 0.9f);
-    renderer.draw_text_centered("[ENTER] Volver al menu", 150, {120, 130, 150, 220});
+    renderer.draw_text_centered("[ENTER] Volver al menú", 150, {120, 130, 150, 220});
 }
 
 void MenuSystem::render_settings(Renderer& renderer) {
@@ -145,7 +153,7 @@ void MenuSystem::render_settings(Renderer& renderer) {
     renderer.draw_text_centered("OPCIONES", 30, Color::elias_gold(), 2);
 
     option_count = 4;
-    const char* labels[] = {"Musica", "Efectos", "Auto-mira", "Volver"};
+    const char* labels[] = {"Música", "Efectos", "Auto-mira", "Volver"};
     f32 volumes[] = {settings_music_vol, settings_sfx_vol, 0.0f, 0.0f};
 
     for (int i = 0; i < option_count; i++) {
@@ -198,14 +206,15 @@ void MenuSystem::render_controls(Renderer& renderer) {
     renderer.draw_text_centered("Movimiento", 50, label);
     renderer.draw_text_centered("WASD / Flechas", 62, value);
 
-    renderer.draw_text_centered("Ataque", 78, label);
-    renderer.draw_text_centered("K (mantener) - dispara hacia donde te mueves", 90, value);
+    renderer.draw_text_centered("Ataque", 74, label);
+    renderer.draw_text_centered("K (mantener) — dispara hacia donde te mueves", 86, value, 0.9f);
 
-    renderer.draw_text_centered("Dash", 106, label);
-    renderer.draw_text_centered("ESPACIO / J", 118, value);
+    renderer.draw_text_centered("Arma secundaria", 100, label);
+    renderer.draw_text_centered("I / clic derecho — Honda o Vara, si la llevas", 112, value, 0.9f);
 
-    renderer.draw_text_centered("Milagros: Q / E   Mapa: TAB   Pausa: ESC", 138, value, 0.8f);
-    renderer.draw_text_centered("Objetivo: limpia salas, llega al JEFE y cruza el arco", 150, label, 0.75f);
+    renderer.draw_text_centered("Dash: ESPACIO / J     Consumible: R     Orar: P", 130, value, 0.8f);
+    renderer.draw_text_centered("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", 142, value, 0.8f);
+    renderer.draw_text_centered("Objetivo: limpia salas, llega al JEFE y cruza el arco", 156, label, 0.75f);
 
-    renderer.draw_text_centered("[ENTER/ESC] Volver", 166, {100, 90, 80, 180});
+    renderer.draw_text_centered("[ENTER/ESC] Volver", 170, {100, 90, 80, 180}, 0.85f);
 }

@@ -59,15 +59,15 @@ bool Renderer::bake_atlas(FontAtlas& atlas, const char* full_path, f32 ptsize, i
     TTF_SetFontHinting(font, TTF_HINTING_LIGHT);
     const int line_h = TTF_GetFontHeight(font);
     const int cell_h = line_h + 2 * outline_px + 2;
-    // Cell width: widest advance (+ outline + margin); 16 columns x 6 rows
+    // Cell width: widest advance (+ outline + margin); 16 columns, rows to fit the charset
     int max_adv = 1;
-    for (int c = 32; c < 127; c++) {
+    for (int i = 0; i < GLYPH_COUNT; i++) {
         int minx, maxx, miny, maxy, adv;
-        if (TTF_GetGlyphMetrics(font, static_cast<Uint32>(c), &minx, &maxx, &miny, &maxy, &adv))
+        if (TTF_GetGlyphMetrics(font, glyph_codepoint(i), &minx, &maxx, &miny, &maxy, &adv))
             max_adv = std::max(max_adv, std::max(adv, maxx - std::min(minx, 0)));
     }
     const int cell_w = max_adv + 2 * outline_px + 6;
-    const int cols = 16, rows = 6;
+    const int cols = 16, rows = (GLYPH_COUNT + cols - 1) / cols;
     SDL_Surface* fill = SDL_CreateSurface(cols * cell_w, rows * cell_h, SDL_PIXELFORMAT_RGBA32);
     SDL_Surface* outl = SDL_CreateSurface(cols * cell_w, rows * cell_h, SDL_PIXELFORMAT_RGBA32);
     if (!fill || !outl) {
@@ -80,21 +80,26 @@ bool Renderer::bake_atlas(FontAtlas& atlas, const char* full_path, f32 ptsize, i
     SDL_FillSurfaceRect(outl, nullptr, 0);
     const SDL_Color white = {255, 255, 255, 255};
 
-    for (int c = 32; c < 127; c++) {
-        Glyph& g = atlas.glyphs[c - 32];
+    int missing = 0;
+    for (int i = 0; i < GLYPH_COUNT; i++) {
+        Glyph& g = atlas.glyphs[i];
+        g = Glyph{};
+        const Uint32 cp = glyph_codepoint(i);
         int minx = 0, maxx = 0, miny = 0, maxy = 0, adv = 0;
-        TTF_GetGlyphMetrics(font, static_cast<Uint32>(c), &minx, &maxx, &miny, &maxy, &adv);
+        // A font without this codepoint leaves advance at 0, and glyph_for() then skips it
+        // instead of leaving a blank gap in the middle of a word.
+        if (!TTF_GetGlyphMetrics(font, cp, &minx, &maxx, &miny, &maxy, &adv)) {
+            missing++;
+            continue;
+        }
         g.advance = static_cast<f32>(adv);
         g.xoff = static_cast<f32>(std::min(minx, 0));
-        const int i = c - 32;
         const int cx = (i % cols) * cell_w + outline_px + 1;
         const int cy = (i / cols) * cell_h + outline_px + 1;
-        g.src = {0, 0, 0, 0};
-        g.src_out = {0, 0, 0, 0};
 
         // Fill glyph
         TTF_SetFontOutline(font, 0);
-        SDL_Surface* gs = TTF_RenderGlyph_Blended(font, static_cast<Uint32>(c), white);
+        SDL_Surface* gs = TTF_RenderGlyph_Blended(font, cp, white);
         if (gs) {
             SDL_Rect dst = {cx, cy, gs->w, gs->h};
             SDL_SetSurfaceBlendMode(gs, SDL_BLENDMODE_NONE);
@@ -105,7 +110,7 @@ bool Renderer::bake_atlas(FontAtlas& atlas, const char* full_path, f32 ptsize, i
         // Outline glyph (bigger by outline_px on every side)
         if (outline_px > 0) {
             TTF_SetFontOutline(font, outline_px);
-            SDL_Surface* os = TTF_RenderGlyph_Blended(font, static_cast<Uint32>(c), white);
+            SDL_Surface* os = TTF_RenderGlyph_Blended(font, cp, white);
             if (os) {
                 SDL_Rect dst = {cx - outline_px, cy - outline_px, os->w, os->h};
                 SDL_SetSurfaceBlendMode(os, SDL_BLENDMODE_NONE);
@@ -139,7 +144,8 @@ bool Renderer::bake_atlas(FontAtlas& atlas, const char* full_path, f32 ptsize, i
     atlas.px = static_cast<f32>(line_h);
     atlas.outline = static_cast<f32>(outline_px);
     atlas.valid = (atlas.texture != TEXTURE_NONE);
-    SDL_Log("Font atlas %.0fpt: line %d px, cell %dx%d, outline %d", ptsize, line_h, cell_w, cell_h, outline_px);
+    SDL_Log("Font atlas %.0fpt: line %d px, cell %dx%d, outline %d, %d/%d glyphs (%d missing)",
+            ptsize, line_h, cell_w, cell_h, outline_px, GLYPH_COUNT - missing, GLYPH_COUNT, missing);
     return atlas.valid;
 }
 
@@ -375,9 +381,11 @@ void Renderer::draw_rect_outline(Rect rect, Color color) {
     draw_rect(rect, color, false);
 }
 
-static inline const Glyph* glyph_for(const FontAtlas& fa, unsigned char ch) {
-    if (ch < 32 || ch > 126) return nullptr;   // non-ASCII bytes are skipped
-    return &fa.glyphs[ch - 32];
+static inline const Glyph* glyph_for(const FontAtlas& fa, u32 cp) {
+    const int i = glyph_index(cp);
+    if (i < 0) return nullptr;                          // outside the baked charset
+    const Glyph& g = fa.glyphs[i];
+    return (g.advance > 0.0f) ? &g : nullptr;           // codepoint the font does not provide
 }
 
 void Renderer::draw_text(const char* text, f32 x, f32 y, Color color, f32 scale) {
@@ -389,8 +397,8 @@ void Renderer::draw_text(const char* text, f32 x, f32 y, Color color, f32 scale)
         // Pass 0: dark outline behind everything, pass 1: fill
         for (int pass = 0; pass < 2; pass++) {
             f32 pen = x;
-            for (const char* p = text; *p; p++) {
-                const Glyph* g = glyph_for(fa, static_cast<unsigned char>(*p));
+            for (const char* p = text; *p; ) {
+                const Glyph* g = glyph_for(fa, utf8_next(p));
                 if (!g) continue;
                 if (pass == 0 && g->src_out.w > 0.0f) {
                     draw_sprite_rect(fa.texture_out, g->src_out,
@@ -422,15 +430,46 @@ void Renderer::draw_text(const char* text, f32 x, f32 y, Color color, f32 scale)
 
 f32 Renderer::measure_text(const char* text, f32 scale) const {
     if (!text) return 0.0f;
-    if (!has_font) return static_cast<f32>(std::strlen(text)) * 8.0f * scale;
+    if (!has_font) {
+        // Debug font: 8x8 per codepoint, not per byte (a tilde is 2 bytes in UTF-8)
+        int n = 0;
+        for (const char* p = text; *p; ) { utf8_next(p); n++; }
+        return static_cast<f32>(n) * 8.0f * scale;
+    }
     const FontAtlas& fa = (scale > 1.25f) ? font_large : font_small;
     const f32 k = (TEXT_LINE_UNITS * scale) / fa.px;
     f32 w = 0.0f;
-    for (const char* p = text; *p; p++) {
-        const Glyph* g = glyph_for(fa, static_cast<unsigned char>(*p));
+    for (const char* p = text; *p; ) {
+        const Glyph* g = glyph_for(fa, utf8_next(p));
         if (g) w += g->advance * k;
     }
     return w;
+}
+
+// Greedy word wrap. Splits on spaces only: a single word longer than `max_w` overflows
+// rather than being cut mid-codepoint.
+int Renderer::wrap_text(const char* text, f32 max_w, f32 scale, std::string* out, int max_lines) const {
+    if (!text || !out || max_lines <= 0) return 0;
+    int lines = 0;
+    std::string cur;
+    const char* p = text;
+    while (*p && lines < max_lines) {
+        const char* space = std::strchr(p, ' ');
+        std::string word = space ? std::string(p, static_cast<size_t>(space - p)) : std::string(p);
+        if (!word.empty()) {
+            std::string candidate = cur.empty() ? word : cur + " " + word;
+            if (!cur.empty() && measure_text(candidate.c_str(), scale) > max_w) {
+                out[lines++] = cur;
+                cur = word;
+            } else {
+                cur = candidate;
+            }
+        }
+        if (!space) break;
+        p = space + 1;
+    }
+    if (!cur.empty() && lines < max_lines) out[lines++] = cur;
+    return lines;
 }
 
 void Renderer::draw_text_centered(const char* text, f32 y, Color color, f32 scale) {

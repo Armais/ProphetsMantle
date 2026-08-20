@@ -1,0 +1,106 @@
+# Verificacion Tracks 3 y 4: Ojos Abiertos, Aceite Inagotable y tercer slot (F)
+# Uso:  MANTLE.exe --script scripts/milagros_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# MiracleID: 0 Cuervos, 1 Sequia, 2 Fuego, 3 Carro, 4 Altar,
+#            5 Sanar Aguas, 6 Aceite Inagotable, 7 Ojos Abiertos,
+#            8 Ejercito Celestial, 9 Doble Porcion
+# ItemDef:   8 Vino Nuevo, 9 Agua del Jordan (los dos consumibles)
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# =============================================================================
+# 3.1 Ojos Abiertos: mapa del capitulo + marcas sobre lo que hay en la sala
+# =============================================================================
+# Antes: solo se ven la sala actual, las adyacentes, INICIO y JEFE
+hold map 0.7
+shot 50_mapa_antes
+wait 0.1
+
+learn 7 1
+faith 100
+wait 0.3
+press m2
+wait 0.5
+# Marcas doradas sobre cada enemigo y azules sobre cada drop de la sala
+shot 51_ojos_marcas
+wait 0.1
+
+hold map 0.7
+# Despues: la rejilla entera, con etiquetas de TESORO / ALTAR / ELITE / RELATO
+shot 52_mapa_revelado
+wait 0.1
+
+# =============================================================================
+# 3.2 Aceite Inagotable: cargas del consumible
+# =============================================================================
+give 9
+wait 0.4
+# Celda del consumible sin numero: una sola carga
+shot 53_consumible_1_carga
+wait 0.1
+
+learn 6 0
+faith 100
+wait 0.3
+press m1
+wait 0.6
+# Ahora la celda debe llevar un 3 (1 + 2 del aceite)
+shot 54_consumible_3_cargas
+wait 0.1
+
+press use
+wait 0.5
+# Y tras usarlo, un 2: la vasija sigue en la mano
+shot 55_consumible_2_cargas
+wait 0.1
+
+# =============================================================================
+# 4. Tercer slot de milagro (tecla F)
+# =============================================================================
+learn 5 0
+learn 7 1
+learn 9 2
+faith 100
+wait 0.5
+# Tres celdas: Q / E / F, sin pisar la caja de mensajes ni la barra de jefe
+shot 56_tres_slots
+wait 0.1
+
+press m3
+wait 0.8
+# Doble Porcion lanzada desde la F: aura dorada alrededor del profeta
+shot 57_slot_f_lanzado
+wait 0.1
+wait 1.0
+
+# --- Guardar y volver a cargar: los tres slots tienen que sobrevivir ---
+press pause
+wait 0.6
+press down
+wait 0.2
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 1.5
+shot 58_menu_tras_guardar
+wait 0.1
+press down
+wait 0.3
+press confirm
+wait 2.5
+# Tres celdas otra vez, con los mismos milagros y el consumible con sus cargas
+shot 59_tras_cargar
+wait 0.1
+stats milagros_fin
+
+quit

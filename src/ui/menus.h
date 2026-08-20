@@ -9,13 +9,12 @@
 
 enum class MenuScreen : u8 {
     Title,
-    CharacterSelect,
     Settings,
     Controls,
     PauseMenu,
     GameOver,
-    Victory,
-    Ascension  // Elias -> Eliseo transition screen
+    Victory
+    // La Ascension ya no es un menu: se narra en GameScene::Story (ui/story.h)
 };
 
 struct MenuSystem {
@@ -25,6 +24,7 @@ struct MenuSystem {
 
     // Continue / Settings state
     bool has_continue = false;
+    int  offerings    = 0;   // Se muestra en el titulo (moneda de El Santuario)
     MenuScreen settings_origin = MenuScreen::Title;
     f32 settings_music_vol = 0.8f;
     f32 settings_sfx_vol   = 1.0f;
@@ -42,7 +42,6 @@ private:
     void render_title(Renderer& renderer);
     void render_pause(Renderer& renderer);
     void render_game_over(Renderer& renderer);
-    void render_ascension(Renderer& renderer);
     void render_victory(Renderer& renderer);
     void render_settings(Renderer& renderer);
     void render_controls(Renderer& renderer);

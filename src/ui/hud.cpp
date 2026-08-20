@@ -71,19 +71,12 @@ static int wrap_text(const Renderer& renderer, const char* text, f32 max_w, f32 
     return lines;
 }
 
-static Color rarity_color(ItemRarity r) {
-    switch (r) {
-        case ItemRarity::Common:    return {200, 195, 185, 255};
-        case ItemRarity::Uncommon:  return {120, 210, 120, 255};
-        case ItemRarity::Rare:      return {110, 175, 245, 255};
-        default:                    return {245, 205, 90, 255};
-    }
-}
+static Color rarity_color(ItemRarity r) { return item_rarity_color(r); }   // game/items.h
 
 static const char* rarity_name(ItemRarity r) {
     switch (r) {
-        case ItemRarity::Common:    return "COMUN";
-        case ItemRarity::Uncommon:  return "POCO COMUN";
+        case ItemRarity::Common:    return "COMÚN";
+        case ItemRarity::Uncommon:  return "POCO COMÚN";
         case ItemRarity::Rare:      return "RARO";
         default:                    return "LEGENDARIO";
     }
@@ -108,7 +101,7 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
 
     renderer.draw_text_centered(title, 12, {245, 205, 90, 255}, 1.3f);
 
-    constexpr f32 CARD_W = 92.0f, CARD_H = 86.0f, GAP = 8.0f, TOP = 34.0f;
+    constexpr f32 CARD_W = 92.0f, CARD_H = 78.0f, GAP = 8.0f, TOP = 38.0f;
     const f32 x0 = (W - (CARD_W * count + GAP * (count - 1))) * 0.5f;
     // Everything inside a card centres on the card, not on the screen
     auto centred = [&renderer](const char* s, f32 cx, f32 y, Color c, f32 sc) {
@@ -136,24 +129,86 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
         f32 cx = x + CARD_W * 0.5f;
         draw_badge(renderer, tileset, card.icon, cx, y + 17.0f, 22.0f);
 
-        // Name (up to 2 lines)
+        // Se mide todo antes de pintar y el bloque se centra bajo el icono: al quitar la
+        // referencia biblica del pie, la carta se quedaba con un tercio vacio abajo.
         char lines[2][40];
         int n = wrap_text(renderer, card.name, CARD_W - 8.0f, 0.8f, lines, 2);
-        for (int l = 0; l < n; l++)
-            centred(lines[l], cx, y + 30.0f + l * 8.0f, on ? TEXT_LIGHT : Color{215, 208, 195, 255}, 0.8f);
+        char dl[4][40];
+        int dn = wrap_text(renderer, card.desc, CARD_W - 8.0f, 0.62f, dl, 4);
 
-        f32 ty = y + 30.0f + n * 8.0f + 3.0f;
+        f32 content_h = n * 8.0f + 3.0f + dn * 6.5f + 2.0f
+                      + (card.tag[0]   ? 7.0f : 0.0f)
+                      + (card.extra[0] ? 7.0f : 0.0f);
+        const f32 body_top = y + 29.0f;               // justo debajo del icono
+        f32 ty = body_top + std::max(0.0f, (y + h - 5.0f - body_top - content_h) * 0.5f);
+
+        for (int l = 0; l < n; l++)
+            centred(lines[l], cx, ty + l * 8.0f, on ? TEXT_LIGHT : Color{215, 208, 195, 255}, 0.8f);
+        ty += n * 8.0f + 3.0f;
+
         if (card.tag[0]) { centred(card.tag, cx, ty, rc, 0.55f); ty += 7.0f; }
         if (card.extra[0]) { centred(card.extra, cx, ty, {230, 170, 90, 255}, 0.55f); ty += 7.0f; }
 
-        // Description (up to 3 lines)
-        char dl[3][40];
-        int dn = wrap_text(renderer, card.desc, CARD_W - 8.0f, 0.62f, dl, 3);
         for (int l = 0; l < dn; l++)
             centred(dl[l], cx, ty + 2.0f + l * 6.5f, {180, 172, 160, 255}, 0.62f);
     }
 
     renderer.draw_text_centered("[A/D] elegir     [ENTER] tomar", H - 14.0f, {170, 160, 150, 220}, 0.7f);
+}
+
+// =============================================================================
+// Encuentro biblico: caja de dialogo sobre el mundo congelado
+// =============================================================================
+void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time) {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
+    renderer.draw_rect({0, 0, W, H}, {8, 6, 12, 130});
+
+    // Caja: alta cuando hay opciones que listar, baja cuando solo hay texto
+    const f32 box_h = view.option_count > 0 ? 78.0f : 54.0f;
+    const f32 bx = 12.0f, by = H - box_h - 10.0f, bw = W - 24.0f;
+
+    renderer.draw_rect({bx - 2, by - 2, bw + 4, box_h + 4}, {180, 150, 95, 240});
+    renderer.draw_rect({bx, by, bw, box_h}, {24, 19, 28, 248});
+    renderer.draw_rect({bx, by, bw, 1.0f}, {255, 255, 255, 40});
+
+    // Nombre de quien habla, sobre una placa que muerde el borde superior
+    if (view.speaker && view.speaker[0]) {
+        f32 nw = renderer.measure_text(view.speaker, 0.85f);
+        renderer.draw_rect({bx + 5.0f, by - 7.0f, nw + 10.0f, 12.0f}, {180, 150, 95, 245});
+        renderer.draw_rect({bx + 6.0f, by - 6.0f, nw + 8.0f, 10.0f}, {40, 31, 24, 250});
+        renderer.draw_text(view.speaker, bx + 10.0f, by - 5.0f, {245, 218, 160, 255}, 0.85f);
+    }
+    // Cuerpo del dialogo (hasta 3 lineas)
+    std::string lines[3];
+    int n = renderer.wrap_text(view.body, bw - 16.0f, 0.8f, lines, 3);
+    for (int i = 0; i < n; i++)
+        renderer.draw_text(lines[i].c_str(), bx + 8.0f, by + 8.0f + i * 9.0f, {224, 216, 204, 250}, 0.8f);
+
+    // Opciones
+    if (view.option_count > 0) {
+        f32 oy = by + 8.0f + n * 9.0f + 4.0f;
+        for (int i = 0; i < view.option_count && i < 2; i++) {
+            bool on = (i == view.selected);
+            Color c = on ? Color{250, 215, 130, 255} : Color{160, 152, 142, 235};
+            if (on) renderer.draw_rect({bx + 5.0f, oy + i * 11.0f - 1.0f, bw - 10.0f, 10.0f}, {70, 56, 34, 200});
+            char buf[96];
+            snprintf(buf, sizeof(buf), "%s%s", on ? "> " : "  ", view.options[i]);
+            renderer.draw_text(buf, bx + 8.0f, oy + i * 11.0f, c, 0.8f);
+            // Coste a la derecha, en rojo: la decision tiene que doler antes de tomarla
+            if (view.costs[i] && view.costs[i][0]) {
+                f32 cw = renderer.measure_text(view.costs[i], 0.7f);
+                renderer.draw_text(view.costs[i], bx + bw - cw - 8.0f, oy + i * 11.0f + 1.0f,
+                                   on ? Color{240, 130, 110, 255} : Color{150, 90, 80, 220}, 0.7f);
+            }
+        }
+        renderer.draw_text_centered("[W/S] elegir     [ENTER] decidir", H - 6.0f, {160, 150, 140, 200}, 0.65f);
+    } else {
+        f32 blink = 0.55f + 0.45f * std::sin(time * 3.4f);
+        const char* prompt = view.more_lines ? "[ENTER] seguir" : "[ENTER] continuar";
+        renderer.draw_text_centered(prompt, H - 6.0f, {200, 185, 160, static_cast<u8>(210 * blink)}, 0.65f);
+    }
+    (void)tileset;
 }
 
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],
@@ -180,7 +235,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
     char tags[3][28];
     for (int i = 0; i < count && i < 3; i++) {
         MiracleDef d = get_miracle_def(ids[i]);
-        snprintf(tags[i], sizeof(tags[i]), "TIER %d  -  %.0f FE", d.tier, d.faith_cost);
+        snprintf(tags[i], sizeof(tags[i]), "TIER %d  ·  %.0f FE", d.tier, d.faith_cost);
         cards[i].name   = d.name;
         cards[i].tag    = tags[i];
         cards[i].extra  = (extras && extras[i]) ? extras[i] : "";
@@ -248,6 +303,16 @@ void HUD::draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUD
     }
     draw_bar(renderer, {BAR_X, y, BAR_W, h}, ratio, faith_color);
 
+    // Muescas en los umbrales que desbloquean tier de milagro (25 / 50 / 75). Encendidas
+    // las ya alcanzadas: asi se ve de un vistazo cuanta fe falta para el siguiente milagro.
+    for (int t = 2; t <= 4; t++) {
+        f32 need = faith_required_for_tier(t);
+        f32 mx = BAR_X + BAR_W * (need / faith.max);
+        bool reached = faith.current >= need;
+        renderer.draw_rect({mx - 0.5f, y - 1.0f, 1.0f, h + 2.0f},
+                           reached ? Color{255, 240, 190, 235} : Color{70, 66, 78, 220});
+    }
+
     // Percentage + level name
     char buf[48];
     snprintf(buf, sizeof(buf), "%.0f%%", faith.current);
@@ -258,8 +323,38 @@ void HUD::draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUD
 // Small icon row under the vitals: one cell per item taken this run. The held consumable
 // gets a highlighted frame and its key, since it is the only one the player can trigger.
 void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDContext& ctx) {
-    if (ctx.tileset == TEXTURE_NONE || !ctx.registry || player.items.empty()) return;
-    constexpr f32 S = 9.0f, Y = 33.0f;
+    if (ctx.tileset == TEXTURE_NONE || !ctx.registry) return;
+
+    // Arma equipada: celda propia con su tecla y el barrido de recarga, porque es lo
+    // unico del inventario que se dispara aparte del consumible.
+    constexpr f32 WS = 12.0f, WY = 33.0f;
+    if (player.weapon_slot != UINT32_MAX) {
+        bool ready = player.secondary_cd <= 0.0f;
+        // Icono por arma: la piedra de la Honda y la vara florecida no son lo mismo
+        TileSprite wicon = (player.weapon_slot == 1) ? TileSprite::Grass : TileSprite::Arrow;
+        renderer.draw_rect({2.0f, WY - 1.0f, WS + 2, WS + 2}, ready ? Color{245, 205, 90, 235} : Color{90, 80, 70, 220});
+        renderer.draw_rect({3.0f, WY, WS, WS}, {22, 16, 26, 230});
+        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
+                                  ready ? Color::white() : Color{120, 115, 110, 200});
+        if (!ready) {
+            f32 k = std::min(1.0f, player.secondary_cd / 0.9f);
+            renderer.draw_rect({3.0f, WY, WS, WS * k}, {10, 8, 14, 170});
+        }
+        // Tecla en placa, como la del consumible: es la unica pista de que el arma se dispara
+        f32 kx = 3.0f + WS + 2.0f;
+        if (renderer.shadow_tex != TEXTURE_NONE)
+            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 1.0f, WY + 1.0f, 10, 10}, {0, 0, 0, 180});
+        renderer.draw_text("I", kx + 2.0f, WY + 2.0f, ready ? Color{250, 220, 130, 245} : Color{120, 110, 100, 200}, 0.7f);
+        // El nombre del arma, la primera vez que se lleva: sin esto la celda es un icono mudo
+        if (ctx.registry) {
+            const ItemDef* wd = ctx.registry->get(player.weapon_slot);
+            if (wd) renderer.draw_text(wd->name, kx + 10.0f, WY + 2.5f,
+                                       ready ? Color{200, 180, 140, 200} : Color{120, 110, 100, 170}, 0.55f);
+        }
+    }
+
+    if (player.items.empty()) return;
+    constexpr f32 S = 9.0f, Y = 47.0f;
     f32 x = 3.0f;
     int shown = 0;
     for (u32 id : player.items) {
@@ -271,6 +366,12 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         renderer.draw_rect({x - 1, Y - 1, S + 2, S + 2}, held ? Color{245, 205, 90, 230} : rarity_color(def->rarity));
         renderer.draw_rect({x, Y, S, S}, {22, 16, 26, 220});
         renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
+        // Cargas del consumible (Aceite Inagotable): sin el numero, "+2 cargas" es invisible
+        if (held && player.consumable_charges > 1) {
+            char n[4];
+            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
+            renderer.draw_text(n, x + S - 3.0f, Y + S - 5.0f, {255, 235, 180, 250}, 0.6f);
+        }
         x += S + 2.0f;
         shown++;
     }
@@ -296,18 +397,25 @@ static TileSprite miracle_icon(MiracleID id) {
 
 void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUDContext& ctx,
                              const FaithSystem& faith) {
-    static const char* keys[2] = {"Q", "E"};
+    static const char* keys[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
     const f32 S = 22.0f;   // slot size
-    for (int i = 0; i < player.active_slot_count; i++) {
+    for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++) {
         f32 x = static_cast<f32>(Config::GAME_WIDTH) - 28.0f - i * 27.0f;
         f32 y = static_cast<f32>(Config::GAME_HEIGHT) - 36.0f;
 
         const auto& slot = player.miracle_slots[i];
-        bool locked = false;
+        // Dos bloqueos distintos, y el jugador tiene que poder distinguirlos de un vistazo:
+        //   lock_tier = el milagro pide un NIVEL de fe (candado + fe requerida)
+        //   lock_cost = tienes el nivel pero no te llega para pagarlo (coste en rojo)
+        bool lock_tier = false, lock_cost = false;
+        f32 tier_need = 0.0f;
         if (!slot.is_empty()) {
             auto def = get_miracle_def(slot.miracle);
-            locked = def.tier > faith.get_max_miracle_tier() || def.faith_cost > faith.current;
+            lock_tier = def.tier > faith.get_max_miracle_tier();
+            lock_cost = !lock_tier && def.faith_cost > faith.current;
+            if (lock_tier) tier_need = faith_required_for_tier(def.tier);
         }
+        bool locked = lock_tier || lock_cost;
         bool ready = !slot.is_empty() && slot.is_ready() && !locked;
 
         // Frame + inner plate (lighter top half = bevel)
@@ -329,6 +437,16 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
             renderer.draw_sprite_rect(ctx.tileset, get_tile_src(miracle_icon(slot.miracle)), {x + 3, y + 3, S - 6, S - 6}, tint);
         }
 
+        // Candado: solo cuando falta NIVEL de fe. Un cuerpo con arco encima, en 3 rects.
+        if (lock_tier) {
+            renderer.draw_rect({x, y, S, S}, {20, 8, 10, 130});
+            f32 lx = x + S * 0.5f - 3.0f, ly = y + S * 0.5f - 1.0f;
+            renderer.draw_rect({lx - 0.75f, ly - 0.75f, 7.5f, 6.5f}, {30, 14, 16, 235});
+            renderer.draw_rect({lx, ly, 6.0f, 5.0f}, {235, 165, 80, 255});
+            renderer.draw_rect({lx + 1.0f, ly - 3.0f, 4.0f, 3.0f}, {235, 165, 80, 255});
+            renderer.draw_rect({lx + 2.0f, ly - 2.0f, 2.0f, 2.0f}, {30, 14, 16, 235});
+        }
+
         // Cooldown sweep (bottom-up)
         if (!slot.is_empty() && !slot.is_ready()) {
             auto def = get_miracle_def(slot.miracle);
@@ -344,16 +462,19 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
             renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
         renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
 
-        // Cost (faith orb + number) above the slot
+        // Sobre el slot: normalmente el coste en fe; si falta nivel, la fe que hay que
+        // alcanzar precedida de "+", que es la informacion que de verdad hace falta.
         if (!slot.is_empty()) {
             auto def = get_miracle_def(slot.miracle);
-            char cost[8];
-            snprintf(cost, sizeof(cost), "%.0f", def.faith_cost);
+            char cost[12];
+            if (lock_tier) snprintf(cost, sizeof(cost), "%.0f", tier_need);
+            else           snprintf(cost, sizeof(cost), "%.0f", def.faith_cost);
             Color cc = locked ? Color{240, 120, 100, 255} : Color{160, 210, 250, 255};
             f32 tw = renderer.measure_text(cost, 0.65f);
             f32 cx0 = x + S - tw - 1.0f;
             if (ctx.tileset != TEXTURE_NONE)
-                renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::Orb), {cx0 - 7.0f, y - 8.5f, 7, 7});
+                renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::Orb), {cx0 - 7.0f, y - 8.5f, 7, 7},
+                                          lock_tier ? Color{240, 150, 130, 255} : Color::white());
             renderer.draw_text(cost, cx0, y - 9.0f, cc, 0.65f);
         }
     }
@@ -377,7 +498,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
 
     if (big) {
         renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)}, {0, 0, 0, 160});
-        renderer.draw_text_centered("MAPA DEL CAPITULO", oy - 16.0f, {240, 220, 160, 255});
+        renderer.draw_text_centered("MAPA DEL CAPÍTULO", oy - 16.0f, {240, 220, 160, 255});
     } else {
         renderer.draw_rect({ox - 2, oy - 2, total_w + 4, total_h + 4}, {0, 0, 0, 110});
     }
@@ -388,7 +509,8 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     for (int i = 0; i < fm->room_count; i++) {
         const auto& node = fm->rooms[i];
         bool visited = fm->room_generated[i] && fm->room_cache[i].visited;
-        bool adjacent = false;
+        // "Y vio el monte lleno": Ojos Abiertos vale por haber estado en la sala de al lado
+        bool adjacent = ctx.map_revealed;
         for (int c = 0; c < 4; c++) if (fm->rooms[cur].connections[c] == i) adjacent = true;
         bool known = visited || adjacent || i == cur || node.type == RoomType::Boss || node.type == RoomType::Start;
         if (!known && !big) continue;
@@ -410,6 +532,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
         if (node.type == RoomType::Treasure && (visited || adjacent)) mark = {255, 210, 60, 255};
         if (node.type == RoomType::Altar    && (visited || adjacent)) mark = {120, 200, 255, 255};
         if (node.type == RoomType::Elite    && (visited || adjacent)) mark = {200, 120, 255, 255};
+        if (node.type == RoomType::Event    && (visited || adjacent)) mark = {255, 226, 150, 255};
         if (mark.a) renderer.draw_rect({x + cw * 0.5f - 1.5f, y + ch * 0.5f - 1.5f, 3, 3}, mark);
         if (node.type == RoomType::Boss) {
             // small skull-ish cross
@@ -427,6 +550,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
                 case RoomType::Treasure: label = (visited || adjacent) ? "TESORO" : nullptr; break;
                 case RoomType::Altar:    label = (visited || adjacent) ? "ALTAR" : nullptr; break;
                 case RoomType::Elite:    label = (visited || adjacent) ? "ELITE" : nullptr; break;
+                case RoomType::Event:    label = (visited || adjacent) ? "RELATO" : nullptr; break;
                 default: break;
             }
             if (label) renderer.draw_text(label, x + 1, y + ch + 1, {220, 210, 190, 255}, 0.6f);
@@ -434,7 +558,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     }
 
     if (big) {
-        renderer.draw_text_centered("Llega al JEFE (rojo) y derrotalo para abrir la salida", oy + total_h + 12.0f, {200, 200, 200, 255}, 0.75f);
+        renderer.draw_text_centered("Llega al JEFE (rojo) y derrótalo para abrir la salida", oy + total_h + 12.0f, {200, 200, 200, 255}, 0.75f);
         renderer.draw_text_centered("Suelta TAB para volver", oy + total_h + 22.0f, {160, 160, 160, 255}, 0.75f);
     }
 }
@@ -475,8 +599,12 @@ void HUD::draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss) 
     f32 nw = renderer.measure_text(name, 0.8f);
     renderer.draw_rect({(Config::GAME_WIDTH - nw) * 0.5f - 6, y - 11.0f, nw + 12, 9.0f}, {0, 0, 0, 120});
     renderer.draw_text_centered(name, y - 11.0f, {255, 225, 185, 255}, 0.8f);
-    draw_bar(renderer, {x, y, w, 6}, h.ratio(), {215, 55, 45, 255}, 1.25f);
+    // Un jefe intocable (La Muerte del cap. 8) tiene que decirlo, o parece un bug
+    Color bar_c = h.invulnerable ? Color{110, 100, 120, 255} : Color{215, 55, 45, 255};
+    draw_bar(renderer, {x, y, w, 6}, h.ratio(), bar_c, 1.25f);
     draw_badge(renderer, world.tileset, TileSprite::Skull, x - 6.0f, y + 3.0f, 11.0f);
+    if (h.invulnerable)
+        renderer.draw_text_centered("INTOCABLE — acércate", y - 19.0f, {215, 190, 230, 235}, 0.7f);
 }
 
 void HUD::draw_banner(Renderer& renderer, const HUDContext& ctx) {

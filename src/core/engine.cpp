@@ -38,9 +38,11 @@ static void web_main_loop() {
     if (frame_time > 0.1f) frame_time = 0.1f;
 
     g_engine->accumulator += frame_time;
+    bool first_step = true;
     while (g_engine->accumulator >= Config::FIXED_DT) {
         g_engine->update(Config::FIXED_DT);
         g_engine->accumulator -= Config::FIXED_DT;
+        if (first_step) { g_engine->input.consume_presses(); first_step = false; }
     }
 
     g_engine->render();
@@ -139,8 +141,10 @@ bool Engine::init(const char* title) {
     world.init();
     world.tileset = tileset_texture;
     faith.init();
-    save.init();
+    save.init();          // lee el fichero: la meta-progresion tiene que estar viva ya
     item_registry.init();
+    progression.init();
+    sync_progression_from_save();
     menus.has_continue = save.has_save();
 
     // Timer + RNG
@@ -181,6 +185,7 @@ void Engine::load_sprites() {
 
     for (u32 t = 0; t < static_cast<u32>(EnemyType::COUNT); t++) {
         enemy_textures[t] = load_sheet(get_enemy_def(static_cast<EnemyType>(t)).sprite_path);
+        world.enemy_textures[t] = enemy_textures[t];   // los jefes invocan sin pasar por el Engine
     }
 
     tileset_texture = renderer.load_texture("sprites/tiles.png", /*smooth=*/false);  // atlas: nearest, no cell bleeding
@@ -227,11 +232,15 @@ void Engine::run() {
         delta_time = frame_time;
         fps = (frame_time > 0.0f) ? (1.0f / frame_time) : 0.0f;
 
-        // Fixed timestep accumulator
+        // Fixed timestep accumulator. Una pulsacion = una accion: tras el primer paso se
+        // consumen las teclas, o un frame lento (cargar un capitulo) daria varios pasos y
+        // el mismo ENTER pasaria varias paginas de historia de golpe.
         accumulator += frame_time;
+        bool first_step = true;
         while (accumulator >= Config::FIXED_DT) {
             update(Config::FIXED_DT);
             accumulator -= Config::FIXED_DT;
+            if (first_step) { input.consume_presses(); first_step = false; }
         }
 
         render();
@@ -284,6 +293,7 @@ void Engine::update(f32 dt) {
     if (banner_timer > 0.0f)  banner_timer  -= dt;
     if (message_timer > 0.0f) message_timer -= dt;
     if (room_fade > 0.0f)     room_fade = std::max(0.0f, room_fade - dt / 0.3f);
+    if (world_flash > 0.0f)   world_flash = std::max(0.0f, world_flash - dt);
 
     // Menu navigation blips (any scene showing a menu)
     if (state.scene != GameScene::Playing) {
@@ -313,6 +323,15 @@ void Engine::update(f32 dt) {
                             if (save.has_save()) continue_run();
                             break;
                         case 2:
+                            sanctuary_sel = 0;
+                            change_scene(GameScene::Sanctuary);
+                            break;
+                        case 3:
+                            codex_return = GameScene::MainMenu;
+                            codex = CodexScreen{};
+                            change_scene(GameScene::Codex);
+                            break;
+                        case 4:
                             menus.settings_origin = MenuScreen::Title;
                             menus.settings_music_vol = audio.music_volume;
                             menus.settings_sfx_vol = audio.sfx_volume;
@@ -320,7 +339,7 @@ void Engine::update(f32 dt) {
                             menus.current = MenuScreen::Settings;
                             menus.selected_option = 0;
                             break;
-                        case 3:
+                        case 5:
                             menus.current = MenuScreen::Controls;
                             menus.selected_option = 0;
                             break;
@@ -347,11 +366,15 @@ void Engine::update(f32 dt) {
             state.run_time += dt;
             faith.update(dt);
             int shots_before = player.shots_fired;
+            f32 secondary_before = player.secondary_cd;
             bool was_dashing = player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement) &&
                                world.movements[player.entity].is_dashing;
             player.update(world, input, faith, dt);
             if (player.shots_fired != shots_before)
                 audio.play_sfx(player.character == CharacterType::Elias ? SfxID::ProyectilFuego : SfxID::ProyectilLuz, 0.5f);
+            // El arma secundaria acaba de disparar (la recarga pasa de 0 a su valor): sonido propio
+            if (secondary_before <= 0.0f && player.secondary_cd > 0.0f)
+                audio.play_sfx(player.weapon_slot == 1 ? SfxID::CayadoSwing2 : SfxID::CayadoSwing3, 0.9f);
             if (!was_dashing && player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement) &&
                 world.movements[player.entity].is_dashing)
                 audio.play_sfx(SfxID::DashWoosh, 0.6f);
@@ -364,25 +387,57 @@ void Engine::update(f32 dt) {
 
             combat_events.reset();
             system_collision(world, faith, combat_events);
+            // Mechas del Leproso: despues de las colisiones (usa fe/eventos) y antes de
+            // update_room_state (sus bajas tienen que contar ya)
+            update_death_fuses(world, faith, combat_events, dt);
+            if (world.shake_request > 0.0f) {
+                renderer.shake_camera(world.shake_request, 0.3f);
+                audio.play_sfx(SfxID::EnemyDeath, 0.9f);
+                world.shake_request = 0.0f;
+            }
 
             // Miracle feedback (kills by miracles, shake, messages)
             for (Entity k : player.pending_kills) on_enemy_killed(world, faith, k, combat_events);
             player.pending_kills.clear();
             if (player.shake_request > 0.0f) { renderer.shake_camera(player.shake_request, 0.4f); player.shake_request = 0.0f; }
+            if (player.flash_request > 0.0f) { world_flash = player.flash_request; player.flash_request = 0.0f; }
             if (player.last_event == Player::MiracleEvent::Cast) {
                 show_message(get_miracle_def(player.last_cast).name, 1.5f);
+                // Cada milagro con su sonido: diez poderes compartiendo cuatro efectos
+                // hacian que todos sonaran igual aunque se vieran distintos.
                 switch (player.last_cast) {
-                    case MiracleID::CuervosDeQuerit:
-                    case MiracleID::SanarAguas:
-                    case MiracleID::AceiteInagotable:  audio.play_sfx(SfxID::MiracleHeal); break;
+                    case MiracleID::CuervosDeQuerit:   audio.play_sfx(SfxID::MiracleRavens); break;
+                    case MiracleID::PalabraDeSequia:   audio.play_sfx(SfxID::MiracleCastFire, 0.7f); break;
+                    case MiracleID::FuegoDelCielo:     audio.play_sfx(SfxID::MiracleCastFire); break;
+                    case MiracleID::CarroDeFuego:      audio.play_sfx(SfxID::DashWoosh);
+                                                       audio.play_sfx(SfxID::MiracleCastFire, 0.8f); break;
                     case MiracleID::AltarConsumido:    audio.play_sfx(SfxID::MiracleUltimate); break;
-                    case MiracleID::FuegoDelCielo:
-                    case MiracleID::CarroDeFuego:
-                    case MiracleID::PalabraDeSequia:   audio.play_sfx(SfxID::MiracleCastFire); break;
+                    case MiracleID::SanarAguas:        audio.play_sfx(SfxID::MiracleHeal); break;
+                    case MiracleID::AceiteInagotable:  audio.play_sfx(SfxID::MiracleHeal, 0.75f); break;
+                    case MiracleID::OjosAbiertos:      audio.play_sfx(SfxID::MiracleCastLight, 0.8f); break;
+                    case MiracleID::EjercitoCelestial: audio.play_sfx(SfxID::MiracleCastLight); break;
+                    case MiracleID::DoblePorcion:      audio.play_sfx(SfxID::MiracleUltimate, 0.85f);
+                                                       audio.play_sfx(SfxID::LevelUp, 0.7f); break;
                     default:                           audio.play_sfx(SfxID::MiracleCastLight); break;
                 }
-            } else if (player.last_event == Player::MiracleEvent::NeedFaith) {
-                show_message("Fe insuficiente para el milagro", 1.2f);
+            } else if (player.last_event != Player::MiracleEvent::None) {
+                // Decir exactamente que falta: nivel de fe, fe para pagarlo o recarga
+                MiracleDef md = get_miracle_def(player.last_cast);
+                char buf[128];
+                switch (player.last_event) {
+                    case Player::MiracleEvent::NeedTier:
+                        snprintf(buf, sizeof(buf), "%s: necesitas %.0f de fe (%s)", md.name,
+                                 faith_required_for_tier(md.tier), faith_level_name_for_tier(md.tier));
+                        break;
+                    case Player::MiracleEvent::NeedCost:
+                        snprintf(buf, sizeof(buf), "%s: te faltan %.0f de fe", md.name,
+                                 md.faith_cost - faith.current);
+                        break;
+                    default:
+                        snprintf(buf, sizeof(buf), "%s: en recarga", md.name);
+                        break;
+                }
+                show_message(buf, 2.0f);
                 audio.play_sfx(SfxID::MenuBack, 0.5f);
             }
             player.last_event = Player::MiracleEvent::None;
@@ -414,6 +469,34 @@ void Engine::update(f32 dt) {
                 world.healths[player.entity].current = world.healths[player.entity].max;
             }
 
+            // Pista de milagro: una sola vez por partida, en el cap. 1, cuando la Q ya
+            // se puede lanzar de verdad (nada de enseñar un boton bloqueado).
+            if (!miracle_hint_shown && state.current_chapter == 1) {
+                const MiracleSlot& q = player.miracle_slots[0];
+                bool castable = !q.is_empty() && q.is_ready() &&
+                                get_miracle_def(q.miracle).tier <= faith.get_max_miracle_tier() &&
+                                get_miracle_def(q.miracle).faith_cost <= faith.current;
+                if (castable) miracle_hint_timer -= dt;
+                if (miracle_hint_timer <= 0.0f && message_timer <= 0.0f) {
+                    miracle_hint_shown = true;
+                    SDL_Log("Miracle hint shown (slot Q: %s)", get_miracle_def(q.miracle).name);
+                    char hint[96];
+                    snprintf(hint, sizeof(hint), "Pulsa [Q]: %s  ·  %.0f de fe",
+                             get_miracle_def(q.miracle).name, get_miracle_def(q.miracle).faith_cost);
+                    show_message(hint, 3.5f);
+                }
+            }
+
+            // "Altar Portátil" (El Santuario): una oración por capítulo sin necesitar altar
+            if (input.is_action_just_pressed(Action::Pray) &&
+                progression.is_unlocked(5) && !portable_altar_used) {
+                portable_altar_used = true;
+                faith.on_pray();
+                if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
+                show_message("Oras donde estás  +10 Fe", 2.0f);
+                audio.play_sfx(SfxID::FaithGain);
+            }
+
             // Consumable (R): the Engine owns the registry, so the key is handled here
             if (input.is_action_just_pressed(Action::Consumable)) {
                 u32 held = player.consumable_slot;
@@ -431,11 +514,24 @@ void Engine::update(f32 dt) {
             if (player.entity != ENTITY_NONE &&
                 world.has(player.entity, Component::Health) &&
                 !world.healths[player.entity].is_alive()) {
-                SDL_Log("Player died! Game Over.");
-                menus.stats_chapter = state.current_chapter;
-                menus.stats_kills = run_kills;
-                menus.stats_time = state.run_time;
-                change_scene(GameScene::GameOver);
+                if (has_revive) {
+                    // El aposento sunamita (2 Reyes 4:35): el niño estornudó siete veces
+                    has_revive = false;
+                    auto& h = world.healths[player.entity];
+                    h.current = h.max * 0.5f;
+                    h.iframes_timer = 2.0f;
+                    faith.modify(10.0f);
+                    show_banner("EL NIÑO ESTORNUDÓ", "La sunamita te levanta una vez", 3.5f);
+                    audio.play_sfx(SfxID::LevelUp);
+                } else {
+                    SDL_Log("Player died! Game Over.");
+                    menus.stats_chapter = state.current_chapter;
+                    menus.stats_kills = run_kills;
+                    menus.stats_time = state.run_time;
+                    award_offerings(false);
+                    save_after_defeat();
+                    change_scene(GameScene::GameOver);
+                }
             }
             break;
         }
@@ -454,6 +550,11 @@ void Engine::update(f32 dt) {
                     switch (menus.selected_option) {
                         case 0: change_scene(GameScene::Playing); break;
                         case 1:
+                            codex_return = GameScene::Paused;
+                            codex = CodexScreen{};
+                            change_scene(GameScene::Codex);
+                            break;
+                        case 2:
                             menus.settings_origin = MenuScreen::PauseMenu;
                             menus.settings_music_vol = audio.music_volume;
                             menus.settings_sfx_vol = audio.sfx_volume;
@@ -461,7 +562,7 @@ void Engine::update(f32 dt) {
                             menus.current = MenuScreen::Settings;
                             menus.selected_option = 0;
                             break;
-                        case 2:
+                        case 3:
                             populate_save_data();
                             save.save();
                             change_scene(GameScene::MainMenu);
@@ -474,20 +575,33 @@ void Engine::update(f32 dt) {
             }
             break;
 
-        case GameScene::Transition:
-            // Ascension screen: confirm to continue as Eliseo
-            if (input.is_action_just_pressed(Action::Confirm)) {
-                finish_ascension();
-            }
+        case GameScene::Story:
+            if (story.update(input, dt, renderer)) finish_story();
+            break;
+
+        case GameScene::Dialogue:
+            update_dialogue(dt);
+            break;
+
+        case GameScene::Codex:
+            if (codex.update(input, save.data, item_registry)) change_scene(codex_return);
+            break;
+
+        case GameScene::Sanctuary:
+            update_sanctuary();
             break;
 
         case GameScene::GameOver:
-            if (input.is_action_just_pressed(Action::Consumable)) {   // R: retry the chapter
+            menus.update(input);
+            // [R] sigue siendo atajo directo; la opcion 0 del menu hace lo mismo
+            if (input.is_action_just_pressed(Action::Consumable) ||
+                (input.is_action_just_pressed(Action::Confirm) && menus.selected_option == 0)) {
                 retry_chapter();
                 break;
             }
             if (input.is_action_just_pressed(Action::Confirm)) {
-                save.delete_save();
+                // La partida NO se borra al perder: save_after_defeat() la dejo rebobinada
+                // al principio del capitulo, asi que "Continuar" sigue vivo en el menu.
                 change_scene(GameScene::MainMenu);
             }
             break;
@@ -544,6 +658,12 @@ void Engine::render() {
             renderer.draw_text(buf, p.pos.x - w * 0.5f, p.pos.y - 10.0f - 14.0f * p.life, c, scale);
         }
 
+        // Fogonazo blanco de milagro (Altar Consumido): sobre el mundo, bajo el HUD
+        if (world_flash > 0.0f) {
+            renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)},
+                               {255, 250, 235, static_cast<u8>(235.0f * std::min(1.0f, world_flash / 0.38f))});
+        }
+
         // Room/chapter change: short fade-in over the world, under the HUD
         if (room_fade > 0.0f) {
             renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)},
@@ -562,16 +682,18 @@ void Engine::render() {
         ctx.message_t = message_timer;
         ctx.time = world.time;
         ctx.show_map = input.is_action_pressed(Action::Map);
+        ctx.map_revealed = player.map_revealed;
         ctx.tileset = tileset_texture;
         ctx.registry = &item_registry;
 
-        // Sanar Aguas zone
-        if (player.heal_zone_timer > 0.0f) {
+        // Sanar Aguas: disco en el suelo. El efecto es circular (distancia < 34), asi que
+        // se pinta con la elipse suave de las sombras en vez del rectangulo que habia.
+        if (player.heal_zone_timer > 0.0f && renderer.shadow_tex != TEXTURE_NONE) {
             f32 pulse = 0.6f + 0.4f * std::sin(world.time * 5.0f);
-            renderer.draw_rect({player.heal_zone_pos.x - 32, player.heal_zone_pos.y - 22, 64, 44},
-                               {90, 170, 240, static_cast<u8>(50 + 40 * pulse)});
-            renderer.draw_rect_outline({player.heal_zone_pos.x - 32, player.heal_zone_pos.y - 22, 64, 44},
-                                       {160, 220, 255, static_cast<u8>(120 + 80 * pulse)});
+            f32 r = 34.0f + 2.0f * pulse;
+            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32},
+                                      {player.heal_zone_pos.x - r, player.heal_zone_pos.y - r * 0.62f, r * 2, r * 1.24f},
+                                      {110, 200, 250, static_cast<u8>(70 + 45 * pulse)});
         }
         hud.render(renderer, player, world, faith, ctx);
     };
@@ -609,8 +731,42 @@ void Engine::render() {
             break;
         }
 
-        case GameScene::Transition:
-            menus.render(renderer);
+        case GameScene::Story:
+            story.render(renderer);
+            break;
+
+        case GameScene::Dialogue: {
+            render_world();
+            EventDef def = get_event_def(dialogue.chapter);
+            DialogueView v;
+            v.speaker = def.speaker;
+            if (dialogue.resolved) {
+                v.body = dialogue.result;
+            } else if (dialogue.choosing) {
+                // Ultima linea visible mientras se decide, para no perder el contexto
+                int last = 0;
+                while (last + 1 < 3 && def.lines[last + 1]) last++;
+                v.body = def.lines[last] ? def.lines[last] : "";
+                v.option_count = def.options[1].label ? 2 : 1;
+                v.selected = dialogue.selected;
+                for (int i = 0; i < v.option_count; i++) {
+                    v.options[i] = def.options[i].label;
+                    v.costs[i]   = def.options[i].cost;
+                }
+            } else {
+                v.body = def.lines[dialogue.line] ? def.lines[dialogue.line] : "";
+                v.more_lines = (dialogue.line + 1 < 3) && def.lines[dialogue.line + 1] != nullptr;
+            }
+            draw_dialogue(renderer, v, tileset_texture, world.time);
+            break;
+        }
+
+        case GameScene::Codex:
+            codex.render(renderer, save.data, item_registry, tileset_texture);
+            break;
+
+        case GameScene::Sanctuary:
+            render_sanctuary();
             break;
 
         case GameScene::GameOver:
@@ -646,10 +802,13 @@ void Engine::change_scene(GameScene new_scene) {
         case GameScene::MainMenu:
             menus.current = MenuScreen::Title;
             menus.has_continue = save.has_save();
+            menus.offerings = progression.offerings;
             break;
         case GameScene::Paused:     menus.current = MenuScreen::PauseMenu; break;
-        case GameScene::GameOver:   menus.current = MenuScreen::GameOver;  break;
-        case GameScene::Transition: menus.current = MenuScreen::Ascension; break;
+        case GameScene::GameOver:
+            menus.current = MenuScreen::GameOver;
+            menus.option_count = 2;   // render_game_over lo confirma; aqui evita el frame de mas
+            break;
         case GameScene::Victory:    menus.current = MenuScreen::Victory;   break;
         default: break;
     }
@@ -662,6 +821,9 @@ void Engine::start_new_run() {
     state.current_room = 0;
     state.run_time = 0.0f;
     run_kills = 0;
+    has_revive = false;
+    miracle_hint_shown = false;
+    miracle_hint_timer = 5.0f;
 
     world.clear();
     world.tileset = tileset_texture;
@@ -671,12 +833,23 @@ void Engine::start_new_run() {
     player = Player{};
     player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
 
-    start_chapter(1);
-    change_scene(GameScene::Playing);
+    apply_meta_upgrades();   // lo comprado en El Santuario entra antes de la primera sala
+
+    // El mundo queda listo detras: el prologo y la carta del capitulo 1 se leen primero
+    start_chapter(1, false);
+    story.begin();
+    story_prologue(story);
+    story_chapter_card(story, 1);
+    play_story(StoryThen::Play);
 }
 
 void Engine::start_chapter(int chapter, bool announce) {
     state.current_chapter = chapter;
+    boss_hp_scale = 1.0f;   // el encuentro de cada capitulo se gana de nuevo
+    portable_altar_used = false;
+    player.map_revealed = false;   // "Ojos Abiertos" revela ESTE capitulo, no los siguientes
+    player.reveal_timer = 0.0f;
+    codex_see_chapter(save.data, chapter);
     state.current_act = chapter <= Config::CHAPTERS_ACT_I ? Act::Act_I : Act::Act_II;
 
     // Elias unlocks the second miracle slot from chapter 4 (GDD)
@@ -701,11 +874,12 @@ void Engine::start_chapter(int chapter, bool announce) {
     boss_entity = ENTITY_NONE;
     load_room(floor_map.current_room);
 
+    // `announce`: la carta narrada del capitulo (versiculo + objetivo) antes de jugar.
+    // El mundo ya esta cargado detras, asi que al cerrarla se entra directo a la sala.
     if (announce) {
-        auto def = get_chapter_def(chapter);
-        char title[48];
-        snprintf(title, sizeof(title), "CAPITULO %d", chapter);
-        show_banner(title, def.name, 3.5f);
+        story.begin();
+        story_chapter_card(story, chapter);
+        play_story(StoryThen::Play);
         audio.play_sfx(SfxID::Notification, 0.8f);
     }
 }
@@ -723,7 +897,10 @@ void Engine::advance_chapter() {
         menus.stats_kills = run_kills;
         menus.stats_time = state.run_time;
         save.data.runs_completed++;
-        change_scene(GameScene::Victory);
+        award_offerings(true);
+        story.begin();
+        story_epilogue(story);
+        play_story(StoryThen::VictoryMenu);
         return;
     }
     start_chapter(next);
@@ -733,25 +910,30 @@ void Engine::retry_chapter() {
     // Same prophet, fresh HP and starting faith, chapter regenerated
     int chapter = state.current_chapter;
     CharacterType ch = player.character;
+    has_revive = false;
     world.clear();
     world.tileset = tileset_texture;
     faith.init();
     player = Player{};
     if (ch == CharacterType::Elias) player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
     else                            player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
-    start_chapter(chapter);
-    change_scene(GameScene::Playing);
+    apply_meta_upgrades();
+    start_chapter(chapter);   // announce = true: la carta del capitulo lleva de vuelta a Playing
 }
 
 void Engine::trigger_ascension() {
     SDL_Log("THE ASCENSION - Elias rises, the mantle falls to Eliseo");
     state.current_act = Act::Act_II;
-    change_scene(GameScene::Transition);
+    story.begin();
+    story_ascension(story);
+    play_story(StoryThen::FinishAscension);
 }
 
 void Engine::finish_ascension() {
-    // Inheritance: half the faith (floored so Eliseo starts usable), miracles, mantle
-    faith.current = std::max(faith.current * Config::INHERITANCE_FAITH_RATIO, 40.0f);
+    // Inheritance: half the faith (floored so Eliseo starts usable), miracles, mantle.
+    // "Herencia Ampliada" (El Santuario) sube la porción heredada al 60%.
+    f32 ratio = progression.is_unlocked(4) ? 0.60f : Config::INHERITANCE_FAITH_RATIO;
+    faith.current = std::max(faith.current * ratio, 40.0f);
     faith.modify(0.0f);
 
     Vec2 pos = {Config::GAME_WIDTH * 0.5f, Config::GAME_HEIGHT * 0.5f};
@@ -775,9 +957,40 @@ void Engine::finish_ascension() {
     if (!inherited.empty()) SDL_Log("Ascension: %d heredable item(s) passed to Eliseo", static_cast<int>(inherited.size()));
     if (player.entity != ENTITY_NONE) world.transforms[player.entity].position = pos;
 
-    start_chapter(Config::CHAPTERS_ACT_I + 1, false);
-    show_banner("ACTO II: ELISEO", "Capitulo 6 - Las Aguas de Jerico", 4.0f);
-    change_scene(GameScene::Playing);
+    start_chapter(Config::CHAPTERS_ACT_I + 1, true);   // la carta del cap. 6 abre el Acto II
+}
+
+// =============================================================================
+// Historia (ui/story.h)
+// =============================================================================
+// Las paginas se encolan en `story` antes de llamar aqui. Durante GameScene::Story el
+// mundo ya esta cargado detras, de modo que al cerrar la ultima pagina se entra directo.
+void Engine::play_story(StoryThen then) {
+    if (story.page_count == 0) { finish_story_action(then); return; }
+    story.then = then;
+    story.active = true;
+    // Los playtests con --script no pueden quedarse clavados leyendo
+    story.auto_timer = autoplay.active ? 1.2f : 0.0f;
+    change_scene(GameScene::Story);
+}
+
+void Engine::finish_story() {
+    story.active = false;
+    finish_story_action(story.then);
+}
+
+void Engine::finish_story_action(StoryThen then) {
+    switch (then) {
+        case StoryThen::Play:            change_scene(GameScene::Playing); break;
+        case StoryThen::AdvanceChapter:  advance_chapter();                break;
+        case StoryThen::FinishAscension: finish_ascension();               break;
+        case StoryThen::VictoryMenu:
+            menus.stats_chapter = state.current_chapter;
+            menus.stats_kills   = run_kills;
+            menus.stats_time    = state.run_time;
+            change_scene(GameScene::Victory);
+            break;
+    }
 }
 
 // =============================================================================
@@ -788,7 +1001,9 @@ void Engine::update_music() {
     switch (state.scene) {
         case GameScene::MainMenu:   want = MusicID::MainTheme; break;
         case GameScene::Playing:
-        case GameScene::Paused: {
+        case GameScene::Paused:
+        case GameScene::Choice:
+        case GameScene::Dialogue: {
             bool boss_room = floor_map.room_count > 0 &&
                              floor_map.rooms[floor_map.current_room].type == RoomType::Boss &&
                              !current_room_data.cleared;
@@ -796,13 +1011,140 @@ void Engine::update_music() {
             else want = (state.current_act == Act::Act_I) ? MusicID::Exploration : MusicID::EliseoCombat;
             break;
         }
-        case GameScene::Transition: want = MusicID::Ascension; break;
+        case GameScene::Story:
+            // La ascension tiene su propio tema; el resto de paginas mantienen el ambiente
+            // del acto para no cortar la musica cada vez que empieza un capitulo.
+            if      (story.then == StoryThen::FinishAscension) want = MusicID::Ascension;
+            else if (story.then == StoryThen::VictoryMenu)     want = MusicID::Victory;
+            else if (state.current_act == Act::Act_I)          want = MusicID::Exploration;
+            else                                               want = MusicID::EliseoCombat;
+            break;
+        case GameScene::Codex:      break;   // sin cambio: se abre sobre lo que ya suene
+        case GameScene::Sanctuary:  want = MusicID::MainTheme; break;
         case GameScene::GameOver:   want = MusicID::Death; break;
         case GameScene::Victory:    want = MusicID::Victory; break;
     }
     if (want != MusicID::COUNT && want != audio.current_music) {
         audio.play_music(want, true, 800.0f);
     }
+}
+
+// =============================================================================
+// Meta-progresion (systems/progression.h): ofrendas y El Santuario
+// =============================================================================
+// El estado vive en SaveData (sobrevive a la derrota, ver SaveSystem::delete_save)
+// y se copia al ProgressionSystem, que es quien conoce costes y nombres.
+void Engine::sync_progression_from_save() {
+    progression.offerings = save.data.offerings;
+    for (auto& u : progression.upgrades)
+        u.unlocked = (save.data.upgrades_bought >> u.id) & 1u;
+}
+
+void Engine::sync_progression_to_save() {
+    save.data.offerings = progression.offerings;
+    save.data.upgrades_bought = 0;
+    for (const auto& u : progression.upgrades)
+        if (u.unlocked) save.data.upgrades_bought |= (1u << u.id);
+}
+
+// Se aplican al crear al profeta, antes de la primera sala.
+void Engine::apply_meta_upgrades() {
+    if (player.entity == ENTITY_NONE) return;
+    if (progression.is_unlocked(0) && world.has(player.entity, Component::Health)) {
+        world.healths[player.entity].max += 10.0f;
+        world.healths[player.entity].current += 10.0f;
+    }
+    if (progression.is_unlocked(1) && world.has(player.entity, Component::Combat))
+        world.combats[player.entity].damage += 2.0f;
+    if (progression.is_unlocked(2) && world.has(player.entity, Component::Movement))
+        world.movements[player.entity].speed *= 1.10f;
+    if (progression.is_unlocked(3)) { faith.current = std::max(faith.current, 60.0f); faith.modify(0.0f); }
+    if (progression.is_unlocked(6) && player.character == CharacterType::Eliseo)
+        player.active_slot_count = Config::MAX_MIRACLE_SLOTS;   // Q / E / F
+    portable_altar_used = false;
+}
+
+// Al morir o al ganar. La partida se paga: capitulo alcanzado, bajas y salas limpias.
+void Engine::award_offerings(bool victory) {
+    int earned = state.current_chapter * 12 + run_kills + player.rooms_cleared * 4;
+    if (victory) earned *= 2;
+    progression.add_offerings(earned);
+    sync_progression_to_save();
+    save.data.total_runs++;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "+%d ofrendas", earned);
+    show_message(buf, 4.0f);
+    SDL_Log("Run over: +%d offerings (total %d)", earned, progression.offerings);
+}
+
+void Engine::update_sanctuary() {
+    const int n = static_cast<int>(progression.upgrades.size());
+    if (n <= 0) { change_scene(GameScene::MainMenu); return; }
+    if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_sel = (sanctuary_sel - 1 + n + 1) % (n + 1);
+    if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_sel = (sanctuary_sel + 1) % (n + 1);
+
+    if (input.is_action_just_pressed(Action::Cancel)) { change_scene(GameScene::MainMenu); return; }
+    if (!input.is_action_just_pressed(Action::Confirm)) return;
+
+    if (sanctuary_sel >= n) { change_scene(GameScene::MainMenu); return; }   // "Volver"
+    const MetaUpgrade& u = progression.upgrades[sanctuary_sel];
+    if (u.unlocked) { show_message("Ya es tuyo", 1.2f); return; }
+    if (progression.offerings < u.cost) {
+        show_message("No tienes ofrendas suficientes", 1.6f);
+        audio.play_sfx(SfxID::MenuSelect, 0.5f);
+        return;
+    }
+    progression.purchase(u.id);
+    sync_progression_to_save();
+    save.save();
+    audio.play_sfx(SfxID::LevelUp, 0.9f);
+}
+
+// El Santuario: las siete mejoras de progression.cpp con su coste y estado.
+void Engine::render_sanctuary() {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
+    renderer.clear({14, 11, 18, 255});
+    if (renderer.vignette_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 150});
+
+    renderer.draw_text_centered("EL SANTUARIO", 10, {240, 215, 150, 255}, 1.4f);
+    renderer.draw_text_centered("«Traed todos los diezmos al alfolí»",
+                                26, {150, 132, 100, 220}, 0.65f);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%d ofrendas", progression.offerings);
+    renderer.draw_text_centered(buf, 38, {245, 205, 90, 255}, 0.9f);
+
+    const int n = static_cast<int>(progression.upgrades.size());
+    f32 y = 52.0f;
+    for (int i = 0; i < n; i++) {
+        const MetaUpgrade& u = progression.upgrades[i];
+        bool on = (i == sanctuary_sel);
+        bool afford = progression.offerings >= u.cost;
+        if (on) renderer.draw_rect({12.0f, y - 1.5f, W - 24.0f, 15.0f}, {58, 46, 30, 225});
+
+        Color name_c = u.unlocked ? Color{130, 205, 130, 245}
+                                  : (on ? Color{250, 228, 170, 255} : Color{200, 190, 176, 235});
+        renderer.draw_text(on ? ">" : " ", 14.0f, y, name_c, 0.8f);
+        renderer.draw_text(u.name, 22.0f, y, name_c, 0.8f);
+        renderer.draw_text(u.description, 22.0f, y + 7.0f, {150, 142, 132, 225}, 0.6f);
+
+        const char* right = u.unlocked ? "COMPRADO" : nullptr;
+        char cost[24];
+        if (!right) { snprintf(cost, sizeof(cost), "%d", u.cost); right = cost; }
+        Color cc = u.unlocked ? Color{120, 195, 120, 235}
+                              : (afford ? Color{245, 205, 90, 245} : Color{150, 90, 80, 220});
+        f32 rw = renderer.measure_text(right, 0.75f);
+        renderer.draw_text(right, W - 14.0f - rw, y + 2.0f, cc, 0.75f);
+        y += 16.0f;
+    }
+
+    bool back_on = (sanctuary_sel >= n);
+    renderer.draw_text_centered(back_on ? "> Volver" : "  Volver", y + 2.0f,
+                                back_on ? Color::elias_gold() : Color{140, 130, 120, 235}, 0.85f);
+    renderer.draw_text_centered("[W/S] mover   [ENTER] comprar   [ESC] volver", H - 8.0f,
+                                {130, 122, 112, 200}, 0.65f);
 }
 
 // =============================================================================
@@ -823,6 +1165,7 @@ void Engine::show_message(const char* text, f32 seconds) {
 // Save / Settings
 // =============================================================================
 void Engine::populate_save_data() {
+    save.data.run_active      = true;   // hay partida que continuar (ver SaveSystem::has_save)
     save.data.current_act     = (state.current_act == Act::Act_I) ? 1 : 2;
     save.data.current_chapter = state.current_chapter;
     save.data.current_room    = state.current_room;
@@ -838,8 +1181,9 @@ void Engine::populate_save_data() {
         save.data.item_ids[save.data.item_count++] = id;
     }
     save.data.consumable_id = player.consumable_slot;
+    save.data.consumable_uses = player.consumable_charges;
     save.data.active_slots  = player.active_slot_count;
-    for (int s = 0; s < 2; s++)
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++)
         save.data.miracle_ids[s] = static_cast<u32>(player.miracle_slots[s].miracle);
 
     // Read HP from ECS if player entity is valid
@@ -847,6 +1191,24 @@ void Engine::populate_save_data() {
         world.has(player.entity, Component::Health)) {
         save.data.hp = world.healths[player.entity].current;
     }
+}
+
+// Morir no borra la partida. El guardado se rebobina al principio del capitulo (profeta
+// entero, sin objetos, mapa nuevo), que es justo donde deja "Reintentar": asi las dos
+// salidas de la pantalla de derrota llevan al mismo sitio y "Continuar" sigue existiendo.
+void Engine::save_after_defeat() {
+    populate_save_data();
+    save.data.run_active   = true;
+    save.data.current_room = -1;          // el capitulo se regenera: la sala guardada ya no existe
+    save.data.chapter_seed = 0;           // semilla nueva, como en retry_chapter()
+    save.data.hp           = 9999.0f;     // continue_run() lo recorta al maximo del profeta
+    save.data.faith        = Config::FAITH_INITIAL;
+    save.data.item_count   = 0;           // el equipo del run muere con el run
+    save.data.consumable_id = UINT32_MAX;
+    save.data.consumable_uses = 0;
+    // UINT32_MAX -> los milagros de arranque del profeta
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) save.data.miracle_ids[s] = UINT32_MAX;
+    save.save();
 }
 
 void Engine::continue_run() {
@@ -889,8 +1251,12 @@ void Engine::continue_run() {
         if (d) player.grant_item(world, faith, *d);
     }
     player.consumable_slot = save.data.consumable_id;
-    player.active_slot_count = std::max(1, std::min(2, save.data.active_slots));
-    for (int s = 0; s < 2; s++) {
+    // grant_item ya dejo 1 carga al reponer el consumible: la guardada manda
+    player.consumable_charges = (player.consumable_slot == UINT32_MAX)
+                              ? 0
+                              : static_cast<u8>(std::max(1u, std::min(9u, save.data.consumable_uses)));
+    player.active_slot_count = std::max(1, std::min(Config::MAX_MIRACLE_SLOTS, save.data.active_slots));
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) {
         if (save.data.miracle_ids[s] < static_cast<u32>(MiracleID::COUNT))
             player.miracle_slots[s].equip(static_cast<MiracleID>(save.data.miracle_ids[s]));
     }
@@ -906,7 +1272,11 @@ void Engine::continue_run() {
     if (save.data.current_room >= 0 && save.data.current_room < floor_map.room_count)
         load_room(save.data.current_room);
 
-    change_scene(GameScene::Playing);
+    // La carta del capitulo tambien al continuar: el jugador vuelve dias despues y hay que
+    // recordarle donde esta y que se le pide (el mundo ya esta cargado detras).
+    story.begin();
+    story_chapter_card(story, state.current_chapter);
+    play_story(StoryThen::Play);
 }
 
 // =============================================================================
@@ -989,9 +1359,19 @@ void Engine::load_room(int room_index) {
         if (node.type == RoomType::Boss) {
             auto def = get_chapter_def(state.current_chapter);
             Vec2 pos = current_room_data.tile_to_world(Config::ROOM_TILES_X / 2, 3);
+            codex_see_enemy(save.data, def.boss_type);
             boss_entity = spawn_boss(world, def.boss_type, pos,
                                      enemy_textures[static_cast<u32>(def.boss_type)],
-                                     state.current_chapter, def.boss_name);
+                                     state.current_chapter, def.boss_name, def.boss_pattern);
+            // El encuentro del capitulo puede haber debilitado al jefe (agua sobre el altar,
+            // ojos abiertos): se aplica al desangrarlo, no al definirlo.
+            if (boss_hp_scale < 1.0f && boss_entity != ENTITY_NONE &&
+                world.has(boss_entity, Component::Health)) {
+                auto& bh = world.healths[boss_entity];
+                bh.max *= boss_hp_scale;
+                bh.current = bh.max;
+                show_message("El jefe entra debilitado", 2.5f);
+            }
             char buf[64];
             snprintf(buf, sizeof(buf), "%s", def.boss_name);
             show_banner("JEFE", buf, 2.5f);
@@ -1113,7 +1493,7 @@ void Engine::update_room_state() {
                 audio.play_sfx(SfxID::LevelUp);
             } else if (!player.took_damage_this_room) {
                 faith.on_room_no_damage();
-                show_message("Sala despejada sin dano  +2 Fe", 2.5f);
+                show_message("Sala despejada sin daño  +2 Fe", 2.5f);
             } else {
                 show_message("Sala despejada", 1.5f);
             }
@@ -1137,8 +1517,8 @@ void Engine::update_room_state() {
             // one card per room would hand out all 13 items well before the first chapter ends
             // (bot runs reached chapter 10 carrying 18 items and never dropped below 70% HP).
             if (node.type == RoomType::Elite)      open_item_choice("ELITE DERROTADA");
-            else if (node.type == RoomType::Boss)  open_item_choice("BOTIN DEL JEFE");
-            else if (randi_range(0, 4) == 0)       open_item_choice("ELIGE UNA BENDICION");
+            else if (node.type == RoomType::Boss)  open_item_choice("BOTÍN DEL JEFE");
+            else if (randi_range(0, 4) == 0)       open_item_choice("ELIGE UNA BENDICIÓN");
         }
     }
 
@@ -1155,7 +1535,10 @@ void Engine::update_room_state() {
         Vec2 center = world.transforms[player.entity].position;
         if (std::abs(center.x - exit_pos.x) < 20.0f && std::abs(feet.y - exit_pos.y) < 20.0f) {
             floor_map.room_cache[floor_map.current_room] = room;
-            advance_chapter();
+            // Cierre narrado del capitulo antes de pasar al siguiente
+            story.begin();
+            story_chapter_outro(story, state.current_chapter);
+            play_story(StoryThen::AdvanceChapter);
             return;
         }
     }
@@ -1182,9 +1565,158 @@ void Engine::update_room_state() {
                 open_item_choice("EL COFRE SE ABRE");
             }
             break;
+        case TileType::Event:
+            if (!room.event_used) open_dialogue(state.current_chapter);
+            break;
         default:
             break;
     }
+}
+
+// =============================================================================
+// Encuentros biblicos (game/events.h): sala Event, dialogo y decision
+// =============================================================================
+void Engine::open_dialogue(int chapter) {
+    EventDef def = get_event_def(chapter);
+    if (!def.speaker || !def.speaker[0]) return;
+    dialogue = DialogueState{};
+    dialogue.chapter = chapter;
+    dialogue.auto_timer = autoplay.active ? 1.0f : 0.0f;
+    audio.play_sfx(SfxID::Notification, 0.7f);
+    change_scene(GameScene::Dialogue);
+}
+
+void Engine::update_dialogue(f32 dt) {
+    EventDef def = get_event_def(dialogue.chapter);
+    int opt_count = def.options[1].label ? 2 : 1;
+
+    bool confirm = input.is_action_just_pressed(Action::Confirm) ||
+                   input.is_action_just_pressed(Action::Attack);
+    if (dialogue.auto_timer > 0.0f) {
+        dialogue.auto_timer -= dt;
+        if (dialogue.auto_timer <= 0.0f) { confirm = true; dialogue.auto_timer = 0.8f; }
+    }
+
+    if (dialogue.choosing && !dialogue.resolved) {
+        if (input.is_action_just_pressed(Action::MoveUp))
+            dialogue.selected = (dialogue.selected - 1 + opt_count) % opt_count;
+        if (input.is_action_just_pressed(Action::MoveDown))
+            dialogue.selected = (dialogue.selected + 1) % opt_count;
+    }
+    if (!confirm) return;
+
+    if (!dialogue.choosing) {
+        // Avanzar por las lineas del personaje hasta agotarlas
+        dialogue.line++;
+        if (dialogue.line >= 3 || !def.lines[dialogue.line]) {
+            dialogue.choosing = true;
+            dialogue.selected = 0;
+        }
+        return;
+    }
+    if (!dialogue.resolved) {
+        apply_event_choice(dialogue.chapter, dialogue.selected);
+        dialogue.result = def.options[dialogue.selected].result;
+        dialogue.resolved = true;
+        return;
+    }
+    // El encuentro no se repite: la hoguera se apaga y la sala queda marcada
+    current_room_data.event_used = true;
+    Vec2 feet = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
+                ? world.transforms[player.entity].position + Vec2{0, 6} : Vec2{0, 0};
+    int tx = static_cast<int>(feet.x) / Config::TILE_SIZE;
+    int ty = static_cast<int>(feet.y) / Config::TILE_SIZE;
+    if (tx >= 0 && tx < Config::ROOM_TILES_X && ty >= 0 && ty < Config::ROOM_TILES_Y &&
+        current_room_data.tiles[ty][tx] == TileType::Event)
+        current_room_data.tiles[ty][tx] = TileType::Path;
+    floor_map.room_cache[floor_map.current_room] = current_room_data;
+    change_scene(GameScene::Playing);
+}
+
+// El texto vive en events.h; la mecanica vive aqui, con los sistemas que ya existen.
+void Engine::apply_event_choice(int chapter, int option) {
+    auto heal_full = [&]() {
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
+            world.healths[player.entity].current = world.healths[player.entity].max;
+    };
+    auto hurt = [&](f32 amount) {
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
+            auto& h = world.healths[player.entity];
+            h.current = std::max(1.0f, h.current - amount);   // un encuentro nunca mata
+        }
+    };
+    auto add_max_hp = [&](f32 amount) {
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
+            auto& h = world.healths[player.entity];
+            h.max = std::max(20.0f, h.max + amount);
+            h.current = std::min(h.current, h.max);
+            if (amount > 0.0f) h.current += amount;
+        }
+    };
+    auto add_damage = [&](f32 amount) {
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat))
+            world.combats[player.entity].damage += amount;
+    };
+    auto grant = [&](u32 item_id) {
+        const ItemDef* d = item_registry.get(item_id);
+        if (!d) return;
+        player.grant_item(world, faith, *d);
+        codex_see_item(save.data, item_id);
+        show_message(d->name, 2.5f);
+    };
+
+    switch (chapter) {
+        case 1:  // Los cuervos de Querit
+            if (option == 0) { heal_full(); faith.modify(5.0f); }
+            else             { faith.modify(12.0f); }
+            break;
+        case 2:  // La viuda de Sarepta — 1 Reyes 17:14
+            if (option == 0) { hurt(15.0f); faith.on_help_widow(); grant(13); }
+            else             { faith.modify(Config::FAITH_FLEE); }
+            break;
+        case 3:  // El agua sobre el altar del Carmelo — 1 Reyes 18:33
+            if (option == 0) { faith.modify(-20.0f); boss_hp_scale = 0.5f; }
+            else             { add_damage(8.0f); }
+            break;
+        case 4:  // El silbo apacible — 1 Reyes 19:12
+            if (option == 0) { faith.modify(30.0f); player.active_slot_count = std::max(player.active_slot_count, 2); }
+            else             { heal_full(); }
+            break;
+        case 5:  // El llamado de Eliseo — 1 Reyes 19:20
+            if (option == 0) { player.consumable_slot = UINT32_MAX; player.consumable_charges = 0;
+                               add_damage(2.0f); faith.modify(10.0f); }
+            else             { faith.modify(20.0f); }
+            break;
+        case 6:  // La sal en la fuente de Jerico — 2 Reyes 2:21
+            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
+            else             { hurt(10.0f); faith.modify(15.0f); }
+            break;
+        case 7:  // Las vasijas de la viuda — 2 Reyes 4:6
+            if (option == 0) { hurt(20.0f); faith.on_help_widow(); grant(14); }
+            else             { faith.modify(10.0f); }
+            break;
+        case 8:  // El aposento sunamita — 2 Reyes 4:35
+            if (option == 0) { add_max_hp(-15.0f); has_revive = true; }
+            else             { faith.modify(12.0f); }
+            break;
+        case 9:  // Naaman en el Jordan — 2 Reyes 5:14
+            if (option == 0) { faith.modify(-25.0f); heal_full(); add_max_hp(20.0f); }
+            else             { add_damage(4.0f); faith.modify(Config::FAITH_FLEE); }
+            break;
+        case 10: // Ojos abiertos — 2 Reyes 6:17
+            if (option == 0) {
+                faith.modify(-20.0f);
+                boss_hp_scale = 0.6f;
+                player.miracle_slots[player.active_slot_count - 1].equip(MiracleID::EjercitoCelestial);
+            } else {
+                add_damage(6.0f);
+            }
+            break;
+        default: break;
+    }
+    audio.play_sfx(option == 0 ? SfxID::FaithGain : SfxID::MenuConfirm, 0.9f);
+    populate_save_data();
+    save.save();
 }
 
 // =============================================================================
@@ -1233,8 +1765,9 @@ void Engine::open_miracle_choice(const char* title) {
         choice.ids[choice.count] = pool[k];
         pool.erase(pool.begin() + k);
         const MiracleSlot& slot = player.miracle_slots[target];
+        static const char* SLOT_KEYS[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
         choice.extras[choice.count] = slot.is_empty()
-            ? std::string("SLOT ") + (target == 0 ? "Q" : "E") + " LIBRE"
+            ? std::string("SLOT ") + SLOT_KEYS[std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, target))] + " LIBRE"
             : std::string("SUSTITUYE A ") + get_miracle_def(slot.miracle).name;
         choice.count++;
     }
@@ -1275,6 +1808,7 @@ void Engine::update_item_choice(f32 dt) {
             for (int s = 0; s < player.active_slot_count; s++)
                 if (player.miracle_slots[s].is_empty()) { target = s; break; }
             player.miracle_slots[target].equip(id);
+            codex_see_miracle(save.data, id);
             MiracleDef d = get_miracle_def(id);
             SDL_Log("Miracle equipped in slot %d: %s (tier %d, %.0f faith)", target, d.name, d.tier, d.faith_cost);
             snprintf(buf, sizeof(buf), "%s equipado en [%s]", d.name, target == 0 ? "Q" : "E");
@@ -1284,9 +1818,14 @@ void Engine::update_item_choice(f32 dt) {
             const ItemDef* def = item_registry.get(choice.ids[choice.selected]);
             if (def) {
                 player.grant_item(world, faith, *def);
+                codex_see_item(save.data, def->id);
                 SDL_Log("Item taken: %s (%s)", def->name, def->description);
-                snprintf(buf, sizeof(buf), "%s: %s", def->name, def->description);
-                show_message(buf, 3.0f);
+                // Las armas traen tecla: sin decirlo, el jugador recoge la Honda y no la usa jamas
+                if (def->category == ItemCategory::Weapon)
+                    snprintf(buf, sizeof(buf), "%s: pulsa [I] para usarla", def->name);
+                else
+                    snprintf(buf, sizeof(buf), "%s: %s", def->name, def->description);
+                show_message(buf, 3.5f);
                 audio.play_sfx(SfxID::MenuConfirm, 0.9f);
             }
         }
@@ -1302,6 +1841,7 @@ void Engine::spawn_room_enemies() {
     for (auto& spawn : current_room_data.enemy_spawns) {
         Entity e = spawn_enemy(world, spawn.type, spawn.position,
                                enemy_textures[static_cast<u32>(spawn.type)], state.current_chapter);
+        codex_see_enemy(save.data, spawn.type);   // el bestiario se llena viéndolos
         if (e != ENTITY_NONE) {
             SDL_Log("Spawned enemy '%s' at (%.0f, %.0f)",
                     get_enemy_def(spawn.type).name, spawn.position.x, spawn.position.y);
@@ -1393,6 +1933,10 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "walk")  { ss >> c.num >> c.num2; }
         else if (c.op == "seed")  { ss >> c.num; }
         else if (c.op == "chapter") { ss >> c.num; }
+        else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
+        else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
+        else if (c.op == "learn") { ss >> c.num >> c.num2; }    // id de milagro + slot
+        else if (c.op == "faith") { ss >> c.num; }              // fijar la fe actual
         else if (c.op == "say")   { std::getline(ss, c.arg); }
         else if (c.op == "stats") { std::getline(ss, c.arg); }
         cmds.push_back(c);
@@ -1411,6 +1955,8 @@ static Action action_from_name(const std::string& n) {
     if (n == "dash")    return Action::Dash;
     if (n == "m1")      return Action::Miracle1;
     if (n == "m2")      return Action::Miracle2;
+    if (n == "m3")      return Action::Miracle3;
+    if (n == "weapon")  return Action::AttackSecondary;
     if (n == "confirm") return Action::Confirm;
     if (n == "cancel")  return Action::Cancel;
     if (n == "pause")   return Action::Pause;
@@ -1424,13 +1970,20 @@ void Engine::update_autoplay(f32 dt) {
     // Actions the script may drive: reset each tick, then re-assert what is held
     static const Action driven[] = {Action::MoveUp, Action::MoveDown, Action::MoveLeft, Action::MoveRight,
                                     Action::Attack, Action::Dash, Action::Miracle1, Action::Miracle2,
-                                    Action::Confirm, Action::Cancel, Action::Pause, Action::Map, Action::Consumable};
+                                    Action::Miracle3,
+                                    Action::Confirm, Action::Cancel, Action::Pause, Action::Map, Action::Consumable,
+                                    Action::AttackSecondary};
     for (Action a : driven) input.actions[static_cast<u32>(a)] = false;
 
     if (ap.timer > 0.0f) {
         ap.timer -= dt;
         if (ap.holding) input.actions[ap.hold_action] = true;
     } else {
+        // Lo que se estaba manteniendo sobrevive a un `shot`: `hold map 0.6` + `shot` es la
+        // unica forma de fotografiar el mapa grande, y sin esto la tecla se soltaba justo
+        // antes de la captura.
+        const bool was_holding = ap.holding;
+        const u32  was_action  = ap.hold_action;
         ap.holding = false;
         // Execute commands until one that takes time
         while (ap.index < ap.cmds.size()) {
@@ -1449,7 +2002,14 @@ void Engine::update_autoplay(f32 dt) {
                 break;
             }
             if (c.op == "aim")  { input.aim_axis = {c.num, c.num2}; continue; }
-            if (c.op == "shot") { pending_shot_name = c.arg; screenshot_requested = true; ap.timer = Config::FIXED_DT; break; }
+            if (c.op == "shot") {
+                pending_shot_name = c.arg;
+                screenshot_requested = true;
+                ap.timer = Config::FIXED_DT;
+                if (was_holding) { ap.holding = true; ap.hold_action = was_action;
+                                   input.actions[was_action] = true; }
+                break;
+            }
             if (c.op == "goto") { load_room(static_cast<int>(c.num)); continue; }
             if (c.op == "bot")  { ap.bot_timer = c.num; ap.timer = c.num; break; }
             if (c.op == "seed") { srand(static_cast<unsigned>(c.num)); continue; }
@@ -1461,15 +2021,64 @@ void Engine::update_autoplay(f32 dt) {
                 continue;
             }
             if (c.op == "killall") {
+                // Lista primero, matanza despues: si no, los hijos que nacen al morir un
+                // enemigo (Agua Corrupta) caen dentro del mismo barrido y nunca se ven.
+                Entity list[MAX_ENTITIES];
+                int n = 0;
                 for (u32 e = 0; e < world.entity_count; e++) {
                     if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
                     if (!world.healths[e].is_alive()) continue;
-                    if (apply_damage(world, ENTITY_NONE, e, 100000.0f)) on_enemy_killed(world, faith, e, combat_events);
+                    list[n++] = static_cast<Entity>(e);
+                }
+                for (int i = 0; i < n; i++) {
+                    if (apply_damage(world, ENTITY_NONE, list[i], 100000.0f))
+                        on_enemy_killed(world, faith, list[i], combat_events);
                 }
                 continue;
             }
             if (c.op == "walk") { ap.walk_target = {c.num, c.num2}; ap.timer = 6.0f; ap.walking = true; break; }
             if (c.op == "god")  { god_mode = !god_mode; continue; }
+            // Depuracion: sembrar enemigos de un tipo concreto alrededor del jugador.
+            // Sin esto, comprobar una conducta del Acto II depende de que el capitulo
+            // la sortee (los cuatro tipos se reparten al azar por sala).
+            if (c.op == "spawn") {
+                u32 t = static_cast<u32>(std::max(0.0f, c.num));
+                int n = std::max(1, static_cast<int>(c.num2));
+                if (t < static_cast<u32>(EnemyType::COUNT) && player.entity != ENTITY_NONE &&
+                    world.has(player.entity, Component::Transform)) {
+                    Vec2 p = world.transforms[player.entity].position;
+                    for (int i = 0; i < n; i++) {
+                        Vec2 at = p + Vec2{static_cast<f32>((i % 4) - 1) * 20.0f,
+                                           static_cast<f32>((i / 4) - 1) * 20.0f - 34.0f};
+                        spawn_enemy(world, static_cast<EnemyType>(t), at, world.enemy_textures[t],
+                                    state.current_chapter);
+                    }
+                    SDL_Log("Autoplay: spawn %d x %s", n, get_enemy_def(static_cast<EnemyType>(t)).name);
+                }
+                continue;
+            }
+            // Depuracion: montar el estado que hace falta para mirar un efecto concreto
+            if (c.op == "give") {
+                const ItemDef* d = item_registry.get(static_cast<u32>(c.num));
+                if (d) { player.grant_item(world, faith, *d); codex_see_item(save.data, d->id); }
+                continue;
+            }
+            if (c.op == "learn") {
+                int slot = std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, static_cast<int>(c.num2)));
+                u32 mid = static_cast<u32>(c.num);
+                if (mid < static_cast<u32>(MiracleID::COUNT)) {
+                    player.miracle_slots[slot].equip(static_cast<MiracleID>(mid));
+                    player.active_slot_count = std::max(player.active_slot_count, slot + 1);
+                }
+                continue;
+            }
+            if (c.op == "cards")   { open_item_choice("ELIGE UNA BENDICIÓN"); continue; }
+            if (c.op == "mcards")  { open_miracle_choice("ORAS EN EL ALTAR"); continue; }
+            if (c.op == "faith") {
+                faith.current = std::max(0.0f, std::min(faith.max, c.num));
+                faith.modify(0.0f);   // recalcula el nivel
+                continue;
+            }
             if (c.op == "stats") {   // balance probe: one line per checkpoint in the log
                 f32 hp = 0.0f, hpmax = 1.0f;
                 if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
@@ -1530,6 +2139,9 @@ void Engine::update_autoplay(f32 dt) {
             if (player.active_slot_count > 1 && player.miracle_slots[1].is_ready() &&
                 world.healths[player.entity].ratio() < 0.5f && (static_cast<int>(world.time * 10) % 11 == 0))
                 input.actions[static_cast<u32>(Action::Miracle2)] = true;
+            if (player.active_slot_count > 2 && player.miracle_slots[2].is_ready() &&
+                best < 90.0f && (static_cast<int>(world.time * 10) % 13 == 0))
+                input.actions[static_cast<u32>(Action::Miracle3)] = true;
         } else {
             input.actions[static_cast<u32>(Action::Attack)] = false;
             input.move_axis = {0, 0};

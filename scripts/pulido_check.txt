@@ -1,0 +1,165 @@
+# Verificacion del pulido: historia sin referencias, milagros claros, VFX por poder, armas
+# Uso:  MANTLE.exe --script scripts/pulido_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+
+# --- Menu y prologo: la cita se queda, la referencia no ---
+wait 1.0
+press confirm
+wait 3.2
+shot 20_prologo_sin_ref
+wait 0.1
+press confirm
+wait 3.2
+shot 21_cap1_sin_ref
+wait 0.1
+press confirm
+wait 1.2
+
+# --- HUD: barra de fe con muescas de tier, slot Q listo (Cuervos, Tier 1) ---
+god
+shot 22_hud_slot_q_listo
+wait 0.1
+
+# --- Cuervos de Querit (Q): usable con la fe inicial, sin necesitar 50 ---
+press m1
+wait 0.25
+shot 23_vfx_cuervos
+wait 0.1
+wait 1.0
+
+# --- Slot bloqueado por NIVEL de fe: candado + fe requerida sobre el slot ---
+learn 2 1
+faith 20
+wait 0.4
+shot 24_slot_bloqueado_candado
+wait 0.1
+press m2
+wait 0.3
+shot 25_mensaje_necesitas_fe
+wait 0.1
+
+# --- Fuego del Cielo con fe suficiente: columna que cae + corona ---
+faith 95
+wait 0.4
+press m2
+wait 0.22
+shot 26_vfx_fuego_del_cielo
+wait 0.1
+wait 1.5
+
+# --- Palabra de Sequia: onda de tierra seca ---
+learn 1 1
+faith 95
+wait 0.3
+press m2
+wait 0.2
+shot 27_vfx_sequia
+wait 0.1
+wait 1.5
+
+# --- Carro de Fuego: ruedas + estela durante la embestida ---
+learn 3 1
+faith 95
+wait 0.3
+press m2
+wait 0.28
+shot 28_vfx_carro
+wait 0.1
+wait 1.5
+
+# --- Altar Consumido: fogonazo blanco a pantalla completa ---
+learn 4 1
+faith 95
+wait 0.3
+press m2
+wait 0.02
+shot 29_vfx_altar_flash
+wait 0.1
+wait 0.4
+shot 30_vfx_altar_corona
+wait 0.1
+wait 1.5
+
+# --- Milagros de Eliseo: zona de cura, aceite, ojos, ejercito, doble porcion ---
+learn 5 1
+faith 95
+wait 0.3
+press m2
+wait 0.25
+shot 31_vfx_sanar_aguas
+wait 0.1
+wait 1.2
+
+learn 6 1
+faith 95
+wait 0.3
+press m2
+wait 0.25
+shot 32_vfx_aceite
+wait 0.1
+wait 1.2
+
+learn 7 1
+faith 95
+wait 0.3
+press m2
+wait 0.25
+shot 33_vfx_ojos_abiertos
+wait 0.1
+wait 1.2
+
+learn 8 1
+faith 95
+wait 0.3
+press m2
+wait 0.25
+shot 34_vfx_ejercito
+wait 0.1
+wait 1.2
+
+learn 9 1
+faith 95
+wait 0.3
+press m2
+wait 0.4
+shot 35_vfx_doble_porcion
+wait 0.1
+wait 1.2
+
+# --- Armas: celda del HUD con icono, tecla I y nombre; VFX propios ---
+give 0
+wait 0.6
+shot 36_hud_honda
+wait 0.1
+press weapon
+wait 0.15
+shot 37_vfx_honda
+wait 0.1
+wait 1.2
+
+give 1
+wait 0.6
+shot 38_hud_vara
+wait 0.1
+press weapon
+wait 0.15
+shot 39_vfx_vara
+wait 0.1
+wait 1.0
+
+# --- Cartas de eleccion sin referencia al pie (descripcion con mas sitio) ---
+cards
+wait 0.35
+shot 40_cartas_objeto
+wait 0.1
+press confirm
+wait 0.6
+
+mcards
+wait 0.35
+shot 41_cartas_milagro
+wait 0.1
+press confirm
+wait 0.6
+
+quit

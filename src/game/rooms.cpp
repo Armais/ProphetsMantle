@@ -242,7 +242,7 @@ void Room::generate(RoomType room_type, int chap, int difficulty) {
     // Biome decoration for open rooms (boss arena stays mostly clear)
     if (room_type == RoomType::Normal || room_type == RoomType::Elite ||
         room_type == RoomType::Start  || room_type == RoomType::Treasure ||
-        room_type == RoomType::Altar) {
+        room_type == RoomType::Altar  || room_type == RoomType::Event) {
         decorate(*this, biome);
     } else if (room_type == RoomType::Boss) {
         BiomeStyle arena = biome;
@@ -281,6 +281,7 @@ void Room::generate(RoomType room_type, int chap, int difficulty) {
     // Special room props at the centre
     if (room_type == RoomType::Altar)    tiles[CY][CX] = TileType::AltarGod;
     if (room_type == RoomType::Treasure) tiles[CY][CX] = TileType::Chest;
+    if (room_type == RoomType::Event)    tiles[CY][CX] = TileType::Event;
     if (room_type == RoomType::Start) {
         // A Baal altar to smash for a first taste of faith
         tiles[CY - 2][CX + 4] = TileType::AltarBaal;
@@ -398,6 +399,7 @@ bool Room::is_tile_walkable(int tx, int ty) const {
         case TileType::Bridge:
         case TileType::Exit:
         case TileType::Torch:
+        case TileType::Event:
             return true;
         default:
             return false;  // Wall, Pit, Tree, Rock, River = not walkable
@@ -479,6 +481,7 @@ static Color fallback_color(TileType t) {
         case TileType::TallGrass: return {90, 150, 70, 150};
         case TileType::Exit:      return {255, 230, 120, 255};
         case TileType::Torch:     return {240, 140, 40, 255};
+        case TileType::Event:     return {255, 226, 150, 255};
         default:                  return {0, 0, 0, 0};
     }
 }
@@ -500,7 +503,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
                 Color c = fallback_color(t);
                 if (c.a > 0 && t != TileType::Tree && t != TileType::Rock && t != TileType::Bush &&
                     t != TileType::Chest && t != TileType::AltarGod && t != TileType::AltarBaal &&
-                    t != TileType::Torch && t != TileType::Exit)
+                    t != TileType::Torch && t != TileType::Exit && t != TileType::Event)
                     renderer.draw_rect(dst, c);
                 continue;
             }
@@ -650,6 +653,11 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex)
                 case TileType::AltarBaal: sprite = TileSprite::AltarBaal; tall = true; break;
                 case TileType::Torch:     sprite = TileSprite::Torch; tall = true; break;
                 case TileType::Exit:      sprite = TileSprite::Exit;  tall = true; break;
+                // Encuentro: una hoguera encendida marca donde espera el personaje. El
+                // tileset no tiene celda de PNJ; el tinte calido la separa de una antorcha
+                // normal y el dialogo pone el nombre. (Celda propia pendiente en tiles.py.)
+                case TileType::Event:     sprite = TileSprite::Torch; tall = true;
+                                          tint = {255, 226, 150, 255}; break;
                 default: break;
             }
             if (sprite == TileSprite::COUNT) continue;
@@ -762,6 +770,14 @@ void FloorMap::generate(int chapter) {
 
         rooms[treasure_idx].type = RoomType::Treasure;
         rooms[altar_idx].type = RoomType::Altar;
+
+        // Encuentro biblico del capitulo (game/events.h): uno por mapa, siempre presente.
+        // Va antes que la Elite porque el relato pesa mas que una sala extra de combate.
+        if (!candidates.empty()) {
+            int e = randi_range(0, static_cast<i32>(candidates.size()) - 1);
+            rooms[candidates[e]].type = RoomType::Event;
+            candidates.erase(candidates.begin() + e);
+        }
 
         // Place one Elite room if there are candidates left
         if (!candidates.empty()) {

@@ -32,6 +32,7 @@ enum class Action : u32 {
     Dash,           // Espacio / A(Xbox) / Boton Dash
     Miracle1,       // Q / RB / Boton Milagro 1
     Miracle2,       // E / LB / Boton Milagro 2
+    Miracle3,       // F / Y(Xbox) / Boton Milagro 3 (solo con la mejora "Doble Porcion")
     Consumable,     // R / X
 
     // UI
@@ -103,6 +104,11 @@ struct Input {
     void pre_update();
     void process_event(const SDL_Event& event);
     void post_update();
+
+    // Marca las pulsaciones de este frame como "ya vistas". El bucle usa timestep fijo y
+    // puede llamar a update() varias veces por frame: sin esto un solo ENTER se contaba
+    // una vez por paso y se comia paginas enteras de la pantalla de historia.
+    void consume_presses();
 
     // Action queries
     bool is_action_pressed(Action a) const;

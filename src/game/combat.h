@@ -6,6 +6,10 @@
 
 #include "core/ecs.h"
 
+// Celdas del tileset compartido (game/rooms.h). Declarada aqui para no arrastrar
+// todo rooms.h en la cabecera de combate.
+enum class TileSprite : u8;
+
 // =============================================================================
 // Collision layers
 // =============================================================================
@@ -70,6 +74,13 @@ Entity spawn_pickup(ECSWorld& world, Vec2 position, ItemComponent::Pickup kind, 
 
 // Burst of tiny square particles (visual only: no collider, short lifetime)
 void spawn_particles(ECSWorld& world, Vec2 position, Color color, int count, f32 speed = 60.0f, f32 life = 0.35f);
+
+// Un sprite del tileset que vive `life` segundos y se apaga. Con `grow` se abre como un
+// anillo, con `spin` gira, con `velocity` se desplaza. Es la pieza con la que cada milagro
+// tiene su propia firma visual sin necesitar arte nuevo (ver Player::cast_miracle).
+Entity spawn_vfx(ECSWorld& world, Vec2 position, TileSprite sprite, Color tint,
+                 f32 size_units, f32 life, f32 grow = 0.0f, f32 spin = 0.0f,
+                 Vec2 velocity = {0, 0}, i32 z_order = 9);
 
 // Best enemy to shoot at from `from`, using the GDD auto-aim priority (4.3):
 // 1) a boss, 2) an enemy currently attacking, 3) the closest one, 4) the lowest HP

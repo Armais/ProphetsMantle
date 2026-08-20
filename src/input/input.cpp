@@ -34,6 +34,10 @@ void Input::post_update() {
     update_axes();
 }
 
+void Input::consume_presses() {
+    std::memcpy(actions_prev, actions, sizeof(actions));
+}
+
 // =============================================================================
 // Event Processing
 // =============================================================================
@@ -106,10 +110,15 @@ void Input::process_keyboard(const SDL_Event& event) {
         case SDL_SCANCODE_SPACE:  case SDL_SCANCODE_J:
             actions[static_cast<u32>(Action::Dash)]      = pressed; break;
         case SDL_SCANCODE_K:      actions[static_cast<u32>(Action::Attack)]    = pressed; break;
+        // Arma secundaria (Honda / Vara). L y E ya son Miracle2, asi que va en I.
+        case SDL_SCANCODE_I:      actions[static_cast<u32>(Action::AttackSecondary)] = pressed; break;
+        case SDL_SCANCODE_P:      actions[static_cast<u32>(Action::Pray)]      = pressed; break;
         case SDL_SCANCODE_M:      case SDL_SCANCODE_Q:
             actions[static_cast<u32>(Action::Miracle1)]  = pressed; break;
         case SDL_SCANCODE_L:      case SDL_SCANCODE_E:
             actions[static_cast<u32>(Action::Miracle2)]  = pressed; break;
+        // Tercer slot (mejora "Doble Porcion" de El Santuario): Q/E/F seguidas
+        case SDL_SCANCODE_F:      actions[static_cast<u32>(Action::Miracle3)]  = pressed; break;
         case SDL_SCANCODE_R:      actions[static_cast<u32>(Action::Consumable)]= pressed; break;
         case SDL_SCANCODE_TAB:    actions[static_cast<u32>(Action::Map)]       = pressed; break;
         case SDL_SCANCODE_ESCAPE: actions[static_cast<u32>(Action::Pause)]     = pressed;
@@ -175,6 +184,9 @@ void Input::process_gamepad(const SDL_Event& event) {
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_UP:
                 actions[static_cast<u32>(Action::Pray)] = pressed;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      // D-Pad abajo - Milagro 3
+                actions[static_cast<u32>(Action::Miracle3)] = pressed;
                 break;
             default: break;
         }

@@ -249,15 +249,29 @@ static void system_animation(ECSWorld& w, f32 dt) {
 }
 
 // =============================================================================
-// System: Lifetime (auto-destroy)
+// System: Lifetime (auto-destroy + animacion de efecto: fundido, crecimiento, giro)
 // =============================================================================
 static void system_lifetime(ECSWorld& w, f32 dt) {
     for (u32 e = 0; e < w.entity_count; e++) {
-        if (!w.has(static_cast<Entity>(e), Component::Lifetime)) continue;
+        Entity id = static_cast<Entity>(e);
+        if (!w.has(id, Component::Lifetime)) continue;
 
-        w.lifetimes[e].remaining -= dt;
-        if (w.lifetimes[e].remaining <= 0.0f) {
-            w.destroy(static_cast<Entity>(e));
+        auto& life = w.lifetimes[e];
+        life.remaining -= dt;
+        if (life.remaining <= 0.0f) {
+            w.destroy(id);
+            continue;
+        }
+
+        if (life.grow != 0.0f && w.has(id, Component::Transform)) {
+            w.transforms[e].scale.x += life.grow * dt;
+            w.transforms[e].scale.y += life.grow * dt;
+        }
+        if (life.spin != 0.0f && w.has(id, Component::Transform))
+            w.transforms[e].rotation += life.spin * dt;
+        if (life.fade && life.total > 0.0f && w.has(id, Component::Sprite)) {
+            f32 k = std::max(0.0f, std::min(1.0f, life.remaining / life.total));
+            w.sprites[e].tint.a = static_cast<u8>(255.0f * k);
         }
     }
 }
@@ -388,6 +402,12 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
         if (has(static_cast<Entity>(e), Component::Health)) {
             const auto& h = healths[e];
             if (h.hit_flash > 0.0f) tint = {255, 90, 70, 255};
+            // Aura del General Sirio: el aliado buffeado late en rojo para que se
+            // entienda de un vistazo que hay que matar al General primero.
+            else if (is_enemy && enemy_ais[e].buff_timer > 0.0f) {
+                f32 p = 0.5f + 0.5f * std::sin(time * 9.0f + static_cast<f32>(e));
+                tint = {255, static_cast<u8>(150 - 40 * p), static_cast<u8>(120 - 40 * p), tint.a};
+            }
             // Player i-frames: blink
             if (is_player && h.iframes_timer > 0.0f && !movements[e].is_dashing) {
                 int phase = static_cast<int>(h.iframes_timer * 20.0f);

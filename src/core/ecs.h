@@ -153,6 +153,20 @@ struct EnemyAIComponent {
     const char* name    = "???";   // Display name (from EnemyDef)
     bool is_boss        = false;
     u32  enemy_type     = 0;       // EnemyType index (for death effects / faith rewards)
+
+    // Jefes: patron propio por capitulo (game/enemies.h BossPattern)
+    u8  boss_pattern    = 0;
+    u8  phase           = 0;       // Fase alcanzada (los umbrales solo se cruzan una vez)
+    f32 special_timer   = 0.0f;    // Invocaciones / teleports / curaciones
+    Entity partner      = ENTITY_NONE;   // Acab y Jezabel
+
+    // Conductas del Acto II (game/enemies.h: on_enemy_death_behavior / update_death_fuses)
+    u8  chapter          = 1;      // Capitulo en que nacio (escala a los hijos que se dividen)
+    u8  split_generation = 0;      // Agua Corrupta: 0 = original; los hijos no vuelven a dividirse
+    f32 death_fuse       = 0.0f;   // Leproso: mecha encendida sobre el cadaver (telegrafia)
+    f32 buff_timer       = 0.0f;   // General Sirio: segundos que le queda el aura recibida
+    f32 base_damage      = 0.0f;   // Valores previos al aura (0 = nunca buffeado)
+    f32 base_speed       = 0.0f;
 };
 
 struct ProjectileComponent {
@@ -188,8 +202,15 @@ struct ItemComponent {
     bool   is_heredable = false;  // Transfers to Eliseo on ascension
 };
 
+// Vida limitada + animacion de "efecto": la usan particulas, proyectiles y los VFX de
+// milagro (spawn_vfx). Con `total` > 0 el sprite se puede desvanecer, crecer y girar
+// sin necesidad de un componente aparte.
 struct LifetimeComponent {
     f32 remaining = 1.0f;
+    f32 total     = 0.0f;   // Duracion inicial (0 = no hay fundido: `fade` se ignora)
+    f32 grow      = 0.0f;   // Escala ganada por segundo (anillos que se abren)
+    f32 spin      = 0.0f;   // Grados por segundo
+    bool fade     = false;  // Alpha del tinte = remaining / total
 };
 
 // Forward declarations (tile collision, deferred rendering)
@@ -227,10 +248,15 @@ struct ECSWorld {
 
     // Shared tileset texture (pickups / projectiles use its small sprites)
     u32 tileset = TEXTURE_NONE;
+    // Hojas por EnemyType, para que los jefes puedan invocar secuaces con su sprite
+    // correcto sin conocer al Engine (lo rellena Engine::load_sprites).
+    u32 enemy_textures[8] = {TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE,
+                             TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE};
     f32 time    = 0.0f;   // Accumulated world time (bobbing, water animation)
 
     // Event counters consumed by the Engine each frame
     u32 altars_smashed = 0;   // Baal altars destroyed by player projectiles
+    f32 shake_request  = 0.0f;   // Sacudida pedida desde el mundo (estallido del Leproso)
 
     // Floating damage numbers (filled by apply_damage, drawn and aged by the Engine)
     struct DamagePopup { Vec2 pos; f32 amount; f32 life; bool boss; };

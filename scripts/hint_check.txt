@@ -1,0 +1,26 @@
+# Pista de milagro + partida normal del bot (regresion)
+wait 1.0
+press confirm
+wait 3.2
+press confirm
+wait 3.2
+press confirm
+wait 1.0
+shot 50a_pista
+wait 0.1
+wait 1.0
+shot 50b_pista
+wait 0.1
+wait 1.0
+shot 50c_pista
+wait 0.1
+wait 1.0
+shot 50d_pista
+wait 0.1
+wait 1.0
+shot 50e_pista
+wait 0.1
+bot 45
+shot 51_bot_tras_45s
+wait 0.1
+quit

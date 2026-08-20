@@ -1,0 +1,99 @@
+# Verificacion Track 1: conductas de enemigo del Acto II
+# Uso:  MANTLE.exe --script scripts/actoII_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# EnemyType: 0 Soldado Acab, 1 Arquero, 2 Profeta Baal, 3 Leon,
+#            4 Soldado Sirio, 5 General Sirio, 6 Leproso, 7 Agua Corrupta
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+
+# --- Al Acto II (cap 6). god para poder mirar sin morir ---
+god
+chapter 6
+wait 3.0
+press confirm
+wait 1.5
+killall
+wait 0.8
+
+# =============================================================================
+# 1.1 Leproso Enloquecido: explota al morir
+# =============================================================================
+spawn 6 4
+wait 0.8
+shot 20_leprosos_vivos
+wait 0.1
+killall
+wait 0.18
+# La mecha dura 0.35 s: aqui deben verse los orbes verdes creciendo sobre los cadaveres
+shot 21_leprosos_mecha
+wait 0.1
+wait 0.30
+# Y aqui el estallido (estrellas verdes abriendose)
+shot 22_leprosos_estallido
+wait 0.1
+wait 1.0
+
+# --- Cadena: 12 leprosos pegados (20 unidades entre ellos, radio 28). El jugador no se
+#     mueve de sitio: dispara hacia arriba y deja que la cadena se propague sola.
+#     Si la explosion recursara, el frame se colgaria aqui.
+spawn 6 12
+wait 0.6
+shot 23_leprosos_cadena_antes
+wait 0.1
+hold up 0.25
+hold attack 2.5
+shot 24_leprosos_cadena_despues
+wait 0.1
+wait 1.5
+
+# =============================================================================
+# 1.2 Agua Corrupta: se divide
+# =============================================================================
+killall
+wait 1.5
+spawn 7 2
+wait 0.6
+shot 25_agua_padres
+wait 0.1
+killall
+wait 0.6
+# Aqui deben verse 4 hijos mas pequenos (y en el log "Agua Corrupta se divide: gen 1")
+shot 26_agua_hijos
+wait 0.1
+killall
+wait 0.6
+# Y aqui 8 nietos: la generacion 2 ya no se divide
+shot 27_agua_nietos
+wait 0.1
+killall
+wait 1.0
+# Sala despejada de verdad: sin bandas rojas en las salidas
+shot 28_agua_sala_despejada
+wait 0.1
+
+# =============================================================================
+# 1.3 General Sirio: buffea aliados
+# =============================================================================
+killall
+wait 1.5
+spawn 4 4
+wait 0.1
+spawn 5 1
+wait 0.7
+# Los soldados junto al General deben latir en rojo
+shot 29_general_arenga
+wait 0.1
+wait 0.6
+shot 30_general_arenga_2
+wait 0.1
+stats actoII_fin
+
+quit

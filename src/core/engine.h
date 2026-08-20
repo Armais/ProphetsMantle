@@ -19,9 +19,13 @@
 #include "game/combat.h"
 #include "game/rooms.h"
 #include "game/items.h"
+#include "game/events.h"
 #include "ui/menus.h"
 #include "ui/hud.h"
+#include "ui/story.h"
+#include "ui/codex.h"
 #include "systems/save.h"
+#include "systems/progression.h"
 
 // =============================================================================
 // Game State
@@ -31,7 +35,10 @@ enum class GameScene : u8 {
     Playing,
     Paused,
     Choice,      // "Elige una bendicion": 3 item cards over the frozen world
-    Transition,  // Elias -> Eliseo ascension
+    Story,       // Prologo / carta de capitulo / ascension / epilogo (ui/story.h)
+    Dialogue,    // Encuentro biblico de una sala Event (game/events.h)
+    Codex,       // El codice: lo descubierto hasta ahora (ui/codex.h)
+    Sanctuary,   // El Santuario: gastar ofrendas en mejoras (systems/progression.h)
     GameOver,
     Victory
 };
@@ -44,7 +51,18 @@ struct ItemChoice {
     f32 auto_timer = 0.0f;   // > 0: autoplay picks for us after this delay
     bool miracles = false;   // true: ids are MiracleIDs, not item ids
     std::string extras[3];   // per-card note ("Sustituye a ...")
-    const char* title = "ELIGE UNA BENDICION";
+    const char* title = "ELIGE UNA BENDICIÓN";
+};
+
+// Encuentro biblico en curso (GameScene::Dialogue). El texto sale de get_event_def().
+struct DialogueState {
+    int  chapter  = 0;
+    int  line     = 0;       // Linea de dialogo que se esta leyendo
+    int  selected = 0;
+    bool choosing = false;   // Ya se leyo todo: se muestran las opciones
+    bool resolved = false;   // Ya se eligio: se muestra el resultado
+    const char* result = ""; // Texto de la opcion elegida
+    f32  auto_timer = 0.0f;  // > 0 (autoplay): decide solo
 };
 
 enum class Act : u8 {
@@ -104,11 +122,22 @@ struct Engine {
     ECSWorld    world;
     FaithSystem faith;
     MenuSystem  menus;
+    StorySystem story;
+    CodexScreen codex;
+    ProgressionSystem progression;
     HUD         hud;
+    GameScene   codex_return = GameScene::MainMenu;   // Desde donde se abrio el codice
+    int         sanctuary_sel = 0;
     Player      player;
     SaveSystem  save;
     ItemRegistry item_registry;
     ItemChoice   choice;
+    DialogueState dialogue;
+
+    // Efectos de run que fijan los encuentros biblicos (game/events.h)
+    f32  boss_hp_scale = 1.0f;   // < 1: el jefe del capitulo entra debilitado
+    bool has_revive    = false;  // El aposento sunamita: una muerte perdonada
+    bool portable_altar_used = false;   // Mejora "Altar Portatil": una oracion por capitulo
 
     // Room / Map
     FloorMap  floor_map;
@@ -129,12 +158,17 @@ struct Engine {
     f32 banner_timer = 0.0f;
     f32 message_timer = 0.0f;
     f32 room_fade = 0.0f;        // 1 -> 0 fade-in after a room/chapter load (black veil under the HUD)
+    f32 world_flash = 0.0f;      // Fogonazo blanco de milagro (Player::flash_request)
     u32 chapter_seed = 0;        // RNG seed the current chapter map was generated with (saved)
     u32 pending_seed = 0;        // != 0: use this seed for the next start_chapter (loading a save)
     CombatEvents combat_events;
     int  run_kills = 0;
     int  lock_hints_shown = 0;
     bool god_mode = false;
+    // Pista unica "[Q] milagro": el milagro es el corazon del juego y nadie lo pulsa
+    // si nadie se lo dice. Cuenta atras mientras se juega el cap. 1.
+    f32  miracle_hint_timer = 5.0f;
+    bool miracle_hint_shown = false;
 
     // Debug
     Autoplay autoplay;
@@ -175,11 +209,19 @@ struct Engine {
     void trigger_ascension();  // Elias -> Eliseo transition
     void finish_ascension();   // Confirm on the ascension screen
 
+    // Historia (ui/story.h): abre GameScene::Story y ejecuta `then` al terminar
+    void play_story(StoryThen then);
+    void finish_story();
+    void finish_story_action(StoryThen then);
+
     // Room loading
     void load_room(int room_index);
     void spawn_room_enemies();
     void try_room_transition();  // Check if player crossed a room border
     void update_room_state();    // Clear detection, boss death, tile interactions
+    void open_dialogue(int chapter);            // Encuentro biblico -> GameScene::Dialogue
+    void update_dialogue(f32 dt);               // Avance de lineas + eleccion
+    void apply_event_choice(int chapter, int option);   // Efecto de la decision
     void open_item_choice(const char* title);      // Roll 3 item offers -> GameScene::Choice
     void open_miracle_choice(const char* title);   // Roll 3 miracle offers -> GameScene::Choice
     void update_item_choice(f32 dt);            // Navigation + confirm on the choice screen
@@ -189,8 +231,17 @@ struct Engine {
     void show_message(const char* text, f32 seconds = 2.0f);
     void update_music();
 
+    // Meta-progresion (systems/progression.h) y Santuario
+    void sync_progression_from_save();   // save.data -> progression (arranque)
+    void sync_progression_to_save();     // progression -> save.data
+    void apply_meta_upgrades();          // Aplica lo comprado al empezar un run
+    void award_offerings(bool victory);  // Ofrendas ganadas al terminar la partida
+    void update_sanctuary();
+    void render_sanctuary();
+
     // Save / Settings
     void populate_save_data();
+    void save_after_defeat();   // La derrota rebobina la partida al inicio del capitulo, no la borra
     void continue_run();
     void update_settings();
 

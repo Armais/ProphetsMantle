@@ -1,0 +1,90 @@
+# Verificacion Track 2: cuarta pestaña del Codice (Objetos)
+# Uso:  MANTLE.exe --script scripts/codice_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Se descubren unos cuantos objetos con `give` (que llama a codex_see_item) para
+# que la pestaña tenga filas conocidas y filas con ??????, y se comprueba que el
+# contador "Descubierto X/Y" cuadra con las cuatro pestañas.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+
+# --- Descubrir objetos de rarezas distintas: comun, rara y legendaria ---
+give 0
+wait 0.3
+give 2
+wait 0.3
+give 5
+wait 0.3
+give 6
+wait 0.3
+give 13
+wait 0.5
+
+# --- Abrir El Codice desde la pausa (opcion 1) ---
+press pause
+wait 0.6
+press down
+wait 0.3
+press confirm
+wait 0.8
+shot 40_codice_capitulos
+wait 0.1
+
+press right
+wait 0.4
+shot 41_codice_bestiario
+wait 0.1
+
+press right
+wait 0.4
+shot 42_codice_milagros
+wait 0.1
+
+press right
+wait 0.4
+shot 43_codice_objetos
+wait 0.1
+
+# La lista tiene 15 objetos y solo caben 8: bajar hasta el final comprueba el scroll
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+shot 44_codice_objetos_scroll
+wait 0.1
+
+# Y una vuelta completa: de Objetos a Capitulos con [D]
+press right
+wait 0.4
+shot 45_codice_vuelta
+wait 0.1
+
+quit

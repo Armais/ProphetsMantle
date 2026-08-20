@@ -44,6 +44,61 @@ struct DrawCmd {
 };
 
 // =============================================================================
+// Baked charset. Printable ASCII (32..126) plus the Latin-1 / punctuation codepoints
+// Spanish needs: the game text quotes Reina-Valera, so tildes and enye are not optional.
+// Strings in the sources are UTF-8 (MSVC needs /utf-8, see CMakeLists.txt).
+// =============================================================================
+constexpr int GLYPH_ASCII_COUNT = 95;   // 32..126
+
+inline constexpr u32 GLYPH_EXTRA[] = {
+    0x00A1, 0x00BF,                                           // ¡ ¿
+    0x00C1, 0x00C9, 0x00CD, 0x00D3, 0x00DA, 0x00DC, 0x00D1,   // Á É Í Ó Ú Ü Ñ
+    0x00E1, 0x00E9, 0x00ED, 0x00F3, 0x00FA, 0x00FC, 0x00F1,   // á é í ó ú ü ñ
+    0x00AB, 0x00BB, 0x00AA, 0x00BA, 0x00B7,                   // « » ª º ·
+    0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2026,           // — ‘ ’ “ ” …
+};
+constexpr int GLYPH_EXTRA_COUNT = static_cast<int>(sizeof(GLYPH_EXTRA) / sizeof(GLYPH_EXTRA[0]));
+constexpr int GLYPH_COUNT       = GLYPH_ASCII_COUNT + GLYPH_EXTRA_COUNT;
+
+// Codepoint -> slot in FontAtlas::glyphs (-1 = not part of the baked charset)
+inline int glyph_index(u32 cp) {
+    if (cp >= 32 && cp <= 126) return static_cast<int>(cp) - 32;
+    for (int i = 0; i < GLYPH_EXTRA_COUNT; i++) {
+        if (GLYPH_EXTRA[i] == cp) return GLYPH_ASCII_COUNT + i;
+    }
+    return -1;
+}
+
+// Slot -> codepoint (the order bake_atlas walks)
+inline u32 glyph_codepoint(int slot) {
+    return (slot < GLYPH_ASCII_COUNT) ? static_cast<u32>(slot + 32)
+                                      : GLYPH_EXTRA[slot - GLYPH_ASCII_COUNT];
+}
+
+// Decodes one UTF-8 codepoint and advances `p` past it. Malformed bytes are consumed one at
+// a time and reported as 0 so callers just skip them.
+inline u32 utf8_next(const char*& p) {
+    const unsigned char c0 = static_cast<unsigned char>(*p);
+    if (c0 < 0x80) { p++; return c0; }
+    auto cont = [](const char* q) { return (static_cast<unsigned char>(*q) & 0xC0) == 0x80; };
+    auto bits = [](const char* q) { return static_cast<u32>(static_cast<unsigned char>(*q) & 0x3F); };
+    if ((c0 & 0xE0) == 0xC0 && cont(p + 1)) {
+        u32 cp = ((c0 & 0x1Fu) << 6) | bits(p + 1);
+        p += 2; return cp;
+    }
+    if ((c0 & 0xF0) == 0xE0 && cont(p + 1) && cont(p + 2)) {
+        u32 cp = ((c0 & 0x0Fu) << 12) | (bits(p + 1) << 6) | bits(p + 2);
+        p += 3; return cp;
+    }
+    if ((c0 & 0xF8) == 0xF0 && cont(p + 1) && cont(p + 2) && cont(p + 3)) {
+        u32 cp = ((c0 & 0x07u) << 18) | (bits(p + 1) << 12) | (bits(p + 2) << 6) | bits(p + 3);
+        p += 4; return cp;
+    }
+    p++;
+    return 0;
+}
+
+// =============================================================================
 // Bitmap font baked from a TTF at init (SDL3_ttf is only used while baking).
 // Glyphs are drawn as quads from one atlas texture: no per-frame allocations.
 // =============================================================================
@@ -57,7 +112,7 @@ struct Glyph {
 struct FontAtlas {
     u32   texture     = TEXTURE_NONE;   // Fill glyphs (white)
     u32   texture_out = TEXTURE_NONE;   // Outline glyphs (white)
-    Glyph glyphs[96];                   // ASCII 32..126
+    Glyph glyphs[GLYPH_COUNT];          // Indexed by glyph_index(codepoint)
     f32   px      = 0.0f;               // Line height in atlas pixels
     f32   outline = 0.0f;               // Outline thickness in atlas pixels
     bool  valid   = false;
@@ -124,6 +179,9 @@ struct Renderer {
     void draw_text(const char* text, f32 x, f32 y, Color color, f32 scale = 1.0f);
     void draw_text_centered(const char* text, f32 y, Color color, f32 scale = 1.0f);
     f32  measure_text(const char* text, f32 scale = 1.0f) const;   // Width in game units
+    // Greedy word wrap into `out` (caller-owned, `max_lines` entries). Returns the line count.
+    // Wrap once when the text changes, not every frame: it allocates.
+    int  wrap_text(const char* text, f32 max_w, f32 scale, std::string* out, int max_lines) const;
     void draw_sorted(std::vector<DrawCmd>& cmds);   // Sorts by sort_y, then draws
 
     // Screenshot of the internal render target (PNG, 1280x720 at scale 1)

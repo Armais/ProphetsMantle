@@ -18,6 +18,7 @@
 #include "game/player.h"
 #include "game/rooms.h"
 #include "game/items.h"
+#include "game/lore.h"
 #include "core/ecs.h"
 
 struct HUDContext {
@@ -32,6 +33,7 @@ struct HUDContext {
     f32             message_t = 0.0f;
     f32             time      = 0.0f;
     bool            show_map  = false;     // Tab held: big map
+    bool            map_revealed = false;  // "Ojos Abiertos": todo el capitulo a la vista
     u32             tileset   = TEXTURE_NONE;
     const ItemRegistry* registry = nullptr;   // Needed to draw the inventory icons
 };
@@ -55,6 +57,20 @@ void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* cons
 // `extras[i]` is an optional line per card ("Sustituye a Cuervos de Querit").
 void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID* ids, int count,
                          int selected, u32 tileset, const char* const* extras);
+
+// Encuentro biblico (GameScene::Dialogue): caja inferior sobre el mundo congelado.
+// `body` es el texto ya elegido por el Engine (linea de dialogo o resultado).
+// Con `option_count` > 0 se pintan las opciones; `selected` marca la activa.
+struct DialogueView {
+    const char* speaker = "";
+    const char* body    = "";
+    const char* options[2] = {nullptr, nullptr};
+    const char* costs[2]   = {nullptr, nullptr};
+    int  option_count = 0;
+    int  selected     = 0;
+    bool more_lines   = false;                  // Quedan lineas: el pie dice "seguir"
+};
+void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time);
 
 struct HUD {
     bool visible = true;

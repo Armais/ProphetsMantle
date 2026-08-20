@@ -37,6 +37,29 @@ inline FaithLevelInfo get_faith_level_info(FaithLevel level) {
     return {"???", 1.0f, 0};
 }
 
+// Fe minima a la que se desbloquea un tier de milagro, y el nivel que hay que alcanzar.
+// El HUD las usa para decir "necesitas 50 (Siervo Fiel)" en vez de pintar el slot en rojo
+// y dejar al jugador adivinando por que no puede lanzar el milagro.
+inline f32 faith_required_for_tier(int tier) {
+    switch (tier) {
+        case 1:  return Config::FAITH_LEVEL_1;
+        case 2:  return Config::FAITH_LEVEL_2;
+        case 3:  return Config::FAITH_LEVEL_3;
+        case 4:  return Config::FAITH_LEVEL_4;
+        default: return 0.0f;
+    }
+}
+
+inline const char* faith_level_name_for_tier(int tier) {
+    switch (tier) {
+        case 1:  return get_faith_level_info(FaithLevel::EnElDesierto).name;
+        case 2:  return get_faith_level_info(FaithLevel::FeVacilante).name;
+        case 3:  return get_faith_level_info(FaithLevel::SiervoFiel).name;
+        case 4:  return get_faith_level_info(FaithLevel::ProfetaUngido).name;
+        default: return "";
+    }
+}
+
 // =============================================================================
 // Faith System
 // =============================================================================

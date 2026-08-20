@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "game/combat.h"
+#include "game/enemies.h"
 #include "game/faith.h"
 #include "game/rooms.h"
 #include "core/config.h"
@@ -221,6 +222,13 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
 
     auto& health = world.healths[target];
     if (!health.is_alive()) return false;
+    // Un objetivo invulnerable (La Muerte del cap. 8 fuera del cuerpo a cuerpo) rebota el
+    // golpe: ni parpadeo, ni hit-stop, ni numero flotante. Solo un destello frio.
+    if (health.invulnerable) {
+        if (world.has(target, Component::Transform))
+            spawn_particles(world, world.transforms[target].position, {170, 160, 200, 255}, 3, 45.0f, 0.2f);
+        return false;
+    }
     f32 before = health.current;
     health.take_damage(damage);
     health.hit_flash = HIT_FLASH_TIME;
@@ -279,17 +287,30 @@ void on_enemy_killed(ECSWorld& world, FaithSystem& faith, Entity enemy, CombatEv
     Vec2 pos = world.has(enemy, Component::Transform) ? world.transforms[enemy].position : Vec2{160, 90};
     bool boss = false;
     u32 type = 0;
+    u8 split_gen = 0;
     if (world.has(enemy, Component::EnemyAI)) {
         boss = world.enemy_ais[enemy].is_boss;
         type = world.enemy_ais[enemy].enemy_type;
+        split_gen = world.enemy_ais[enemy].split_generation;
         // (EnemyAI stays on the corpse for depth/shadow; count_living_enemies checks health)
     }
+
+    // Conducta de muerte del Acto II (explotar, dividirse). Va antes que los drops y
+    // siempre antes de Engine::update_room_state: los hijos deben contar como vivos.
+    on_enemy_death_behavior(world, enemy, pos);
 
     if (boss) {
         events.boss_kills++;
         faith.on_defeat_boss();
         spawn_pickup(world, pos + Vec2{-10, 0}, ItemComponent::Pickup::Heart, 25.0f);
         spawn_pickup(world, pos + Vec2{10, 0}, ItemComponent::Pickup::FaithOrb, 10.0f);
+        return;
+    }
+
+    // Los hijos del Agua Corrupta no pagan como el padre: si no, dividirse seria farmear
+    if (split_gen > 0) {
+        faith.modify(0.25f);
+        faith.reset_inactivity();
         return;
     }
 
@@ -396,6 +417,43 @@ void spawn_particles(ECSWorld& world, Vec2 position, Color color, int count, f32
         world.add(e, Component::Lifetime);
         world.lifetimes[e].remaining = life * randf_range(0.6f, 1.3f);
     }
+}
+
+Entity spawn_vfx(ECSWorld& world, Vec2 position, TileSprite sprite, Color tint,
+                 f32 size_units, f32 life, f32 grow, f32 spin, Vec2 velocity, i32 z_order) {
+    Entity e = world.create();
+    if (e == ENTITY_NONE) return e;
+
+    world.add(e, Component::Transform);
+    world.transforms[e].position = position;
+
+    world.add(e, Component::Sprite);
+    world.sprites[e].z_order = z_order;
+    world.sprites[e].tint = tint;
+    if (world.tileset != TEXTURE_NONE) {
+        world.sprites[e].texture_id = world.tileset;
+        world.sprites[e].src_rect = get_tile_src(sprite);
+        // Las celdas del tileset son de 16 unidades: la escala lleva el sprite al tamano pedido
+        f32 s = size_units / static_cast<f32>(Config::TILE_SIZE);
+        world.transforms[e].scale = {s, s};
+    } else {
+        world.sprites[e].texture_id = TEXTURE_NONE;
+        world.sprites[e].src_rect = {0, 0, size_units, size_units};
+    }
+
+    if (velocity.length_sq() > 0.0f) {
+        world.add(e, Component::Movement);
+        world.movements[e].velocity = velocity;
+        world.movements[e].friction = 2.0f;
+    }
+
+    world.add(e, Component::Lifetime);
+    world.lifetimes[e].remaining = life;
+    world.lifetimes[e].total = life;
+    world.lifetimes[e].fade = true;
+    world.lifetimes[e].grow = grow;
+    world.lifetimes[e].spin = spin;
+    return e;
 }
 
 Entity spawn_pickup(ECSWorld& world, Vec2 position, ItemComponent::Pickup kind, f32 value) {

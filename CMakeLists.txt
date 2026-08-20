@@ -113,6 +113,8 @@ set(MANTLE_SOURCES
     src/game/combat.cpp
     src/ui/hud.cpp
     src/ui/menus.cpp
+    src/ui/story.cpp
+    src/ui/codex.cpp
     src/systems/save.cpp
     src/systems/progression.cpp
 )
@@ -208,7 +210,9 @@ endif()
 # Compiler warnings
 # =============================================================================
 if(MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /wd4100 /wd4189)
+    # /utf-8: the sources hold Spanish text (Reina-Valera quotes, accented names) as UTF-8
+    # literals. Without this MSVC reads them as codepage 1252 and every tilde turns to mojibake.
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /wd4100 /wd4189 /utf-8)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic -Wno-unused-parameter)
 endif()

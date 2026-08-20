@@ -32,6 +32,8 @@ constexpr float ELIAS_HP          = 80.0f;
 constexpr float ELIAS_SPEED       = 100.0f;  // pixels/sec at base resolution
 constexpr float ELIAS_DAMAGE      = 12.0f;
 constexpr int   ELIAS_MIRACLE_SLOTS = 1;     // 2 from chapter 4+
+// Techo de slots de milagro: 3, el que promete la mejora meta 6 para Eliseo (Q / E / F)
+constexpr int   MAX_MIRACLE_SLOTS = 3;
 
 // =============================================================================
 // Player - Eliseo

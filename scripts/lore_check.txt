@@ -1,0 +1,85 @@
+# Verificacion F0-F7: acentos, lore, eventos, codice, santuario, armas y jefes
+# Uso:  MANTLE.exe --script scripts/lore_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Nota: durante GameScene::Story y Dialogue el bot avanza solo (auto_timer),
+# por eso basta con esperar en vez de pulsar.
+
+# --- Menu principal: 6 opciones, subtitulo con tilde, contador de ofrendas ---
+wait 1.0
+shot 00_titulo
+wait 0.1
+
+# --- Nueva partida: PROLOGO (1 Reyes 16:33) y carta del CAPITULO 1 ---
+press confirm
+wait 3.0
+shot 01_prologo
+wait 0.1
+press confirm
+wait 3.0
+shot 02_capitulo1
+wait 0.1
+press confirm
+wait 1.2
+shot 03_juego_cap1
+wait 0.1
+
+# --- Mapa: la sala RELATO (dorada) debe aparecer en la rejilla ---
+hold map 0.6
+shot 04_mapa_con_relato
+wait 0.1
+
+# --- Cartas de capitulo por bioma y acto ---
+chapter 3
+wait 3.0
+shot 05_cap3_carmelo
+wait 0.1
+press confirm
+wait 0.8
+
+chapter 4
+wait 3.0
+shot 06_cap4_horeb
+wait 0.1
+press confirm
+wait 0.8
+
+chapter 6
+wait 3.0
+shot 07_cap6_jerico_actoII
+wait 0.1
+press confirm
+wait 0.8
+
+chapter 9
+wait 3.0
+shot 08_cap9_naaman
+wait 0.1
+press confirm
+wait 0.8
+
+# --- Jefes con patron propio. god evita morir mientras se observan ---
+god
+chapter 8
+wait 3.0
+press confirm
+wait 1.0
+# La Muerte (cap 8): la barra debe salir gris con "INTOCABLE - acercate"
+bot 8
+shot 09_jefe_la_muerte
+wait 0.1
+
+chapter 10
+wait 3.0
+press confirm
+wait 1.0
+# Ben-adad: oleadas continuas de sirios
+bot 10
+shot 10_jefe_benadad_asedio
+wait 0.1
+
+# --- HUD: nombres con tilde, celda del arma con tecla I ---
+shot 11_hud
+wait 0.1
+
+quit

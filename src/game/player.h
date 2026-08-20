@@ -27,7 +27,8 @@ struct Player {
     CharacterType character = CharacterType::Elias;
 
     // Miracle slots
-    MiracleSlot miracle_slots[2];  // Eliseo gets 2 from start, Elias gets 1 (2 from ch4+)
+    // Elias arranca con 1 (2 desde el cap. 4); Eliseo con 2, y 3 con la mejora meta 6
+    MiracleSlot miracle_slots[Config::MAX_MIRACLE_SLOTS];
     int active_slot_count = 1;
 
     // Inventory
@@ -35,10 +36,15 @@ struct Player {
     u32 relic_slot = UINT32_MAX;      // Single relic slot
     u32 weapon_slot = UINT32_MAX;     // Secondary weapon
     u32 consumable_slot = UINT32_MAX; // Held consumable (R)
+    // "Aceite Inagotable" (2 Reyes 4:6): el consumible que llevas tiene cargas y solo se
+    // suelta cuando se vacia la ultima. Sin cargas el milagro "Consumibles x2" del GDD no
+    // tenia donde apoyarse. 0 = no llevas nada.
+    u8  consumable_charges = 0;
 
     // Item-driven modifiers
     f32 damage_buff_timer = 0.0f;     // Vino Nuevo: +25% damage while > 0
     f32 miracle_power     = 1.0f;     // Arca del Pacto: miracle damage multiplier
+    f32 secondary_cd      = 0.0f;     // Recarga del ataque secundario del arma equipada
 
     // Meta
     bool took_damage_this_room = false;
@@ -51,12 +57,26 @@ struct Player {
     Vec2 heal_zone_pos = {0, 0};
     f32  heal_zone_timer = 0.0f;       // Sanar Aguas
     f32  double_portion_timer = 0.0f;  // Doble Porcion (damage x2)
+    // "Ojos Abiertos" (2 Reyes 6:17): el mapa del capitulo queda abierto para siempre (el
+    // Engine lo apaga al cambiar de capitulo) y durante la duracion se marca lo que hay en
+    // la sala. Los lee HUD::draw_minimap y el pase de dibujo del Engine.
+    bool map_revealed  = false;
+    f32  reveal_timer  = 0.0f;
 
-    // Feedback for the Engine (consumed each frame)
-    enum class MiracleEvent : u8 { None, Cast, NeedFaith };
+    // VFX continuos: los milagros con duracion se ven mientras duran, no solo al lanzarlos.
+    // Son acumuladores, no estado de juego: nada de esto afecta al combate.
+    f32  aura_timer    = 0.0f;   // Pulso del aura de Doble Porcion / burbujas de Sanar Aguas
+    f32  chariot_timer = 0.0f;   // Estela de fuego del Carro mientras dura la embestida
+    f32  trail_timer   = 0.0f;   // Cadencia de la estela
+    f32  reveal_pulse  = 0.0f;   // Cadencia de las marcas de Ojos Abiertos
+
+    // Feedback for the Engine (consumed each frame). El motivo del fallo va separado
+    // porque "no puedes" sin decir por que es la queja numero uno del sistema de fe.
+    enum class MiracleEvent : u8 { None, Cast, NeedTier, NeedCost, OnCooldown };
     MiracleEvent last_event = MiracleEvent::None;
-    MiracleID last_cast = MiracleID::COUNT;
+    MiracleID last_cast = MiracleID::COUNT;   // milagro del ultimo evento (lanzado o fallido)
     f32 shake_request = 0.0f;
+    f32 flash_request = 0.0f;   // Destello blanco a pantalla completa (Altar Consumido)
     std::vector<Entity> pending_kills;   // Enemies killed by miracles (Engine awards faith/drops)
 
     // texture_id: sprite sheet from Engine::character_textures (TEXTURE_NONE = placeholder)
@@ -64,6 +84,9 @@ struct Player {
     void init_as_eliseo(ECSWorld& world, u32 texture_id = TEXTURE_NONE);
     void update(ECSWorld& world, struct Input& input, struct FaithSystem& faith, f32 dt);
     void cast_miracle(ECSWorld& world, struct FaithSystem& faith, MiracleID id);
+    // Ataque secundario del arma equipada (weapon_slot). Honda = piedra que atraviesa,
+    // Vara = barrido de largo alcance. Devuelve true si llego a disparar.
+    bool fire_secondary(ECSWorld& world, struct FaithSystem& faith, Vec2 aim, f32 damage_mult);
     // Apply an item picked on the choice screen (stats, relic/weapon/consumable slots).
     // Returns the message to show. `record` = false when re-applying inherited items.
     const char* grant_item(ECSWorld& world, struct FaithSystem& faith,
@@ -121,9 +144,12 @@ inline void Player::init_as_elias(ECSWorld& world, u32 texture_id) {
     world.colliders[entity].radius = 6.0f;  // Smaller than sprite for forgiving collision
     world.colliders[entity].offset = {0, 6}; // Feet position (sheet feet baseline = frame row 28)
 
-    // Miracles: Fuego del Cielo (needs Siervo Fiel faith), Cuervos unlocked with slot 2 (ch4+)
-    miracle_slots[0].equip(MiracleID::FuegoDelCielo);
-    miracle_slots[1].equip(MiracleID::CuervosDeQuerit);
+    // Milagros: el primer slot lleva un Tier 1 (5 de fe) para que la Q sirva desde la
+    // primera sala. Fuego del Cielo es Tier 3 y exige nivel Siervo Fiel (50 de fe): con
+    // la fe inicial justo en 50, un solo golpe recibido lo bloqueaba. Entra con el
+    // segundo slot en el cap. 4, cuando la fe ya se sostiene alta.
+    miracle_slots[0].equip(MiracleID::CuervosDeQuerit);
+    miracle_slots[1].equip(MiracleID::FuegoDelCielo);
 
     SDL_Log("Player created: Elias (HP:%.0f SPD:%.0f DMG:%.0f)",
             Config::ELIAS_HP, Config::ELIAS_SPEED, Config::ELIAS_DAMAGE);
