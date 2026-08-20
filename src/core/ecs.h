@@ -136,7 +136,7 @@ enum class AIBehavior : u8 {
     FastLeaper,      // Leon del Desierto: quick jumps
     MeleeResistant,  // Soldado Sirio: slow but tanky
     BuffAllies,      // General Sirio: buff nearby allies
-    ExplodeOnDeath,  // Leproso Enloquecido: explode when killed
+    ExplodeOnDeath,  // Idolatra de Rimon: su brasero prende al caer
     SplitOnDeath     // Agua Corrupta: split into smaller units
 };
 
@@ -163,7 +163,7 @@ struct EnemyAIComponent {
     // Conductas del Acto II (game/enemies.h: on_enemy_death_behavior / update_death_fuses)
     u8  chapter          = 1;      // Capitulo en que nacio (escala a los hijos que se dividen)
     u8  split_generation = 0;      // Agua Corrupta: 0 = original; los hijos no vuelven a dividirse
-    f32 death_fuse       = 0.0f;   // Leproso: mecha encendida sobre el cadaver (telegrafia)
+    f32 death_fuse       = 0.0f;   // Idolatra: brasas prendiendo sobre el cadaver (telegrafia)
     f32 buff_timer       = 0.0f;   // General Sirio: segundos que le queda el aura recibida
     f32 base_damage      = 0.0f;   // Valores previos al aura (0 = nunca buffeado)
     f32 base_speed       = 0.0f;
@@ -256,7 +256,7 @@ struct ECSWorld {
 
     // Event counters consumed by the Engine each frame
     u32 altars_smashed = 0;   // Baal altars destroyed by player projectiles
-    f32 shake_request  = 0.0f;   // Sacudida pedida desde el mundo (estallido del Leproso)
+    f32 shake_request  = 0.0f;   // Sacudida pedida desde el mundo (estallido del brasero)
 
     // Floating damage numbers (filled by apply_damage, drawn and aged by the Engine)
     struct DamagePopup { Vec2 pos; f32 amount; f32 life; bool boss; };

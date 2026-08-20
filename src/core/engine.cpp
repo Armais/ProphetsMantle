@@ -387,7 +387,7 @@ void Engine::update(f32 dt) {
 
             combat_events.reset();
             system_collision(world, faith, combat_events);
-            // Mechas del Leproso: despues de las colisiones (usa fe/eventos) y antes de
+            // Braseros prendidos: despues de las colisiones (usa fe/eventos) y antes de
             // update_room_state (sus bajas tienen que contar ya)
             update_death_fuses(world, faith, combat_events, dt);
             if (world.shake_request > 0.0f) {

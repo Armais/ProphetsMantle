@@ -275,8 +275,8 @@ inline ChapterDef get_chapter_def(int chapter) {
         case 5:  return {"El Llamado",           "Campos",              5, 4, 3, EnemyType::ArqueroReal,     "Acab y Jezabel",           BossPattern::AcabYJezabel};
         case 6:  return {"Las Aguas de Jericó",  "Ciudad corrupta",     6, 3, 3, EnemyType::AguaCorrupta,    "Espíritu de Corrupción",   BossPattern::EspirituCorrupto};
         case 7:  return {"El Aceite de la Viuda","Aldea pobre",         7, 3, 3, EnemyType::SoldadoSirio,    "El Acreedor",              BossPattern::Acreedor};
-        case 8:  return {"El Hijo Sunamita",     "Casa noble",          8, 3, 3, EnemyType::LeprosoEnloquecido, "La Muerte",             BossPattern::LaMuerte};
-        case 9:  return {"Naamán el Sirio",      "Campamento / Jordán", 9, 4, 3, EnemyType::GeneralSirio,    "Guiezi el Leproso",        BossPattern::Guiezi};
+        case 8:  return {"El Hijo Sunamita",     "Casa noble",          8, 3, 3, EnemyType::IdolatraDeRimon, "La Muerte",                BossPattern::LaMuerte};
+        case 9:  return {"Naamán el Sirio",      "Campamento / Jordán", 9, 4, 3, EnemyType::GeneralSirio,    "Guiezi el Codicioso",      BossPattern::Guiezi};
         case 10: return {"El Ejército Celestial","Ciudad sitiada",     10, 4, 4, EnemyType::GeneralSirio,    "Ben-adad de Siria",        BossPattern::BenAdad};
         default: return {"???",                  "???",                  0, 3, 3, EnemyType::SoldadoDeAcab,  "???",                      BossPattern::CapitanDeAcab};
     }

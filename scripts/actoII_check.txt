@@ -3,7 +3,7 @@
 # Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
 #
 # EnemyType: 0 Soldado Acab, 1 Arquero, 2 Profeta Baal, 3 Leon,
-#            4 Soldado Sirio, 5 General Sirio, 6 Leproso, 7 Agua Corrupta
+#            4 Soldado Sirio, 5 General Sirio, 6 Idolatra de Rimon, 7 Agua Corrupta
 
 # --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
 wait 1.0
@@ -24,33 +24,33 @@ killall
 wait 0.8
 
 # =============================================================================
-# 1.1 Leproso Enloquecido: explota al morir
+# 1.1 Idolatra de Rimon: su brasero prende al morir
 # =============================================================================
 spawn 6 4
 wait 0.8
-shot 20_leprosos_vivos
+shot 20_idolatras_vivos
 wait 0.1
 killall
 wait 0.18
-# La mecha dura 0.35 s: aqui deben verse los orbes verdes creciendo sobre los cadaveres
-shot 21_leprosos_mecha
+# La mecha dura 0.35 s: aqui deben verse las brasas naranjas creciendo sobre los cadaveres
+shot 21_idolatras_mecha
 wait 0.1
 wait 0.30
-# Y aqui el estallido (estrellas verdes abriendose)
-shot 22_leprosos_estallido
+# Y aqui el estallido (estrellas naranjas abriendose)
+shot 22_idolatras_estallido
 wait 0.1
 wait 1.0
 
-# --- Cadena: 12 leprosos pegados (20 unidades entre ellos, radio 28). El jugador no se
+# --- Cadena: 12 idolatras pegados (20 unidades entre ellos, radio 28). El jugador no se
 #     mueve de sitio: dispara hacia arriba y deja que la cadena se propague sola.
 #     Si la explosion recursara, el frame se colgaria aqui.
 spawn 6 12
 wait 0.6
-shot 23_leprosos_cadena_antes
+shot 23_idolatras_cadena_antes
 wait 0.1
 hold up 0.25
 hold attack 2.5
-shot 24_leprosos_cadena_despues
+shot 24_idolatras_cadena_despues
 wait 0.1
 wait 1.5
 

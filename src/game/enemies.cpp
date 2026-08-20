@@ -423,7 +423,7 @@ static void update_boss_ai(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_p
         }
         if (ai.special_timer <= 0.0f) {
             ai.special_timer = 8.0f;
-            summon(world, e, EnemyType::LeprosoEnloquecido, 5, chapter, 4);
+            summon(world, e, EnemyType::IdolatraDeRimon, 5, chapter, 4);
         }
         break;
     }
@@ -614,8 +614,8 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
 // =============================================================================
 // Muerte con conducta: lo que hace un enemigo del Acto II al caer
 // =============================================================================
-static constexpr f32 LEPER_FUSE      = 0.35f;   // telegrafia: sin ella el estallido se lee como daño injusto
-static constexpr f32 LEPER_RADIUS    = 28.0f;
+static constexpr f32 BRASERO_FUSE    = 0.35f;   // telegrafia: sin ella el estallido se lee como daño injusto
+static constexpr f32 BRASERO_RADIUS  = 28.0f;
 static constexpr int SPLIT_MAX_ALIVE = 18;      // MAX_ENTITIES es un techo compartido con proyectiles y VFX
 static constexpr u8  SPLIT_MAX_GEN   = 2;       // 1 padre -> 2 -> 4 y se acaba
 
@@ -626,17 +626,18 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
 
     switch (ai.behavior) {
 
-    // --- Leproso Enloquecido: enciende la mecha; el estallido lo resuelve update_death_fuses ---
+    // --- Idolatra de Rimon: al caer suelta el brasero y las brasas prenden. La mecha es
+    //     el tiempo que tardan en cuajar; el estallido lo resuelve update_death_fuses ---
     case AIBehavior::ExplodeOnDeath: {
-        ai.death_fuse = LEPER_FUSE;
+        ai.death_fuse = BRASERO_FUSE;
         // El cadaver debe durar mas que la mecha o no quedaria nada que estallar
-        f32 keep = LEPER_FUSE + 0.15f;
+        f32 keep = BRASERO_FUSE + 0.15f;
         if (!world.has(enemy, Component::Lifetime)) world.add(enemy, Component::Lifetime);
         world.lifetimes[enemy].remaining = std::max(world.lifetimes[enemy].remaining, keep);
         // Sobre el cuerpo, no debajo: el cadaver se dibuja por encima de un VFX a su misma altura
-        spawn_vfx(world, pos - Vec2{0, 12.0f}, TileSprite::Orb, {170, 250, 120, 235}, 13.0f,
-                  LEPER_FUSE, 1.6f, 0.0f);
-        spawn_particles(world, pos, {150, 230, 120, 255}, 6, 40.0f, LEPER_FUSE);
+        spawn_vfx(world, pos - Vec2{0, 12.0f}, TileSprite::Orb, {255, 170, 60, 235}, 13.0f,
+                  BRASERO_FUSE, 1.6f, 0.0f);
+        spawn_particles(world, pos, {255, 150, 50, 255}, 6, 40.0f, BRASERO_FUSE);
         break;
     }
 
@@ -679,7 +680,7 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
     }
 }
 
-// El estallido en si: dana a jugador y enemigos por igual (el leproso no distingue).
+// El estallido en si: dana a jugador y enemigos por igual (las brasas no distinguen).
 static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, Entity e) {
     Vec2 at = world.has(e, Component::Transform) ? world.transforms[e].position : Vec2{160, 90};
 
@@ -687,13 +688,13 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
     // por capitulo que usa spawn_common.
     int chapter = std::max(1, static_cast<int>(world.enemy_ais[e].chapter));
     int step = (chapter - 1) % 5;
-    f32 dmg = get_enemy_def(EnemyType::LeprosoEnloquecido).damage * (1.0f + 0.18f * step) * 1.40f;
+    f32 dmg = get_enemy_def(EnemyType::IdolatraDeRimon).damage * (1.0f + 0.18f * step) * 1.40f;
     if (chapter > Config::CHAPTERS_ACT_I) dmg *= 1.20f;
 
     // El anillo termina midiendo lo que mide el radio del estallido (~56 unidades)
-    spawn_vfx(world, at, TileSprite::Star, {180, 245, 140, 230}, 18.0f, 0.45f, 4.5f, 190.0f);
-    SDL_Log("Leproso estalla en (%.0f,%.0f) dano %.1f  t=%.2f", at.x, at.y, dmg, world.time);
-    spawn_particles(world, at, {140, 220, 110, 255}, 18, 130.0f, 0.5f);
+    spawn_vfx(world, at, TileSprite::Star, {255, 190, 90, 230}, 18.0f, 0.45f, 4.5f, 190.0f);
+    SDL_Log("Brasero de Rimon estalla en (%.0f,%.0f) dano %.1f  t=%.2f", at.x, at.y, dmg, world.time);
+    spawn_particles(world, at, {255, 140, 40, 255}, 18, 130.0f, 0.5f);
     world.shake_request = std::max(world.shake_request, 3.0f);
 
     for (u32 v = 0; v < world.entity_count; v++) {
@@ -704,7 +705,7 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
         bool is_player = (static_cast<Entity>(v) == world.player);
         bool is_enemy  = world.has(v, Component::EnemyAI);
         if (!is_player && !is_enemy) continue;   // pickups y proyectiles no cuentan
-        if (world.transforms[v].position.distance_to(at) > LEPER_RADIUS) continue;
+        if (world.transforms[v].position.distance_to(at) > BRASERO_RADIUS) continue;
 
         Vec2 away = (world.transforms[v].position - at).normalized();
         if (is_player) {
@@ -723,8 +724,8 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
 
 void update_death_fuses(ECSWorld& world, FaithSystem& faith, CombatEvents& events, f32 dt) {
     // Dos pasadas a proposito: primero se apuran las mechas, luego estallan. Asi una
-    // explosion que mata a otro Leproso le enciende una mecha nueva que NO se consume este
-    // mismo frame: la cadena se reparte por frames en vez de recursar (una sala de leprosos
+    // explosion que mata a otro Idolatra le enciende una mecha nueva que NO se consume este
+    // mismo frame: la cadena se reparte por frames en vez de recursar (una sala de braseros
     // colgaba el frame si el estallido llamaba al estallido).
     constexpr int MAX_PER_FRAME = 12;
     Entity ready[MAX_PER_FRAME];

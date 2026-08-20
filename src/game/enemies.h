@@ -20,7 +20,7 @@ enum class EnemyType : u32 {
     // Act II
     SoldadoSirio,       // Melee resistente
     GeneralSirio,       // Buff aliados
-    LeprosoEnloquecido, // Explota al morir
+    IdolatraDeRimon,    // Explota al morir (el brasero de brasas que carga)
     AguaCorrupta,       // Se divide
 
     COUNT
@@ -68,8 +68,8 @@ inline EnemyDef get_enemy_def(EnemyType type) {
             return {"Soldado Sirio", 25, 10, 78, AIBehavior::MeleeResistant, 190, 16, {22, 160, 133, 255}, "sprites/soldado_sirio.png"};
         case EnemyType::GeneralSirio:
             return {"General Sirio", 60, 18, 64, AIBehavior::BuffAllies, 220, 80, {192, 57, 43, 255}, "sprites/general_sirio.png"};
-        case EnemyType::LeprosoEnloquecido:
-            return {"Leproso Enloquecido", 20, 8, 96, AIBehavior::ExplodeOnDeath, 200, 12, {39, 174, 96, 255}, "sprites/leproso.png"};
+        case EnemyType::IdolatraDeRimon:
+            return {"Idólatra de Rimón", 20, 8, 96, AIBehavior::ExplodeOnDeath, 200, 12, {150, 90, 170, 255}, "sprites/idolatra_rimon.png"};
         case EnemyType::AguaCorrupta:
             return {"Agua Corrupta", 35, 10, 70, AIBehavior::SplitOnDeath, 190, 20, {44, 62, 80, 255}, "sprites/agua_corrupta.png"};
         default:
@@ -106,7 +106,7 @@ void update_enemy_ai(ECSWorld& world, f32 dt);
 //    ya cuenten como vivos cuando el Engine compruebe si la sala esta despejada.
 void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos);
 
-// Mechas encendidas: telegrafia y estallido del Leproso Enloquecido. El Engine la llama
+// Mechas encendidas: telegrafia y estallido del Idolatra de Rimon. El Engine la llama
 // una vez por frame despues de system_collision (necesita fe/eventos para las bajas que
 // cause) y antes de update_room_state (los muertos deben contar ya).
 void update_death_fuses(ECSWorld& world, struct FaithSystem& faith,

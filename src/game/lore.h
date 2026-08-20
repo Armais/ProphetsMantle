@@ -260,8 +260,8 @@ inline Scripture get_enemy_lore(EnemyType type) {
             return {"2 Reyes 6:14",  "Envió allá gente de a caballo, y carros, y un gran ejército."};
         case EnemyType::GeneralSirio:
             return {"2 Reyes 5:1",   "Naamán era varón grande delante de su señor; pero leproso."};
-        case EnemyType::LeprosoEnloquecido:
-            return {"2 Reyes 7:3",   "Había cuatro hombres leprosos a la entrada de la puerta."};
+        case EnemyType::IdolatraDeRimon:
+            return {"2 Reyes 5:18",  "Cuando mi señor entra en el templo de Rimón para adorar en él."};
         case EnemyType::AguaCorrupta:
             return {"2 Reyes 2:19",  "Las aguas son malas, y la tierra es estéril."};
         default:
