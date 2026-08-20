@@ -107,6 +107,12 @@ tools/
                             quantize=True = legacy pixel-art). FRAME=128, SS=2, feet baseline = row 112.
                             Stylisation in characters.py: HEAD_SCALE 1.45 (parts on the head bone scaled about
                             HEAD_PIVOT), LION_HEAD_SCALE, palette through parts.vivid() (SAT 1.35, skin 1.15).
+                            Faces: `characters._face()` (sclera + iris + brow + nose + mouth, EYE_*/BROW_TILT
+                            constants, `eyes`/`brow`/`brow_color`/`mouth` keys per SPEC) hangs off the `head`
+                            bone, so hair/hood/helmet MUST leave z>=1.60 of the head clear or the rostro
+                            disappears again. Smoothing: `parts.box(round=..., taper=...)` bevels every edge
+                            (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
+                            rings (helmet band, hood cowl) and soft cap edges.
                             tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=64,
                             TILE_ROWS=8; `only=[...]` patches the existing tiles.png instead of blanking it);
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
@@ -384,7 +390,7 @@ Eliseo GAINS new:
 |---------|----|------|----------------|
 | Soldado Sirio | 25 | 10 | Melee resistente |
 | General Sirio | 60 | 18 | Buff aliados |
-| Leproso Enloquecido | 20 | 8 | Explota al morir |
+| Idólatra de Rimón | 20 | 8 | Explota al morir (su brasero) |
 | Agua Corrupta | 35 | 10 | Se divide |
 
 ### Items System (5 categories)
@@ -427,7 +433,7 @@ Eliseo GAINS new:
 
 The project compiles and runs and the full 10-chapter loop is playable end to end:
 - **Working**: movement (feet-point tile collision with axis sliding; `Room::is_walkable_world` is the single world→tile walkability test used by movement, `combat.cpp push()` body separation and spawns; `system_movement` has an `unstick()` safety net that snaps a body whose feet are inside a solid tile to the nearest walkable tile and logs it), shooting toward the last movement direction (hold K), projectiles with tileset sprites, enemy AI (melee packs, archers/casters/generals shoot with line-of-sight, lions leap), contact damage with player i-frames (1 s), knockback, hit flash, particles, camera shake, drops (hearts / faith orbs), faith system.
-- **Conductas de muerte del Acto II** (`game/enemies.h`): `on_enemy_death_behavior` se llama desde `on_enemy_killed`, **antes** de `Engine::update_room_state`, para que lo que nazca al morir cuente ya como vivo (si no, la sala se declara limpia con enemigos dentro). El **Leproso** enciende una mecha (`EnemyAIComponent::death_fuse`, 0.35 s de telegrafiado sobre el cadáver) y `update_death_fuses` — que el Engine llama una vez por frame justo después de `system_collision` — la apura y detona: daño en radio 28 a jugador **y** enemigos. La cadena NO recursa: son dos pasadas (apurar mechas, luego detonar), así que una explosión que mata a otro Leproso le enciende una mecha que se consume el frame siguiente. El **Agua Corrupta** se parte en 2 hijos al 55% de vida y escala (`split_generation`, máximo 2 generaciones, y no se divide con ≥18 enemigos vivos); los hijos dan fe reducida y ningún drop. El **General Sirio** arenga cada 4 s: +30% daño y +15% velocidad en radio 70 durante 5 s. Los valores base se guardan **una vez** en el aliado (`base_damage`/`base_speed`), así que refrescar el aura no acumula; el aliado late en rojo en `ECSWorld::collect_draws`. Sin nadie a quien arengar no gasta la arenga.
+- **Conductas de muerte del Acto II** (`game/enemies.h`): `on_enemy_death_behavior` se llama desde `on_enemy_killed`, **antes** de `Engine::update_room_state`, para que lo que nazca al morir cuente ya como vivo (si no, la sala se declara limpia con enemigos dentro). El **Idólatra de Rimón** suelta al caer su brasero de brasas, que prende tras una mecha (`EnemyAIComponent::death_fuse`, 0.35 s de telegrafiado sobre el cadáver); `update_death_fuses` — que el Engine llama una vez por frame justo después de `system_collision` — la apura y detona: daño en radio 28 a jugador **y** enemigos. La cadena NO recursa: son dos pasadas (apurar mechas, luego detonar), así que una explosión que mata a otro Idólatra le enciende una mecha que se consume el frame siguiente. El **Agua Corrupta** se parte en 2 hijos al 55% de vida y escala (`split_generation`, máximo 2 generaciones, y no se divide con ≥18 enemigos vivos); los hijos dan fe reducida y ningún drop. El **General Sirio** arenga cada 4 s: +30% daño y +15% velocidad en radio 70 durante 5 s. Los valores base se guardan **una vez** en el aliado (`base_damage`/`base_speed`), así que refrescar el aura no acumula; el aliado late en rojo en `ECSWorld::collect_draws`. Sin nadie a quien arengar no gasta la arenga.
 - **Working**: rooms — cliff borders with 6/5-tile openings on connected sides, trails carved from a jittered hub to every opening (guaranteed reachable; river → bridge, obstacles → path), rivers with fords, biome look per chapter (`get_biome_style`: floor family sand/meadow/paving via `floor_base`, 3 ground decals + `detail_pct` scattered by `tile_hash` on plain Floor tiles in `render_ground`, plus tints/props/buildings), room state persisted in `FloorMap::room_cache`, exits sealed while enemies live (`Room::exits_locked`), Start room Baal altar (shoot it: +8 Fe), Treasure chest, Altar prayer, Elite reward.
 - **Working**: progression — room clear detection, boss per chapter (`spawn_boss`: volleys, ring, charge, HP bar), exit arch after the boss (`Room::place_exit`), `advance_chapter()`, Ascension screen → Eliseo (faith halved, 2 slots), Victory after chapter 10, Game Over with `[R]` retry chapter.
 - **Working**: miracles with effects (`Player::cast_miracle`) — all 10 are reachable **y cada uno hace lo suyo** (ya no queda ningun placeholder): praying at an `AltarGod` opens a 3-card miracle choice (tier + faith cost + which slot it replaces). Eliseo can learn Elias' miracles and casts them at 70% (`inherit`). Starting sets: Elias = **Cuervos de Querit (Q, Tier 1)** + Fuego del Cielo (E, ch4+); Eliseo = Sanar Aguas + Ejercito Celestial.
@@ -451,32 +457,23 @@ The project compiles and runs and the full 10-chapter loop is playable end to en
 - **Working**: mobile auto-aim (`pick_target` in `game/combat.h`, GDD priority boss > attacking > closest > lowest HP), shared with the autoplay bot; toggle in Opciones, `--touch` forces it on desktop.
 - No Steamworks. Audio is still procedural (now with reverb/stereo, see tools/audio/gen_audio.py); no external assets.
 
-### Pendiente: el "Leproso Enloquecido" no debería ser un enemigo (2026-08-20)
+### Resuelto: el "Leproso Enloquecido" ya no existe (2026-08-20)
 
-`EnemyType::LeprosoEnloquecido` viene del GDD, pero **contradice el texto bíblico** y hay
-que cambiarlo:
+El GDD traía un `EnemyType::LeprosoEnloquecido` que **contradecía el texto bíblico** (en
+2 Reyes 5 Eliseo *sana* al leproso; en 2 Reyes 7:3-10 los cuatro leprosos de Samaria son
+los que traen la buena noticia — héroes, no carne de cañón). Se sustituyó por
+**`EnemyType::IdolatraDeRimon`** (2 Reyes 5:18, «cuando mi señor entra en el templo de
+Rimón para adorar en él»): mismas cifras (20 HP / 8 daño / `AIBehavior::ExplodeOnDeath`)
+y misma maquinaria de mecha; lo que estalla ahora es el **brasero de brasas** que carga,
+así que el VFX y las partículas pasaron de verde-peste a naranja-ascua. Sale en el cap. 8
+y lo invoca el patrón `LaMuerte`. Hoja: `assets/sprites/idolatra_rimon.png` (receta
+`characters.py`: túnica morada larga, capucha echada atrás con `hood_open=True` — calada
+tapa la cara entera — y `censer=True`, el brasero colgado de `hand.L`). El jefe del cap. 9
+pasó a llamarse "Guiezi el Codicioso": su lepra es el castigo, la codicia es lo que se
+combate.
 
-- En 2 Reyes 5 Eliseo **sana** a Naamán el leproso; no pelea con él.
-- En 2 Reyes 7:3-10 los cuatro leprosos a la puerta de Samaria son los que **descubren el
-  campamento sirio abandonado y traen la buena noticia** a la ciudad. Son los héroes del
-  capítulo 10, no carne de cañón.
-- La lepra en estos libros es castigo (Guiezí, 2 Reyes 5:27) o prueba a sanar, nunca una
-  turba enloquecida que se lanza contra el profeta y explota.
-
-Qué hay que tocar cuando se arregle (el comportamiento en sí está bien, es el **quién**
-lo que está mal): renombrar el `EnemyType` y su `EnemyDef` en `game/enemies.h`, la hoja
-`assets/sprites/leproso.png` (y su receta en `tools/blender/mantle_sprites/`), la entrada
-del bestiario en `game/lore.h`, y los `summon()` del patrón `LaMuerte` (cap. 8) y de
-`ChapterDef` del cap. 8 en `game/rooms.h`. El `AIBehavior::ExplodeOnDeath` y toda la
-maquinaria de la mecha (`death_fuse` / `update_death_fuses`) se conservan tal cual: solo
-cambia el enemigo que la lleva. Candidatos que sí encajan con el Acto II: un idólatra de
-Rimón (2 Reyes 5:18), una vasija/ídolo de Baal que revienta al caer, o un merodeador sirio
-incendiario del asedio de Samaria. Los leprosos, si aparecen, deberían ser **NPC a los que
-sanar** (encuentro de `game/events.h`), no enemigos.
-
-También pendiente de ese arreglo: Guiezí es el jefe del cap. 9 con el nombre "Guiezí el
-Leproso" — ahí sí es correcto (su lepra es el castigo por la codicia), pero conviene que
-el texto deje claro que es la codicia lo que se combate, no la enfermedad.
+Si algún día aparecen leprosos, que sea como **NPC a los que sanar** (encuentro de
+`game/events.h`), nunca como enemigos.
 
 ## Platform Macros
 

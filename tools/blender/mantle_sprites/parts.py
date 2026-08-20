@@ -51,13 +51,15 @@ def vivid(rgb, sat=1.35, val=1.04):
 # =============================================================================
 
 def _finish(name, bm, mat, smooth=False):
+    """smooth=True forces every face smooth; otherwise the per-face `smooth` flags set
+    by the builders (bevel strips, tube sides) are carried over untouched."""
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    if smooth:
+        for f in bm.faces:
+            f.smooth = True
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
-    if smooth:
-        for p in me.polygons:
-            p.use_smooth = True
     ob = bpy.data.objects.new(name, me)
     if mat is not None:
         me.materials.append(mat)
@@ -78,22 +80,50 @@ def _basis_from_dir(d):
     return m
 
 
-def box(name, center, size, mat, rot=None):
-    """Axis-aligned box centred at `center` with full extents `size`."""
+def _bevel(bm, geom, width, segments=3, profile=0.5):
+    """Bevel `geom` (edges) by `width` world units and smooth-shade the strips it creates.
+
+    Flat faces stay flat: a rounded *edge* reads as a soft figurine, a fully smoothed box
+    reads as a pillow. Returns the new faces."""
+    if width <= 0.0 or not geom:
+        return []
+    res = bmesh.ops.bevel(bm, geom=geom, offset=width, offset_type='OFFSET',
+                          segments=segments, profile=profile, affect='EDGES',
+                          clamp_overlap=True)
+    for f in res.get('faces', ()):
+        f.smooth = True
+    return res.get('faces', ())
+
+
+def box(name, center, size, mat, rot=None, round=0.0, taper=None, segments=3):
+    """Axis-aligned box centred at `center` with full extents `size`.
+
+    round: 0 = hard 90 deg edges (default, so tiles.py keeps its crisp look); >0 bevels every
+           edge by `round` x half the smallest extent.
+    taper: scale of the +Z face, float or (x, y) - open skirts, capes, mantles.
+    """
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=1.0)
+    if taper is not None:
+        tx, ty = (taper, taper) if isinstance(taper, (int, float)) else taper
+        for v in bm.verts:
+            if v.co.z > 0.0:
+                v.co.x *= tx
+                v.co.y *= ty
     m = Matrix.Diagonal((size[0], size[1], size[2], 1.0))
     if rot is not None:
         m = rot.to_4x4() @ m
     m = Matrix.Translation(center) @ m
     bmesh.ops.transform(bm, matrix=m, verts=bm.verts)
+    # bevel *after* the transform: the width is world-space, so a thin slab keeps an even edge
+    _bevel(bm, list(bm.edges), min(size) * 0.5 * round, segments)
     return _finish(name, bm, mat)
 
 
 def sphere(name, center, radius, mat, scale=(1, 1, 1), segs=10, rings=7):
     # Rendered at 128 px now: denser spheres so silhouettes stay round (callers' low
     # counts were tuned for 32 px)
-    segs, rings = max(segs, 20), max(rings, 12)
+    segs, rings = max(segs, 28), max(rings, 18)
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=radius)
     m = Matrix.Translation(center) @ Matrix.Diagonal((scale[0], scale[1], scale[2], 1.0))
@@ -101,21 +131,32 @@ def sphere(name, center, radius, mat, scale=(1, 1, 1), segs=10, rings=7):
     return _finish(name, bm, mat, smooth=True)
 
 
-def tube(name, p0, p1, r0, r1, mat, segs=8, smooth=True):
-    """Cylinder/frustum from p0 to p1 with radii r0 (at p0) and r1 (at p1)."""
+def tube(name, p0, p1, r0, r1, mat, segs=8, smooth=True, caps=True, rim_round=0.0):
+    """Cylinder/frustum from p0 to p1 with radii r0 (at p0) and r1 (at p1).
+
+    caps=False leaves both ends open: a ring (helmet band, hood cowl).
+    rim_round bevels the hard edge where the cap meets the side.
+    """
     p0 = Vector(p0)
     p1 = Vector(p1)
     d = p1 - p0
     length = d.length
-    segs = max(segs, 16)   # smoother limbs/staffs at 128 px
+    segs = max(segs, 24)   # smoother limbs/staffs/skirts at 128 px
     bm = bmesh.new()
     # create_cone builds along Z centred at origin: radius1 at -Z/2, radius2 at +Z/2
-    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=segs,
+    bmesh.ops.create_cone(bm, cap_ends=caps, cap_tris=False, segments=segs,
                           radius1=r0, radius2=r1, depth=length)
+    # sides smooth, caps flat: a smoothed cap bends the silhouette back on itself
+    bm.normal_update()
+    for f in bm.faces:
+        f.smooth = smooth and abs(f.normal.z) < 0.9
+    if caps:
+        rim = [e for e in bm.edges if len(e.link_faces) == 2 and e.calc_face_angle(0.0) > 0.9]
+        _bevel(bm, rim, rim_round, 2)
     rot = _basis_from_dir(d).to_4x4()
     m = Matrix.Translation((p0 + p1) * 0.5) @ rot
     bmesh.ops.transform(bm, matrix=m, verts=bm.verts)
-    return _finish(name, bm, mat, smooth=smooth)
+    return _finish(name, bm, mat)
 
 
 def plane_quad(name, verts, mat):
