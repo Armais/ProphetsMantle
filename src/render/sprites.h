@@ -133,3 +133,44 @@ struct SpriteSheet {
         };
     }
 };
+
+// =============================================================================
+// Retratos (assets/sprites/portraits.png)
+// =============================================================================
+//
+// 6 col x 4 fil, celda de 96 px = 24 unidades. El orden es el de `LAYOUT` en
+// tools/blender/mantle_sprites/portraits.py, y los OCHO PRIMEROS van en el orden de
+// EnemyType a proposito: asi el Bestiario indexa por tipo sin tabla de traduccion.
+//
+// Vive aqui y no en ui/codex.h porque los encuentros (game/events.h) tambien nombran
+// retratos, y game/ no puede incluir ui/.
+// =============================================================================
+namespace Portrait {
+    constexpr int CELL = 96;    // texeles por retrato
+    constexpr int COLS = 6;
+    constexpr int COUNT = 22;
+    constexpr int NONE = -1;    // "este locutor no tiene cara"
+    // Retratos nombrados, para quien los pide fuera del Bestiario
+    constexpr int GENERAL_SIRIO = 5;
+    constexpr int ELIAS = 8, ELISEO = 9, ACAB = 10, JEZABEL = 11;
+    // Locutores de los encuentros (game/events.h), en orden de capitulo. Existen SOLO como
+    // retrato: no andan por el mundo y no tienen hoja de animacion.
+    constexpr int VIUDA_SAREPTA   = 12;   // cap 2
+    constexpr int ELISEO_LABRADOR = 13;   // cap 5 (todavia no es profeta)
+    constexpr int HOMBRE_JERICO   = 14;   // cap 6
+    constexpr int MUJER_PROFETA   = 15;   // cap 7
+    constexpr int SUNAMITA        = 16;   // cap 8
+    constexpr int NAAMAN          = 17;   // cap 9
+    constexpr int CRIADO_ELISEO   = 18;   // cap 10 (Guiezi antes de su castigo)
+    // Vinetas: los tres locutores que NO son personas, sino la escena. No son retratos de
+    // nadie a proposito — ponerles una cara seria mentir sobre lo que el jugador mira.
+    constexpr int CUERVOS_QUERIT  = 19;   // cap 1
+    constexpr int ALTAR_CARMELO   = 20;   // cap 3
+    constexpr int BOCA_CUEVA      = 21;   // cap 4
+
+    inline Rect src(int index) {
+        return {static_cast<f32>((index % COLS) * CELL),
+                static_cast<f32>((index / COLS) * CELL),
+                static_cast<f32>(CELL), static_cast<f32>(CELL)};
+    }
+}

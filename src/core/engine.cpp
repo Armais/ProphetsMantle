@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "core/engine.h"
+#include "core/i18n.h"
 #include "render/sprites.h"
 #include "platform/platform.h"
 #include <cstdio>
@@ -89,6 +90,12 @@ bool Engine::init(const char* title) {
     }
 #endif
 
+    if (forced_win_w > 0 && forced_win_h > 0) {
+        win_w = forced_win_w;
+        win_h = forced_win_h;
+        flags = SDL_WINDOW_RESIZABLE;
+    }
+
     window = SDL_CreateWindow(title, win_w, win_h, flags);
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
@@ -130,6 +137,9 @@ bool Engine::init(const char* title) {
     load_sprites();
 
     input.init();
+    // El reparto de los botones tactiles depende de cuanta banda negra deje el letterbox,
+    // y eso solo se sabe con la ventana ya creada.
+    input.init_touch_layout(renderer.bottom_band_units());
 
     if (!audio.init()) {
         SDL_Log("Failed to init audio (continuing without sound)");
@@ -142,10 +152,12 @@ bool Engine::init(const char* title) {
     world.tileset = tileset_texture;
     faith.init();
     save.init();          // lee el fichero: la meta-progresion tiene que estar viva ya
+    apply_settings_from_save();   // idioma, volumenes, mira, sensibilidad y vibracion
     item_registry.init();
     progression.init();
     sync_progression_from_save();
-    menus.has_continue = save.has_save();
+    mobile_rules = is_mobile();
+    refresh_continue_state();
 
     // Timer + RNG
     last_time = SDL_GetPerformanceCounter();
@@ -192,6 +204,19 @@ void Engine::load_sprites() {
     if (tileset_texture == TEXTURE_NONE) {
         SDL_Log("WARNING: tileset missing (assets/sprites/tiles.png) - using placeholder tiles");
     }
+
+    // Hoja de efectos propia. Va con filtrado SUAVE (al reves que el tileset): sus celdas
+    // son halos degradados, y el vecino mas proximo los convierte en escalones. El sangrado
+    // entre celdas no molesta porque cada fotograma acaba en transparente por los bordes.
+    vfx_texture = renderer.load_texture("sprites/vfx.png", /*smooth=*/true);
+    world.vfx_sheet = vfx_texture;
+    if (vfx_texture == TEXTURE_NONE)
+        SDL_Log("WARNING: hoja de efectos ausente (assets/sprites/vfx.png) - spawn_fx no dibujara");
+
+    // Retratos del Bestiario. Su ausencia NO es un fallo: el Códice se dibuja igual.
+    portrait_texture = renderer.load_texture("sprites/portraits.png", /*smooth=*/true);
+    if (portrait_texture == TEXTURE_NONE)
+        SDL_Log("Retratos ausentes (assets/sprites/portraits.png) - el Bestiario ira sin ellos");
 }
 
 // =============================================================================
@@ -265,6 +290,9 @@ void Engine::handle_events() {
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 renderer.handle_resize(event.window.data1, event.window.data2);
+                // Girar el telefono cambia cuanta banda negra hay, y con ella si los
+                // botones tactiles caben fuera del mundo o no.
+                input.init_touch_layout(renderer.bottom_band_units());
                 break;
 
             case SDL_EVENT_KEY_DOWN:
@@ -289,6 +317,9 @@ void Engine::handle_events() {
 // =============================================================================
 void Engine::update(f32 dt) {
     if (autoplay.active) update_autoplay(dt);
+    input.update_touch(dt);   // hold sobre un boton de milagro = su ficha
+    audio.update(dt);   // recuperacion del ducking de la musica
+    if (voice_cooldown > 0.0f) voice_cooldown -= dt;   // espera entre exclamaciones
 
     if (banner_timer > 0.0f)  banner_timer  -= dt;
     if (message_timer > 0.0f) message_timer -= dt;
@@ -305,6 +336,10 @@ void Engine::update(f32 dt) {
     update_music();
 
     switch (state.scene) {
+        case GameScene::Intro:
+            if (cinematic.update(input, dt, renderer)) change_scene(GameScene::MainMenu);
+            break;
+
         case GameScene::MainMenu:
             if (menus.current == MenuScreen::Settings) {
                 update_settings();
@@ -320,10 +355,13 @@ void Engine::update(f32 dt) {
                     switch (menus.selected_option) {
                         case 0: start_new_run(); break;
                         case 1:
-                            if (save.has_save()) continue_run();
+                            if (!save.has_save())            break;
+                            if (menus.continue_expired)      claim_abandoned_run();
+                            else                             continue_run();
                             break;
                         case 2:
                             sanctuary_sel = 0;
+                            sanctuary_scroll = 0;
                             change_scene(GameScene::Sanctuary);
                             break;
                         case 3:
@@ -332,14 +370,15 @@ void Engine::update(f32 dt) {
                             change_scene(GameScene::Codex);
                             break;
                         case 4:
+                            start_intro();
+                            break;
+                        case 5:
                             menus.settings_origin = MenuScreen::Title;
-                            menus.settings_music_vol = audio.music_volume;
-                            menus.settings_sfx_vol = audio.sfx_volume;
-                            menus.settings_auto_aim = input.auto_aim_enabled;
+                            load_settings_mirror();
                             menus.current = MenuScreen::Settings;
                             menus.selected_option = 0;
                             break;
-                        case 5:
+                        case 6:
                             menus.current = MenuScreen::Controls;
                             menus.selected_option = 0;
                             break;
@@ -371,27 +410,34 @@ void Engine::update(f32 dt) {
                                world.movements[player.entity].is_dashing;
             player.update(world, input, faith, dt);
             if (player.shots_fired != shots_before)
-                audio.play_sfx(player.character == CharacterType::Elias ? SfxID::ProyectilFuego : SfxID::ProyectilLuz, 0.5f);
+                audio.play_sfx_variant(player.character == CharacterType::Elias ? SfxID::ProyectilFuego
+                                                                                : SfxID::ProyectilLuz, 3, 0.5f);
             // El arma secundaria acaba de disparar (la recarga pasa de 0 a su valor): sonido propio
             if (secondary_before <= 0.0f && player.secondary_cd > 0.0f)
                 audio.play_sfx(player.weapon_slot == 1 ? SfxID::CayadoSwing2 : SfxID::CayadoSwing3, 0.9f);
             if (!was_dashing && player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement) &&
-                world.movements[player.entity].is_dashing)
+                world.movements[player.entity].is_dashing) {
                 audio.play_sfx(SfxID::DashWoosh, 0.6f);
+                play_voice(Voice::Esfuerzo, 0.8f);
+                renderer.shake_camera(Config::Feel::SHAKE_DASH);
+                input.rumble(Config::Feel::RUMBLE_DASH, 90);
+            }
 
             // Check room transition before physics/AI (player may have crossed border)
+            if (room_change_grace > 0.0f) room_change_grace -= dt;
             try_room_transition();
 
             world.update(dt);
             update_enemy_ai(world, dt);
 
-            combat_events.reset();
             system_collision(world, faith, combat_events);
             // Braseros prendidos: despues de las colisiones (usa fe/eventos) y antes de
             // update_room_state (sus bajas tienen que contar ya)
             update_death_fuses(world, faith, combat_events, dt);
             if (world.shake_request > 0.0f) {
-                renderer.shake_camera(world.shake_request, 0.3f);
+                renderer.shake_camera(world.shake_request, Config::Feel::SHAKE_EXPLOSION.dur,
+                                      Config::Feel::SHAKE_EXPLOSION.freq);
+                input.rumble(Config::Feel::RUMBLE_KILL, 160);
                 audio.play_sfx(SfxID::EnemyDeath, 0.9f);
                 world.shake_request = 0.0f;
             }
@@ -399,10 +445,17 @@ void Engine::update(f32 dt) {
             // Miracle feedback (kills by miracles, shake, messages)
             for (Entity k : player.pending_kills) on_enemy_killed(world, faith, k, combat_events);
             player.pending_kills.clear();
-            if (player.shake_request > 0.0f) { renderer.shake_camera(player.shake_request, 0.4f); player.shake_request = 0.0f; }
+            if (player.shake_request > 0.0f) {
+                renderer.shake_camera(player.shake_request, Config::Feel::SHAKE_EXPLOSION.dur,
+                                      Config::Feel::SHAKE_EXPLOSION.freq);
+                input.rumble(Config::Feel::RUMBLE_KILL, 180);
+                player.shake_request = 0.0f;
+            }
             if (player.flash_request > 0.0f) { world_flash = player.flash_request; player.flash_request = 0.0f; }
             if (player.last_event == Player::MiracleEvent::Cast) {
                 show_message(get_miracle_def(player.last_cast).name, 1.5f);
+                save.data.miracles_cast |= (1u << static_cast<u32>(player.last_cast));
+                award(AchievementID::PrimerMilagro);
                 // Cada milagro con su sonido: diez poderes compartiendo cuatro efectos
                 // hacian que todos sonaran igual aunque se vieran distintos.
                 switch (player.last_cast) {
@@ -420,21 +473,24 @@ void Engine::update(f32 dt) {
                                                        audio.play_sfx(SfxID::LevelUp, 0.7f); break;
                     default:                           audio.play_sfx(SfxID::MiracleCastLight); break;
                 }
+                // Solo los milagros GRANDES llevan voz: si el profeta gritara tambien al
+                // curarse con los cuervos, la exclamacion dejaria de significar nada.
+                if (get_miracle_def(player.last_cast).tier >= 3) play_voice(Voice::Milagro, 0.9f);
             } else if (player.last_event != Player::MiracleEvent::None) {
                 // Decir exactamente que falta: nivel de fe, fe para pagarlo o recarga
                 MiracleDef md = get_miracle_def(player.last_cast);
                 char buf[128];
                 switch (player.last_event) {
                     case Player::MiracleEvent::NeedTier:
-                        snprintf(buf, sizeof(buf), "%s: necesitas %.0f de fe (%s)", md.name,
+                        snprintf(buf, sizeof(buf), tr("%s: necesitas %.0f de fe (%s)", "%s: you need %.0f faith (%s)"), md.name,
                                  faith_required_for_tier(md.tier), faith_level_name_for_tier(md.tier));
                         break;
                     case Player::MiracleEvent::NeedCost:
-                        snprintf(buf, sizeof(buf), "%s: te faltan %.0f de fe", md.name,
+                        snprintf(buf, sizeof(buf), tr("%s: te faltan %.0f de fe", "%s: %.0f faith short"), md.name,
                                  md.faith_cost - faith.current);
                         break;
                     default:
-                        snprintf(buf, sizeof(buf), "%s: en recarga", md.name);
+                        snprintf(buf, sizeof(buf), tr("%s: en recarga", "%s: on cooldown"), md.name);
                         break;
                 }
                 show_message(buf, 2.0f);
@@ -445,25 +501,76 @@ void Engine::update(f32 dt) {
             run_kills += combat_events.enemy_kills;
             player.kills += combat_events.enemy_kills;
 
-            if (combat_events.enemy_hits > 0)  audio.play_sfx(SfxID::EnemyHit, 0.6f);
-            if (combat_events.enemy_kills > 0) audio.play_sfx(SfxID::EnemyDeath, 0.8f);
+            // Cada evento con su curva de sacudida y su rumble (Config::Feel). Antes todo
+            // compartia una magnitud suelta escrita aqui mismo, asi que conectar un tiro y
+            // reventar a un jefe se sentian parecido.
+            if (combat_events.enemy_hits > 0) {
+                audio.play_sfx_variant(SfxID::EnemyHit, 3, 0.6f);
+                renderer.shake_camera(combat_events.boss_hits > 0 ? Config::Feel::SHAKE_BOSS_HIT
+                                                                  : Config::Feel::SHAKE_HIT);
+                input.rumble(Config::Feel::RUMBLE_HIT, 60);
+            }
+            if (combat_events.enemy_kills > 0) {
+                // Una recompensa audible por lo que muere: un leon y una vasija de Agua
+                // Corrupta compartian el mismo golpe seco y ninguna de las dos muertes
+                // se leia. Los ids son EnemyType (game/enemies.h).
+                // Con varios muertos en el mismo frame manda el mas llamativo: el agua
+                // derramandose tapa a un soldado, no al reves.
+                auto died = [&](EnemyType t) {
+                    return (combat_events.kill_mask >> static_cast<u32>(t)) & 1u;
+                };
+                if (died(EnemyType::AguaCorrupta)) {
+                    audio.play_sfx(SfxID::WaterFlow, 0.9f);
+                    audio.play_sfx(SfxID::EnemyDeath, 0.5f);
+                } else if (died(EnemyType::IdolatraDeRimon)) {
+                    audio.play_sfx(SfxID::FireCrackle, 0.9f);   // el brasero cae con el
+                    audio.play_sfx(SfxID::EnemyDeath, 0.6f);
+                } else if (died(EnemyType::LeonDelDesierto) || died(EnemyType::ProfetaDeBaal) ||
+                           died(EnemyType::GeneralSirio)) {
+                    audio.play_sfx(SfxID::EnemyDeath, 1.0f);
+                    audio.play_sfx(SfxID::CriticalHit, 0.45f);
+                } else {
+                    audio.play_sfx_variant(SfxID::EnemyDeath, 2, 0.8f);
+                }
+                renderer.shake_camera(Config::Feel::SHAKE_KILL);
+                input.rumble(Config::Feel::RUMBLE_KILL, 100);
+            }
             if (combat_events.hearts_picked + combat_events.orbs_picked > 0) audio.play_sfx(SfxID::ItemPickup, 0.7f);
             if (combat_events.player_hits > 0) {
                 player.took_damage_this_room = true;
-                renderer.shake_camera(2.5f, 0.25f);
+                run_hits_taken += combat_events.player_hits;
+                renderer.shake_camera(Config::Feel::SHAKE_PLAYER_HIT);
+                input.rumble(Config::Feel::RUMBLE_PLAYER_HIT, 220);
                 audio.play_sfx(SfxID::FaithLoss, 0.9f);
+                play_voice(Voice::Dolor);
+            }
+            if (combat_events.enemy_kills > 0) {
+                save.data.total_kills += combat_events.enemy_kills;
+                if ((combat_events.kill_mask >> static_cast<u32>(EnemyType::LeonDelDesierto)) & 1u)
+                    award(AchievementID::LeonDelDesierto);
             }
             if (combat_events.boss_kills > 0) {
-                renderer.shake_camera(5.0f, 0.6f);
+                award(AchievementID::PrimerJefe);
+                renderer.shake_camera(Config::Feel::SHAKE_BOSS_KILL);
+                input.rumble(Config::Feel::RUMBLE_BOSS_KILL, 500);
                 audio.play_sfx(SfxID::CriticalHit);
             }
             if (world.altars_smashed > 0) {
                 for (u32 i = 0; i < world.altars_smashed; i++) faith.on_destroy_altar();
                 world.altars_smashed = 0;
-                renderer.shake_camera(2.0f, 0.2f);
-                show_message("Altar de Baal destruido  +8 Fe");
+                renderer.shake_camera(Config::Feel::SHAKE_ALTAR);
+                show_message(tr("Altar de Baal destruido  +8 Fe", "Altar of Baal torn down  +8 Faith"));
                 audio.play_sfx(SfxID::FaithGain);
+                award(AchievementID::PrimerAltar);
             }
+            // El buzon se vacia AQUI, justo despues de vaciarlo de verdad, y no antes de
+            // llenarlo. La diferencia importa: lo que escribe fuera de esta ventana —el
+            // `killall` del autoplay, que corre antes en el mismo frame— sobrevive hasta
+            // que alguien lo lee, y si ese frame se congela por hit-stop (que ahora lo
+            // pone CUALQUIER golpe, no solo los de jefe) espera al siguiente en vez de
+            // perderse. Con el reinicio delante, `killall` mataba la sala entera y el
+            // marcador de bajas no se enteraba de nada.
+            combat_events.reset();
 
             if (god_mode && player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
                 world.healths[player.entity].current = world.healths[player.entity].max;
@@ -481,7 +588,7 @@ void Engine::update(f32 dt) {
                     miracle_hint_shown = true;
                     SDL_Log("Miracle hint shown (slot Q: %s)", get_miracle_def(q.miracle).name);
                     char hint[96];
-                    snprintf(hint, sizeof(hint), "Pulsa [Q]: %s  ·  %.0f de fe",
+                    snprintf(hint, sizeof(hint), tr("Pulsa [Q]: %s  ·  %.0f de fe", "Press [Q]: %s  ·  %.0f faith"),
                              get_miracle_def(q.miracle).name, get_miracle_def(q.miracle).faith_cost);
                     show_message(hint, 3.5f);
                 }
@@ -493,35 +600,46 @@ void Engine::update(f32 dt) {
                 portable_altar_used = true;
                 faith.on_pray();
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
-                show_message("Oras donde estás  +10 Fe", 2.0f);
+                show_message(tr("Oras donde estás  +10 Fe", "You pray where you stand  +10 Faith"), 2.0f);
                 audio.play_sfx(SfxID::FaithGain);
             }
 
             // Consumable (R): the Engine owns the registry, so the key is handled here
             if (input.is_action_just_pressed(Action::Consumable)) {
                 u32 held = player.consumable_slot;
-                if (player.use_consumable(world, item_registry)) {
+                if (player.use_consumable(world, faith, item_registry)) {
                     const ItemDef* d = item_registry.get(held);
-                    show_message(d ? d->name : "Consumible usado", 1.5f);
+                    show_message(d ? d->name : tr("Consumible usado", "Consumable used"), 1.5f);
                     audio.play_sfx(SfxID::ItemPickup, 0.9f);
                 }
             }
 
             update_room_state();
+            check_achievements();
             renderer.update_shake(dt);
 
             // Check player death
             if (player.entity != ENTITY_NONE &&
                 world.has(player.entity, Component::Health) &&
                 !world.healths[player.entity].is_alive()) {
-                if (has_revive) {
+                const bool relic_saves = !has_revive && relic_revive_ready &&
+                                         player.relic_slot == 20;
+                if (has_revive || relic_saves) {
                     // El aposento sunamita (2 Reyes 4:35): el niño estornudó siete veces
-                    has_revive = false;
+                    if (relic_saves) relic_revive_ready = false;
+                    else             has_revive = false;
                     auto& h = world.healths[player.entity];
                     h.current = h.max * 0.5f;
                     h.iframes_timer = 2.0f;
                     faith.modify(10.0f);
-                    show_banner("EL NIÑO ESTORNUDÓ", "La sunamita te levanta una vez", 3.5f);
+                    SDL_Log("Revive used: %s", relic_saves ? "El Reloj de Acaz (relic)"
+                                                            : "aposento sunamita (event)");
+                    if (relic_saves)
+                        show_banner(tr("LA SOMBRA RETROCEDE", "THE SHADOW GOES BACK"),
+                                    tr("El Reloj de Acaz te devuelve el golpe",
+                                       "Ahaz's dial gives you the blow back"), 3.5f);
+                    else
+                        show_banner(tr("EL NIÑO ESTORNUDÓ", "THE CHILD SNEEZED"), tr("La sunamita te levanta una vez", "The Shunammite raises you once"), 3.5f);
                     audio.play_sfx(SfxID::LevelUp);
                 } else {
                     SDL_Log("Player died! Game Over.");
@@ -556,9 +674,7 @@ void Engine::update(f32 dt) {
                             break;
                         case 2:
                             menus.settings_origin = MenuScreen::PauseMenu;
-                            menus.settings_music_vol = audio.music_volume;
-                            menus.settings_sfx_vol = audio.sfx_volume;
-                            menus.settings_auto_aim = input.auto_aim_enabled;
+                            load_settings_mirror();
                             menus.current = MenuScreen::Settings;
                             menus.selected_option = 0;
                             break;
@@ -685,6 +801,7 @@ void Engine::render() {
         ctx.map_revealed = player.map_revealed;
         ctx.tileset = tileset_texture;
         ctx.registry = &item_registry;
+        ctx.input    = &input;   // controles tactiles (solo si Input::touch_ui)
 
         // Sanar Aguas: disco en el suelo. El efecto es circular (distancia < 34), asi que
         // se pinta con la elipse suave de las sombras en vez del rectangulo que habia.
@@ -699,6 +816,10 @@ void Engine::render() {
     };
 
     switch (state.scene) {
+        case GameScene::Intro:
+            cinematic.render(renderer);
+            break;
+
         case GameScene::MainMenu:
             menus.render(renderer);
             break;
@@ -726,7 +847,11 @@ void Engine::render() {
             } else {
                 const ItemDef* defs[3] = {nullptr, nullptr, nullptr};
                 for (int i = 0; i < choice.count; i++) defs[i] = item_registry.get(choice.ids[i]);
-                draw_item_choice(renderer, choice.title, defs, choice.count, choice.selected, tileset_texture);
+                const ItemDef* held = (player.relic_slot != UINT32_MAX)
+                                    ? item_registry.get(player.relic_slot) : nullptr;
+                draw_item_choice(renderer, choice.title, defs, choice.count, choice.selected,
+                                 tileset_texture, state.current_act == Act::Act_I,
+                                 held ? held->name : nullptr);
             }
             break;
         }
@@ -739,7 +864,8 @@ void Engine::render() {
             render_world();
             EventDef def = get_event_def(dialogue.chapter);
             DialogueView v;
-            v.speaker = def.speaker;
+            v.speaker  = def.speaker;
+            v.portrait = def.portrait;
             if (dialogue.resolved) {
                 v.body = dialogue.result;
             } else if (dialogue.choosing) {
@@ -757,12 +883,12 @@ void Engine::render() {
                 v.body = def.lines[dialogue.line] ? def.lines[dialogue.line] : "";
                 v.more_lines = (dialogue.line + 1 < 3) && def.lines[dialogue.line + 1] != nullptr;
             }
-            draw_dialogue(renderer, v, tileset_texture, world.time);
+            draw_dialogue(renderer, v, tileset_texture, world.time, portrait_texture);
             break;
         }
 
         case GameScene::Codex:
-            codex.render(renderer, save.data, item_registry, tileset_texture);
+            codex.render(renderer, save.data, item_registry, tileset_texture, portrait_texture);
             break;
 
         case GameScene::Sanctuary:
@@ -780,11 +906,28 @@ void Engine::render() {
 
     renderer.end_frame();
 
+    // Vertical (GDD 4.5): los controles tactiles se pintan DESPUES del letterbox, sobre la
+    // ventana entera, para poder caer en la banda negra de abajo. En apaisado no hay banda
+    // y se dibujan como siempre, dentro del HUD.
+    if (input.touch_ui && input.touch_band >= 62.0f) {
+        renderer.begin_overlay();
+        HUDContext ctx;
+        ctx.tileset  = tileset_texture;
+        ctx.registry = &item_registry;
+        ctx.input    = &input;
+        hud.draw_touch_controls(renderer, player, ctx);
+        hud.draw_miracle_slots(renderer, player, ctx, faith);
+        renderer.end_overlay();
+    }
+    // La captura va ANTES de present(): en vertical se lee la ventana, y despues de
+    // presentar el contenido del backbuffer ya no es fiable.
     if (screenshot_requested) {
         screenshot_requested = false;
         take_screenshot(pending_shot_name.empty() ? nullptr : pending_shot_name.c_str());
         pending_shot_name.clear();
     }
+
+    renderer.present();
 }
 
 // =============================================================================
@@ -801,8 +944,7 @@ void Engine::change_scene(GameScene new_scene) {
     switch (new_scene) {
         case GameScene::MainMenu:
             menus.current = MenuScreen::Title;
-            menus.has_continue = save.has_save();
-            menus.offerings = progression.offerings;
+            refresh_continue_state();
             break;
         case GameScene::Paused:     menus.current = MenuScreen::PauseMenu; break;
         case GameScene::GameOver:
@@ -821,7 +963,10 @@ void Engine::start_new_run() {
     state.current_room = 0;
     state.run_time = 0.0f;
     run_kills = 0;
+    run_hits_taken = 0;
+    feel_mark = FeelMark{};
     has_revive = false;
+    relic_revive_ready = true;   // el Reloj de Acaz perdona una muerte POR capitulo
     miracle_hint_shown = false;
     miracle_hint_timer = 5.0f;
 
@@ -898,19 +1043,49 @@ void Engine::advance_chapter() {
         menus.stats_time = state.run_time;
         save.data.runs_completed++;
         award_offerings(true);
-        story.begin();
-        story_epilogue(story);
-        play_story(StoryThen::VictoryMenu);
+
+        // "El Legado" es contenido DESBLOQUEBLE (GDD): se gana derrotando a Ben-Adad con
+        // el celo intacto — fe en Profeta Ungido (75) o mas. Quien gane con la fe por los
+        // suelos se lleva su pantalla de victoria igual, pero no el epilogo: es el motivo
+        // para volver a jugar. Una vez desbloqueado lo es para siempre (SaveData::unlocks).
+        bool zeal = faith.current >= faith_required_for_tier(4);
+        award(AchievementID::Victoria);
+        if (zeal) { save.data.unlocks |= UNLOCK_EPILOGUE; award(AchievementID::Epilogo); }
+        if (save.data.unlocks & UNLOCK_EPILOGUE) {
+            SDL_Log("Victory: epilogue unlocked (faith %.0f)", faith.current);
+            save.save();
+            menus.victory_note = nullptr;
+            story.begin();
+            story_epilogue(story);
+            play_story(StoryThen::VictoryMenu);
+        } else {
+            SDL_Log("Victory without the epilogue (faith %.0f < 75)", faith.current);
+            save.save();
+            menus.victory_note = tr("El epílogo se queda sin contar: vuelve con la fe en alto.", "The epilogue goes untold: come back with faith high.");
+            finish_story_action(StoryThen::VictoryMenu);
+        }
         return;
     }
     start_chapter(next);
 }
 
 void Engine::retry_chapter() {
-    // Same prophet, fresh HP and starting faith, chapter regenerated
+    // Same prophet, fresh HP and starting faith, chapter regenerated.
+    // El equipo del run SOBREVIVE al reintento: morir ya cuesta el capitulo entero, y
+    // volver a empezarlo desnudo dejaba el reintento mas duro que la partida perdida.
     int chapter = state.current_chapter;
     CharacterType ch = player.character;
+
+    // Se guarda por id y se vuelve a otorgar: asi los bonus de HP/dano/velocidad/fe se
+    // reaplican sobre el profeta recien creado en vez de perderse con el Player anterior.
+    std::vector<u32> kept_items   = player.items;
+    u32 kept_consumable           = player.consumable_slot;
+    u8  kept_charges              = player.consumable_charges;
+    MiracleID kept_miracles[Config::MAX_MIRACLE_SLOTS];
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) kept_miracles[s] = player.miracle_slots[s].miracle;
+
     has_revive = false;
+    relic_revive_ready = true;
     world.clear();
     world.tileset = tileset_texture;
     faith.init();
@@ -918,6 +1093,23 @@ void Engine::retry_chapter() {
     if (ch == CharacterType::Elias) player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
     else                            player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
     apply_meta_upgrades();
+
+    for (u32 id : kept_items) {
+        const ItemDef* d = item_registry.get(id);
+        if (d) player.grant_item(world, faith, *d);
+    }
+    // Recalcular la reliquia SIEMPRE al rehacer el equipo: sus efectos no viven en el
+    // Player sino en FaithSystem::floor_value y Player::miracle_power, y en la Ascension
+    // la fe NO se reinicia — sin esto, un Elias con las Tablas dejaba a Eliseo con el
+    // suelo de fe en 25 para siempre, sin llevar la reliquia.
+    player.apply_relic_effects(faith);
+    // grant_item repone el consumible con 1 carga: mandan las que llevaba al morir
+    player.consumable_slot    = kept_consumable;
+    player.consumable_charges = (kept_consumable == UINT32_MAX) ? 0 : kept_charges;
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++)
+        if (kept_miracles[s] != MiracleID::COUNT) player.miracle_slots[s].equip(kept_miracles[s]);
+
+    SDL_Log("Retry chapter %d: %d item(s) kept", chapter, static_cast<int>(kept_items.size()));
     start_chapter(chapter);   // announce = true: la carta del capitulo lleva de vuelta a Playing
 }
 
@@ -930,6 +1122,7 @@ void Engine::trigger_ascension() {
 }
 
 void Engine::finish_ascension() {
+    award(AchievementID::Ascension);
     // Inheritance: half the faith (floored so Eliseo starts usable), miracles, mantle.
     // "Herencia Ampliada" (El Santuario) sube la porción heredada al 60%.
     f32 ratio = progression.is_unlocked(4) ? 0.60f : Config::INHERITANCE_FAITH_RATIO;
@@ -945,16 +1138,58 @@ void Engine::finish_ascension() {
         const ItemDef* d = item_registry.get(id);
         if (d && d->heredable) inherited.push_back(id);
     }
+    // "Doble porcion" (2 Reyes 2:9): el milagro en el que Elias invirtio —el de mayor
+    // tier de los que llevaba equipados— viaja con el manto. Eliseo lo lanza al 70%
+    // (el factor `inherit` de Player::cast_miracle), y NO pisa a los suyos: el tercer
+    // slot que abre el Manto es justo para el.
+    MiracleID legacy = MiracleID::COUNT;
+    int legacy_tier = -1;
+    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) {
+        MiracleID m = player.miracle_slots[s].miracle;
+        if (m == MiracleID::COUNT) continue;
+        auto md = get_miracle_def(m);
+        if (md.owner != Prophet::Elias || md.tier <= legacy_tier) continue;
+        legacy_tier = md.tier;
+        legacy = m;
+    }
     if (player.entity != ENTITY_NONE) world.destroy(player.entity);
     player = Player{};
     player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
+    player.staff_skin = save.data.skin_equipped;   // cosmetico: sobrevive a la Ascension
     player.rooms_cleared = rooms_cleared;
     player.kills = kills;
     for (u32 id : inherited) {
         const ItemDef* d = item_registry.get(id);
         if (d) player.grant_item(world, faith, *d);
     }
+    // Recalcular la reliquia SIEMPRE al rehacer el equipo: sus efectos no viven en el
+    // Player sino en FaithSystem::floor_value y Player::miracle_power, y en la Ascension
+    // la fe NO se reinicia — sin esto, un Elias con las Tablas dejaba a Eliseo con el
+    // suelo de fe en 25 para siempre, sin llevar la reliquia.
+    player.apply_relic_effects(faith);
     if (!inherited.empty()) SDL_Log("Ascension: %d heredable item(s) passed to Eliseo", static_cast<int>(inherited.size()));
+
+    // "Alzo el manto que se le habia caido a Elias" (2 Reyes 2:13). Es el unico camino
+    // hacia el item 15: event_only, nunca sale en una carta de eleccion.
+    if (const ItemDef* mantle = item_registry.get(15)) {
+        player.grant_item(world, faith, *mantle);
+        codex_see_item(save.data, mantle->id);
+        award(AchievementID::ElManto);
+        SDL_Log("Ascension: El Manto de Elias (slot %d, recarga x%.2f)",
+                player.active_slot_count, player.miracle_haste);
+    }
+    // El milagro heredado entra en el primer slot libre, que con el Manto siempre existe.
+    if (legacy != MiracleID::COUNT) {
+        for (int s = 0; s < player.active_slot_count && s < Config::MAX_MIRACLE_SLOTS; s++) {
+            if (!player.miracle_slots[s].is_empty()) continue;
+            player.miracle_slots[s].equip(legacy);
+            codex_see_miracle(save.data, legacy);
+            SDL_Log("Ascension: inherited miracle %s in slot %d (cast at 70%%)",
+                    get_miracle_def(legacy).name, s);
+            break;
+        }
+    }
+
     if (player.entity != ENTITY_NONE) world.transforms[player.entity].position = pos;
 
     start_chapter(Config::CHAPTERS_ACT_I + 1, true);   // la carta del cap. 6 abre el Acto II
@@ -979,6 +1214,22 @@ void Engine::finish_story() {
     finish_story_action(story.then);
 }
 
+// =============================================================================
+// Prologo cinematico (ui/cinematic.h)
+// =============================================================================
+// Lo llama main.cpp al arrancar (si no hay --script) y la opcion "Prólogo" del menu.
+// Las texturas se cargan la primera vez y quedan en la cache del Renderer.
+void Engine::start_intro() {
+    cinematic_prologue(cinematic);
+    if (!cinematic.art_loaded) cinematic.load_art(renderer);
+    cinematic.active = true;
+    cinematic.clock = 0.0f;
+    // Los playtests con --script no pueden quedarse mirando 80 segundos de cine
+    cinematic.auto_timer = autoplay.active ? 0.9f : 0.0f;
+    cinematic.go_to(0, renderer);
+    change_scene(GameScene::Intro);
+}
+
 void Engine::finish_story_action(StoryThen then) {
     switch (then) {
         case StoryThen::Play:            change_scene(GameScene::Playing); break;
@@ -999,6 +1250,7 @@ void Engine::finish_story_action(StoryThen then) {
 void Engine::update_music() {
     MusicID want = MusicID::COUNT;
     switch (state.scene) {
+        case GameScene::Intro:      want = MusicID::Prologue; break;
         case GameScene::MainMenu:   want = MusicID::MainTheme; break;
         case GameScene::Playing:
         case GameScene::Paused:
@@ -1034,22 +1286,139 @@ void Engine::update_music() {
 // =============================================================================
 // El estado vive en SaveData (sobrevive a la derrota, ver SaveSystem::delete_save)
 // y se copia al ProgressionSystem, que es quien conoce costes y nombres.
+// -----------------------------------------------------------------------------
+// Ajustes del jugador (GDD 4.2)
+// -----------------------------------------------------------------------------
+// SaveData (v7) es la fuente de la verdad; esto los reparte a quien los usa. Se llama al
+// arrancar y cada vez que el menu de Opciones toca algo, asi que tiene que ser idempotente.
+void Engine::apply_settings_from_save() {
+    int l = save.data.language;
+    if (l < 0 || l >= static_cast<int>(Language::COUNT)) l = 0;
+    I18N::current = static_cast<Language>(l);
+
+    audio.set_music_volume(save.data.music_volume);
+    audio.set_sfx_volume(save.data.sfx_volume);
+
+    int m = save.data.aim_assist;
+    if (m < 0 || m > 2) m = 0;
+    input.aim_mode = static_cast<Config::AimMode>(m);
+
+    int sens = save.data.sensitivity;
+    if (sens < 1)  sens = 1;
+    if (sens > 10) sens = 10;
+    input.aim_sensitivity = 1.0f + (sens - Config::Feel::SENSITIVITY_DEFAULT) *
+                                    Config::Feel::SENSITIVITY_STEP;
+
+    input.rumble_enabled    = (save.data.settings_flags & SETTING_RUMBLE) != 0;
+    input.touch_right_stick = (save.data.settings_flags & SETTING_TOUCH_RSTICK) != 0;
+    player.staff_skin       = save.data.skin_equipped;   // cosmetico: no toca ninguna cifra
+}
+
+void Engine::set_language(Language l) {
+    if (l >= Language::COUNT) l = Language::ES;
+    I18N::current = l;
+    save.data.language = static_cast<int>(l);
+    save.save(false);   // un ajuste NO re-sella la fecha: no reinicia la caducidad de 48 h
+}
+
 void Engine::sync_progression_from_save() {
     progression.offerings = save.data.offerings;
     for (auto& u : progression.upgrades)
         u.unlocked = (save.data.upgrades_bought >> u.id) & 1u;
+    achievements.unlocked = save.data.achievements;
+    apply_meta_unlocks();
+}
+
+// Una mejora comprada mete su objeto en el sorteo, y de ahi ya no sale: `items_unlocked`
+// es meta y sobrevive a delete_save, que es lo que hace que ahorrar ofrendas signifique
+// algo entre partidas. Solo pone bits, nunca los quita.
+void Engine::apply_meta_unlocks() {
+    for (const auto& u : progression.upgrades) {
+        if (u.unlocked && u.unlocks_item != MetaUpgrade::NO_ITEM)
+            save.data.items_unlocked |= (1u << u.unlocks_item);
+        if (u.unlocked && u.unlocks_skin != MetaUpgrade::NO_ITEM)
+            save.data.skins_unlocked |= (1u << u.unlocks_skin);
+    }
+    save.data.skins_unlocked |= 1u;   // la skin 0 es la de siempre y siempre esta
+
+    // Puerta de contenido (GDD 4.x, modelo Free-to-Start). HOY SE CONCEDE SOLA: es una
+    // PUERTA, no una caja. El dia que haya tienda, quien la rellene sera ella y no esto;
+    // integrar Google Play Billing / StoreKit / Steamworks son dependencias externas y
+    // este repo no las mete sin orden explicita.
+    save.data.entitlements = 0xFFFFFFFFu;
+
+    // Una skin que ya no este desbloqueada no puede quedarse puesta.
+    if (!(save.data.skins_unlocked & (1u << save.data.skin_equipped)))
+        save.data.skin_equipped = 0;
+}
+
+// =============================================================================
+// Logros
+// =============================================================================
+void Engine::award(AchievementID id) {
+    if (!achievements.unlock(id)) return;   // ya lo tenia: ni aviso ni guardado
+    AchievementDef d = get_achievement_def(id);
+    save.data.achievements = achievements.unlocked;
+    save.save(false);   // sin resellar la fecha: un logro no reinicia la caducidad de 48 h
+    SDL_Log("Achievement unlocked: %s (%s)  [%d/%d]", d.name, d.description,
+            achievements.count_unlocked(), static_cast<int>(AchievementID::COUNT));
+    char buf[128];
+    snprintf(buf, sizeof(buf), tr("LOGRO  ·  %s", "ACHIEVEMENT  ·  %s"), d.name);
+    show_banner(buf, d.description, 3.0f);
+    audio.play_sfx(SfxID::LevelUp, 0.9f);
+    achievements.pending = AchievementID::COUNT;
+}
+
+// Los que dependen del ESTADO y no de un evento puntual. Se miran una vez por frame
+// jugando; `award` filtra las repeticiones, asi que no hace falta recordar nada.
+void Engine::check_achievements() {
+    if (player.entity == ENTITY_NONE) return;
+
+    if (faith.current >= faith.max) award(AchievementID::FuegoDelCielo);
+    if (save.data.total_kills >= 100) award(AchievementID::CienCaidos);
+    if (state.current_chapter >= Config::CHAPTERS_ACT_I + 1) award(AchievementID::ActoII);
+    if (player.items.size() >= 8) award(AchievementID::Coleccionista);
+    if (player.relic_slot != UINT32_MAX) award(AchievementID::PrimeraReliquia);
+
+    // Tres slots ocupados A LA VEZ: tener el tercero abierto y vacio no cuenta
+    if (player.active_slot_count >= Config::MAX_MIRACLE_SLOTS) {
+        bool all = true;
+        for (int i = 0; i < Config::MAX_MIRACLE_SLOTS; i++)
+            if (player.miracle_slots[i].is_empty()) { all = false; break; }
+        if (all) award(AchievementID::TriplePorcion);
+    }
+
+    // Los diez milagros lanzados alguna vez (la mascara persiste entre partidas)
+    constexpr u32 ALL_MIRACLES = (1u << static_cast<u32>(MiracleID::COUNT)) - 1u;
+    if ((save.data.miracles_cast & ALL_MIRACLES) == ALL_MIRACLES)
+        award(AchievementID::DiezProdigios);
+
+    // Tres discipulos en pie. `is_ally` es la unica marca de faccion del juego.
+    int allies = 0;
+    for (u32 e = 0; e < world.entity_count; e++) {
+        if (!world.is_alive(e) || !is_ally(world, e)) continue;
+        if (world.has(e, Component::Health) && !world.healths[e].is_alive()) continue;
+        allies++;
+    }
+    if (allies >= 3) award(AchievementID::EjercitoCelestial);
 }
 
 void Engine::sync_progression_to_save() {
+    save.data.achievements = achievements.unlocked;
     save.data.offerings = progression.offerings;
     save.data.upgrades_bought = 0;
     for (const auto& u : progression.upgrades)
         if (u.unlocked) save.data.upgrades_bought |= (1u << u.id);
+    apply_meta_unlocks();
 }
 
 // Se aplican al crear al profeta, antes de la primera sala.
 void Engine::apply_meta_upgrades() {
     if (player.entity == ENTITY_NONE) return;
+    // La skin del cayado vive en el guardado, pero el Player se REHACE al empezar una
+    // partida (`player = Player{}`), asi que hay que volver a ponersela aqui. Es lo unico
+    // cosmetico de esta funcion: no toca ninguna cifra.
+    player.staff_skin = save.data.skin_equipped;
     if (progression.is_unlocked(0) && world.has(player.entity, Component::Health)) {
         world.healths[player.entity].max += 10.0f;
         world.healths[player.entity].current += 10.0f;
@@ -1072,35 +1441,56 @@ void Engine::award_offerings(bool victory) {
     sync_progression_to_save();
     save.data.total_runs++;
     char buf[64];
-    snprintf(buf, sizeof(buf), "+%d ofrendas", earned);
+    snprintf(buf, sizeof(buf), tr("+%d ofrendas", "+%d offerings"), earned);
     show_message(buf, 4.0f);
     SDL_Log("Run over: +%d offerings (total %d)", earned, progression.offerings);
 }
+
+// Filas visibles a la vez. 7 x 14,5 = 101,5 unidades desde y=48 acaban en 149,5, y eso
+// deja "Volver" en 156 y la ayuda de teclas en 170 sin que se toquen. Con 8 filas la fila
+// "Volver" caia justo encima de la ayuda.
+static constexpr int SANCTUARY_ROWS = 7;
 
 void Engine::update_sanctuary() {
     const int n = static_cast<int>(progression.upgrades.size());
     if (n <= 0) { change_scene(GameScene::MainMenu); return; }
     if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_sel = (sanctuary_sel - 1 + n + 1) % (n + 1);
     if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_sel = (sanctuary_sel + 1) % (n + 1);
+    // La ventana sigue a la seleccion, igual que en el Codice. "Volver" (indice n) no
+    // scrollea: se pinta siempre debajo de la lista.
+    if (sanctuary_sel < sanctuary_scroll) sanctuary_scroll = sanctuary_sel;
+    if (sanctuary_sel < n && sanctuary_sel >= sanctuary_scroll + SANCTUARY_ROWS)
+        sanctuary_scroll = sanctuary_sel - SANCTUARY_ROWS + 1;
+    sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
 
     if (input.is_action_just_pressed(Action::Cancel)) { change_scene(GameScene::MainMenu); return; }
     if (!input.is_action_just_pressed(Action::Confirm)) return;
 
     if (sanctuary_sel >= n) { change_scene(GameScene::MainMenu); return; }   // "Volver"
     const MetaUpgrade& u = progression.upgrades[sanctuary_sel];
-    if (u.unlocked) { show_message("Ya es tuyo", 1.2f); return; }
+    if (u.unlocked) { show_message(tr("Ya es tuyo", "Already yours"), 1.2f); return; }
     if (progression.offerings < u.cost) {
-        show_message("No tienes ofrendas suficientes", 1.6f);
+        show_message(tr("No tienes ofrendas suficientes", "Not enough offerings"), 1.6f);
         audio.play_sfx(SfxID::MenuSelect, 0.5f);
         return;
     }
+    const u32 unlocks = u.unlocks_item;
     progression.purchase(u.id);
-    sync_progression_to_save();
+    sync_progression_to_save();   // llama a apply_meta_unlocks
     save.save();
     audio.play_sfx(SfxID::LevelUp, 0.9f);
+    if (unlocks != MetaUpgrade::NO_ITEM) {
+        const ItemDef* d = item_registry.get(unlocks);
+        char msg[96];
+        snprintf(msg, sizeof(msg), tr("%s ya puede salir en las cartas",
+                                      "%s can now appear in the cards"),
+                 d ? d->name : "?");
+        show_message(msg, 2.5f);
+        SDL_Log("Meta unlock: item %u (%s)", unlocks, d ? d->name : "?");
+    }
 }
 
-// El Santuario: las siete mejoras de progression.cpp con su coste y estado.
+// El Santuario: las ocho mejoras de progression.cpp con su coste y estado.
 void Engine::render_sanctuary() {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
@@ -1108,17 +1498,25 @@ void Engine::render_sanctuary() {
     if (renderer.vignette_tex != TEXTURE_NONE)
         renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 150});
 
-    renderer.draw_text_centered("EL SANTUARIO", 10, {240, 215, 150, 255}, 1.4f);
-    renderer.draw_text_centered("«Traed todos los diezmos al alfolí»",
+    renderer.draw_text_centered(tr("EL SANTUARIO", "THE SANCTUARY"), 10, {240, 215, 150, 255}, 1.4f);
+    renderer.draw_text_centered(tr("«Traed todos los diezmos al alfolí»", "«Bring all the tithes into the storehouse»"),
                                 26, {150, 132, 100, 220}, 0.65f);
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "%d ofrendas", progression.offerings);
+    snprintf(buf, sizeof(buf), tr("%d ofrendas", "%d offerings"), progression.offerings);
     renderer.draw_text_centered(buf, 38, {245, 205, 90, 255}, 0.9f);
 
     const int n = static_cast<int>(progression.upgrades.size());
-    f32 y = 52.0f;
-    for (int i = 0; i < n; i++) {
+    // Con 8 mejoras el paso de 16 unidades se salia por abajo: 14,5 deja sitio para
+    // "Volver" y para la ayuda de teclas en las 180 unidades de alto. Con 12 ya no caben
+    // ni asi, de modo que se pinta una VENTANA de SANCTUARY_ROWS filas.
+    const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
+    const int last  = std::min(n, first + SANCTUARY_ROWS);
+    f32 y = 48.0f;
+    // Las flechas de scroll van en el MARGEN IZQUIERDO, no centradas: centradas, la de
+    // arriba caia justo sobre la linea de "N ofrendas".
+    if (first > 0) renderer.draw_text("^", 5.0f, y + 1.0f, {180, 160, 120, 210}, 0.7f);
+    for (int i = first; i < last; i++) {
         const MetaUpgrade& u = progression.upgrades[i];
         bool on = (i == sanctuary_sel);
         bool afford = progression.offerings >= u.cost;
@@ -1130,26 +1528,61 @@ void Engine::render_sanctuary() {
         renderer.draw_text(u.name, 22.0f, y, name_c, 0.8f);
         renderer.draw_text(u.description, 22.0f, y + 7.0f, {150, 142, 132, 225}, 0.6f);
 
-        const char* right = u.unlocked ? "COMPRADO" : nullptr;
+        const char* right = u.unlocked ? tr("COMPRADO", "BOUGHT") : nullptr;
         char cost[24];
         if (!right) { snprintf(cost, sizeof(cost), "%d", u.cost); right = cost; }
         Color cc = u.unlocked ? Color{120, 195, 120, 235}
                               : (afford ? Color{245, 205, 90, 245} : Color{150, 90, 80, 220});
         f32 rw = renderer.measure_text(right, 0.75f);
         renderer.draw_text(right, W - 14.0f - rw, y + 2.0f, cc, 0.75f);
-        y += 16.0f;
+        y += 14.5f;
     }
 
+    if (last < n) renderer.draw_text("v", 5.0f, y - 9.0f, {180, 160, 120, 210}, 0.7f);
     bool back_on = (sanctuary_sel >= n);
-    renderer.draw_text_centered(back_on ? "> Volver" : "  Volver", y + 2.0f,
+    renderer.draw_text_centered(back_on ? tr("> Volver", "> Back") : tr("  Volver", "  Back"), 156.0f,
                                 back_on ? Color::elias_gold() : Color{140, 130, 120, 235}, 0.85f);
-    renderer.draw_text_centered("[W/S] mover   [ENTER] comprar   [ESC] volver", H - 8.0f,
+    renderer.draw_text_centered(tr("[W/S] mover   [ENTER] comprar   [ESC] volver",
+                                   "[W/S] move   [ENTER] buy   [ESC] back"), 170.0f,
                                 {130, 122, 112, 200}, 0.65f);
+    (void)H;
 }
 
 // =============================================================================
 // Feedback
 // =============================================================================
+// Una voz cada VOICE_GAP segundos como mucho. El grito de jefe se salta la espera: suena
+// una vez por capitulo y es justo el momento en el que tiene que oirse.
+void Engine::play_voice(Voice v, f32 volume) {
+    constexpr f32 VOICE_GAP = 2.2f;
+    if (v != Voice::Jefe && voice_cooldown > 0.0f) return;
+    voice_cooldown = VOICE_GAP;
+
+    const bool elias = (player.character == CharacterType::Elias);
+    // Una linea por exclamacion: es lo que permite comprobar desde un guion que la voz
+    // ha sonado y con que toma. Sin esto, `audio_check` solo podia decir que el fichero
+    // se habia cargado, no que se hubiera oido.
+    static const char* NAMES[] = {"esfuerzo", "dolor", "milagro", "jefe"};
+    SDL_Log("Voice: %s (%s)", NAMES[static_cast<int>(v)],
+            (v == Voice::Milagro || v == Voice::Jefe) ? "-" : (elias ? "Elias" : "Eliseo"));
+    switch (v) {
+        case Voice::Esfuerzo:
+            audio.play_sfx_variant(elias ? SfxID::VozEliasEsfuerzo1 : SfxID::VozEliseoEsfuerzo1,
+                                   3, volume);
+            break;
+        case Voice::Dolor:
+            audio.play_sfx_variant(elias ? SfxID::VozEliasDolor1 : SfxID::VozEliseoDolor1,
+                                   3, volume);
+            break;
+        case Voice::Milagro:
+            audio.play_sfx_variant(SfxID::VozMilagro1, 2, volume);
+            break;
+        case Voice::Jefe:
+            audio.play_sfx(SfxID::VozJefe, volume);
+            break;
+    }
+}
+
 void Engine::show_banner(const char* title, const char* sub, f32 seconds) {
     banner_text = title ? title : "";
     subbanner_text = sub ? sub : "";
@@ -1194,21 +1627,48 @@ void Engine::populate_save_data() {
 }
 
 // Morir no borra la partida. El guardado se rebobina al principio del capitulo (profeta
-// entero, sin objetos, mapa nuevo), que es justo donde deja "Reintentar": asi las dos
-// salidas de la pantalla de derrota llevan al mismo sitio y "Continuar" sigue existiendo.
+// entero, mapa nuevo), que es justo donde deja "Reintentar": asi las dos salidas de la
+// pantalla de derrota llevan al mismo sitio y "Continuar" sigue existiendo. El equipo
+// (objetos, consumible y milagros, tal como los dejo populate_save_data) se conserva,
+// igual que en retry_chapter(): lo que se pierde al morir es el capitulo, no el run.
 void Engine::save_after_defeat() {
     populate_save_data();
     save.data.run_active   = true;
     save.data.current_room = -1;          // el capitulo se regenera: la sala guardada ya no existe
     save.data.chapter_seed = 0;           // semilla nueva, como en retry_chapter()
     save.data.hp           = 9999.0f;     // continue_run() lo recorta al maximo del profeta
+    // Fe de arranque + lo que aporten los objetos conservados: continue_run() reaplica los
+    // items pero luego fija la fe a este valor, asi que el bonus tiene que venir ya sumado
+    // (si no, "Continuar" y "Reintentar" salian del mismo sitio con distinta fe)
     save.data.faith        = Config::FAITH_INITIAL;
-    save.data.item_count   = 0;           // el equipo del run muere con el run
-    save.data.consumable_id = UINT32_MAX;
-    save.data.consumable_uses = 0;
-    // UINT32_MAX -> los milagros de arranque del profeta
-    for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) save.data.miracle_ids[s] = UINT32_MAX;
+    for (int i = 0; i < save.data.item_count; i++) {
+        const ItemDef* d = item_registry.get(save.data.item_ids[i]);
+        if (d) save.data.faith += d->faith_bonus;
+    }
     save.save();
+}
+
+// GDD 4.4: en movil una partida abandonada 48 h ya no se continua. En escritorio la
+// regla no aplica (`mobile_rules`), salvo con --touch para poder probarla.
+void Engine::refresh_continue_state() {
+    menus.has_continue        = save.has_save();
+    menus.continue_expired    = menus.has_continue && mobile_rules && save.is_run_expired();
+    menus.abandoned_offerings = menus.continue_expired ? save.get_abandoned_offerings() : 0;
+    menus.offerings           = progression.offerings;
+    if (menus.continue_expired)
+        SDL_Log("Abandoned run (chapter %d): %d offerings on the table",
+                save.data.current_chapter, menus.abandoned_offerings);
+}
+
+// Aceptar la partida abandonada: se cobra el 50% y el guardado se BORRA (la
+// meta-progresion sobrevive: delete_save reescribe el fichero solo con ella).
+void Engine::claim_abandoned_run() {
+    int reward = save.get_abandoned_offerings();
+    progression.add_offerings(reward);
+    sync_progression_to_save();
+    save.delete_save();
+    refresh_continue_state();
+    SDL_Log("Abandoned run claimed: +%d offerings (total %d)", reward, progression.offerings);
 }
 
 void Engine::continue_run() {
@@ -1225,6 +1685,8 @@ void Engine::continue_run() {
     state.current_room    = save.data.current_room;
     state.run_time        = save.data.run_time;
     run_kills = 0;
+    run_hits_taken = 0;
+    feel_mark = FeelMark{};
 
     world.clear();
     world.tileset = tileset_texture;
@@ -1250,6 +1712,11 @@ void Engine::continue_run() {
         const ItemDef* d = item_registry.get(save.data.item_ids[i]);
         if (d) player.grant_item(world, faith, *d);
     }
+    // Recalcular la reliquia SIEMPRE al rehacer el equipo: sus efectos no viven en el
+    // Player sino en FaithSystem::floor_value y Player::miracle_power, y en la Ascension
+    // la fe NO se reinicia — sin esto, un Elias con las Tablas dejaba a Eliseo con el
+    // suelo de fe en 25 para siempre, sin llevar la reliquia.
+    player.apply_relic_effects(faith);
     player.consumable_slot = save.data.consumable_id;
     // grant_item ya dejo 1 carga al reponer el consumible: la guardada manda
     player.consumable_charges = (player.consumable_slot == UINT32_MAX)
@@ -1290,6 +1757,7 @@ void Engine::load_room(int room_index) {
     room_fade = 1.0f;   // fade in the new room (see Engine::render)
     world.popups.clear();
     world.hitstop = 0.0f;
+    room_change_grace = Config::Feel::COYOTE_TIME;   // ver try_room_transition
 
     // Destroy all non-player entities (enemies, projectiles, items from previous room)
     for (u32 e = 0; e < MAX_ENTITIES; e++) {
@@ -1352,6 +1820,15 @@ void Engine::load_room(int room_index) {
         world.transforms[player.entity].position = spawn_pos;
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
+
+        // "La Escuela de Profetas" (mejora meta 7): Eliseo entra acompanado. El discipulo
+        // NO viaja entre salas —al cambiar de sala el mundo se vacia—: se vuelve a
+        // presentar en cada una, que es lo que el jugador percibe como "permanente".
+        if (progression.is_unlocked(7) && player.character == CharacterType::Eliseo) {
+            spawn_disciple(world, spawn_pos + Vec2{18.0f, 6.0f},
+                           enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)],
+                           0.0f, 40.0f, 10.0f);
+        }
     }
 
     // Enemies / boss (only if the room is not already cleared)
@@ -1370,11 +1847,12 @@ void Engine::load_room(int room_index) {
                 auto& bh = world.healths[boss_entity];
                 bh.max *= boss_hp_scale;
                 bh.current = bh.max;
-                show_message("El jefe entra debilitado", 2.5f);
+                show_message(tr("El jefe entra debilitado", "The boss comes in weakened"), 2.5f);
             }
             char buf[64];
             snprintf(buf, sizeof(buf), "%s", def.boss_name);
-            show_banner("JEFE", buf, 2.5f);
+            show_banner(tr("JEFE", "BOSS"), buf, 2.5f);
+            play_voice(Voice::Jefe, 0.9f);   // se salta la espera: suena una vez por capitulo
             audio.play_sfx(SfxID::CriticalHit, 0.9f);
         } else {
             spawn_room_enemies();
@@ -1384,7 +1862,7 @@ void Engine::load_room(int room_index) {
                                      world.count_living_enemies() > 0;
     if (current_room_data.exits_locked && node.type != RoomType::Boss && lock_hints_shown < 3) {
         lock_hints_shown++;
-        show_message("Salidas selladas: derrota a todos los enemigos", 2.5f);
+        show_message(tr("Salidas selladas: derrota a todos los enemigos", "Exits sealed: defeat every enemy"), 2.5f);
     }
 
     // ASCII dump of the layout (debug aid for autoplay sessions)
@@ -1444,6 +1922,15 @@ void Engine::try_room_transition() {
 
     if (move_dir == Direction::None) return;
 
+    // Coyote time: durante el margen que sigue a una carga de sala NO se encadena otra.
+    // El profeta aparece pegado al borde contrario, y con la tecla mantenida un roce en
+    // diagonal podia cruzar dos salas en dos frames. Se le sigue frenando en el borde.
+    if (room_change_grace > 0.0f) {
+        pos.x = std::max(1.0f, std::min(pos.x, static_cast<f32>(Config::GAME_WIDTH) - 1.0f));
+        pos.y = std::max(1.0f, std::min(pos.y, room_h - 1.0f));
+        return;
+    }
+
     if (next_room >= 0 && !current_room_data.exits_locked) {
         // Persist this room's full state (cleared flags, smashed altars, opened chests...)
         floor_map.room_cache[floor_map.current_room] = current_room_data;
@@ -1489,14 +1976,17 @@ void Engine::update_room_state() {
             if (node.type == RoomType::Boss) {
                 room.place_exit();
                 boss_entity = ENTITY_NONE;
-                show_banner("JEFE DERROTADO", "Cruza el arco dorado para continuar", 4.0f);
+                show_banner(tr("JEFE DERROTADO", "BOSS DEFEATED"), tr("Cruza el arco dorado para continuar", "Cross the golden arch to go on"), 4.0f);
                 audio.play_sfx(SfxID::LevelUp);
             } else if (!player.took_damage_this_room) {
                 faith.on_room_no_damage();
-                show_message("Sala despejada sin daño  +2 Fe", 2.5f);
+                show_message(tr("Sala despejada sin daño  +2 Fe", "Room cleared without a scratch  +2 Faith"), 2.5f);
+                award(AchievementID::SinRasguno);
             } else {
-                show_message("Sala despejada", 1.5f);
+                show_message(tr("Sala despejada", "Room cleared"), 1.5f);
             }
+            // Despejarla con el celo apagado tiene su propio merito
+            if (faith.current < Config::FAITH_LEVEL_1) award(AchievementID::BajoLaRetama);
             if (node.type != RoomType::Boss) audio.play_sfx(SfxID::DoorOpen, 0.8f);
             if (node.type == RoomType::Elite) {
                 // Elite reward: a small offering pile at the centre
@@ -1511,14 +2001,14 @@ void Engine::update_room_state() {
             // "Continuar" land on the room the player actually reached)
             populate_save_data();
             save.save();
-            menus.has_continue = true;
+            refresh_continue_state();
 
             // Core loop step 4: choose an upgrade. Elite/Boss always, normal rooms 1 in 5 —
             // one card per room would hand out all 13 items well before the first chapter ends
             // (bot runs reached chapter 10 carrying 18 items and never dropped below 70% HP).
-            if (node.type == RoomType::Elite)      open_item_choice("ELITE DERROTADA");
-            else if (node.type == RoomType::Boss)  open_item_choice("BOTÍN DEL JEFE");
-            else if (randi_range(0, 4) == 0)       open_item_choice("ELIGE UNA BENDICIÓN");
+            if (node.type == RoomType::Elite)      open_item_choice(tr("ELITE DERROTADA", "ELITE DEFEATED"));
+            else if (node.type == RoomType::Boss)  open_item_choice(tr("BOTÍN DEL JEFE", "BOSS LOOT"));
+            else if (randi_range(0, 4) == 0)       open_item_choice(tr("ELIGE UNA BENDICIÓN", "CHOOSE A BLESSING"));
         }
     }
 
@@ -1552,7 +2042,7 @@ void Engine::update_room_state() {
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
                 floor_map.room_cache[floor_map.current_room] = room;
                 // Praying is where new miracles are learned (GDD: miracles come from God)
-                open_miracle_choice("UN NUEVO MILAGRO");
+                open_miracle_choice(tr("UN NUEVO MILAGRO", "A NEW MIRACLE"));
             }
             break;
         case TileType::Chest:
@@ -1562,7 +2052,7 @@ void Engine::update_room_state() {
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(15.0f);
                 faith.modify(5.0f);
                 floor_map.room_cache[floor_map.current_room] = room;
-                open_item_choice("EL COFRE SE ABRE");
+                open_item_choice(tr("EL COFRE SE ABRE", "THE CHEST OPENS"));
             }
             break;
         case TileType::Event:
@@ -1723,8 +2213,19 @@ void Engine::apply_event_choice(int chapter, int option) {
 // "Elige una bendicion": core loop step 4 (GDD 1.4)
 // =============================================================================
 void Engine::open_item_choice(const char* title) {
-    std::vector<u32> ids = item_registry.roll_choices(player.items, 3);
-    if (ids.empty()) return;
+    std::vector<u32> ids = item_registry.roll_choices(player.items, 3, save.data.items_unlocked);
+    // Se loguea LO QUE SE OFRECE, no solo lo que se toma: es lo unico que permite
+    // comprobar desde un guion que un objeto bloqueado no ha entrado en el sorteo.
+    if (ids.empty()) { SDL_Log("Item choice: (sin candidatos)"); return; }
+    {
+        std::string offered;
+        for (u32 id : ids) {
+            const ItemDef* d = item_registry.get(id);
+            offered += offered.empty() ? "" : " / ";
+            offered += d ? d->name : "?";
+        }
+        SDL_Log("Item choice: %s", offered.c_str());
+    }
     choice.count = static_cast<int>(ids.size());
     for (int i = 0; i < choice.count; i++) { choice.ids[i] = ids[i]; choice.extras[i].clear(); }
     choice.miracles = false;
@@ -1767,8 +2268,8 @@ void Engine::open_miracle_choice(const char* title) {
         const MiracleSlot& slot = player.miracle_slots[target];
         static const char* SLOT_KEYS[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
         choice.extras[choice.count] = slot.is_empty()
-            ? std::string("SLOT ") + SLOT_KEYS[std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, target))] + " LIBRE"
-            : std::string("SUSTITUYE A ") + get_miracle_def(slot.miracle).name;
+            ? std::string(tr("SLOT ", "SLOT ")) + SLOT_KEYS[std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, target))] + tr(" LIBRE", " FREE")
+            : std::string(tr("SUSTITUYE A ", "REPLACES ")) + get_miracle_def(slot.miracle).name;
         choice.count++;
     }
     choice.selected = 0;
@@ -1811,7 +2312,7 @@ void Engine::update_item_choice(f32 dt) {
             codex_see_miracle(save.data, id);
             MiracleDef d = get_miracle_def(id);
             SDL_Log("Miracle equipped in slot %d: %s (tier %d, %.0f faith)", target, d.name, d.tier, d.faith_cost);
-            snprintf(buf, sizeof(buf), "%s equipado en [%s]", d.name, target == 0 ? "Q" : "E");
+            snprintf(buf, sizeof(buf), tr("%s equipado en [%s]", "%s equipped on [%s]"), d.name, target == 0 ? "Q" : "E");
             show_message(buf, 3.0f);
             audio.play_sfx(SfxID::MenuConfirm, 0.9f);
         } else {
@@ -1822,8 +2323,17 @@ void Engine::update_item_choice(f32 dt) {
                 SDL_Log("Item taken: %s (%s)", def->name, def->description);
                 // Las armas traen tecla: sin decirlo, el jugador recoge la Honda y no la usa jamas
                 if (def->category == ItemCategory::Weapon)
-                    snprintf(buf, sizeof(buf), "%s: pulsa [I] para usarla", def->name);
-                else
+                    snprintf(buf, sizeof(buf), tr("%s: pulsa [I] para usarla",
+                                                  "%s: press [I] to use it"), def->name);
+                else if (def->category == ItemCategory::Relic &&
+                         player.relic_replaced != UINT32_MAX &&
+                         player.relic_replaced != def->id) {
+                    // Solo hay un slot: hay que DECIR que la otra se ha ido, o el jugador
+                    // ve caer un numero suyo y no sabe por que.
+                    const ItemDef* old = item_registry.get(player.relic_replaced);
+                    snprintf(buf, sizeof(buf), tr("%s sustituye a %s", "%s replaces %s"),
+                             def->name, old ? old->name : "?");
+                } else
                     snprintf(buf, sizeof(buf), "%s: %s", def->name, def->description);
                 show_message(buf, 3.5f);
                 audio.play_sfx(SfxID::MenuConfirm, 0.9f);
@@ -1849,49 +2359,111 @@ void Engine::spawn_room_enemies() {
     }
 }
 
+// SaveData -> el espejo del menu. El menu no conoce el guardado ni Input: solo pinta.
+void Engine::load_settings_mirror() {
+    menus.settings_music_vol   = save.data.music_volume;
+    menus.settings_sfx_vol     = save.data.sfx_volume;
+    menus.settings_aim_mode    = save.data.aim_assist;
+    menus.settings_sensitivity = save.data.sensitivity;
+    menus.settings_rumble      = (save.data.settings_flags & SETTING_RUMBLE) != 0;
+    menus.settings_rstick      = (save.data.settings_flags & SETTING_TOUCH_RSTICK) != 0;
+    menus.settings_language    = save.data.language;
+    menus.settings_skin        = static_cast<int>(save.data.skin_equipped);
+    menus.settings_skins_mask  = save.data.skins_unlocked;
+    // La fila del stick derecho SOLO existe en tactil: en teclado seria ruido, y con
+    // --touch tiene que estar para poder probarla.
+    menus.settings_show_rstick = input.touch_ui;
+}
+
+// El espejo del menu -> SaveData -> los subsistemas. Guarda con save(false): tocar un
+// ajuste NO re-sella la fecha, asi que no le reinicia a nadie la caducidad de 48 h.
+void Engine::commit_settings_from_mirror() {
+    save.data.music_volume = menus.settings_music_vol;
+    save.data.sfx_volume   = menus.settings_sfx_vol;
+    save.data.aim_assist   = menus.settings_aim_mode;
+    save.data.sensitivity  = menus.settings_sensitivity;
+    save.data.language     = menus.settings_language;
+    save.data.skin_equipped = static_cast<u32>(std::max(0, menus.settings_skin));
+    if (menus.settings_rumble) save.data.settings_flags |=  SETTING_RUMBLE;
+    else                       save.data.settings_flags &= ~SETTING_RUMBLE;
+    if (menus.settings_rstick) save.data.settings_flags |=  SETTING_TOUCH_RSTICK;
+    else                       save.data.settings_flags &= ~SETTING_TOUCH_RSTICK;
+    apply_settings_from_save();
+    save.save(false);
+}
+
 void Engine::update_settings() {
-    menus.update(input);  // Up/Down navigation
+    menus.update(input);  // navegacion arriba/abajo
 
-    // Row 2: auto-aim toggle (GDD 4.3 — always available, on by default on mobile)
-    if (menus.selected_option == 2 &&
-        (input.is_action_just_pressed(Action::MoveLeft) || input.is_action_just_pressed(Action::MoveRight) ||
-         input.is_action_just_pressed(Action::Confirm))) {
-        menus.settings_auto_aim = !menus.settings_auto_aim;
-        input.auto_aim_enabled = menus.settings_auto_aim;
-        audio.play_sfx(SfxID::MenuSelect, 0.7f);
-    }
+    const bool left    = input.is_action_just_pressed(Action::MoveLeft);
+    const bool right   = input.is_action_just_pressed(Action::MoveRight);
+    const bool confirm = input.is_action_just_pressed(Action::Confirm);
+    bool changed = false;
 
-    // Left/Right adjust volume on rows 0 and 1
-    if (menus.selected_option < 2) {
-        f32* vol = (menus.selected_option == 0) ? &menus.settings_music_vol
-                                                 : &menus.settings_sfx_vol;
-        bool changed = false;
+    // Por ID de fila, no por indice: la fila del stick derecho solo existe en tactil.
+    const int row = menus.settings_row_at(menus.selected_option);
 
-        if (input.is_action_just_pressed(Action::MoveLeft)) {
-            *vol -= 0.1f;
-            if (*vol < 0.0f) *vol = 0.0f;
-            changed = true;
+    switch (row) {
+        case MenuSystem::ROW_MUSIC:
+        case MenuSystem::ROW_SFX: {
+            f32* vol = (row == MenuSystem::ROW_MUSIC) ? &menus.settings_music_vol
+                                                      : &menus.settings_sfx_vol;
+            if (left)  { *vol = std::max(0.0f, *vol - 0.1f); changed = true; }
+            if (right) { *vol = std::min(1.0f, *vol + 0.1f); changed = true; }
+            break;
         }
-        if (input.is_action_just_pressed(Action::MoveRight)) {
-            *vol += 0.1f;
-            if (*vol > 1.0f) *vol = 1.0f;
-            changed = true;
-        }
-
-        if (changed) {
-            if (menus.selected_option == 0) {
-                audio.set_music_volume(*vol);
-            } else {
-                audio.set_sfx_volume(*vol);
+        case MenuSystem::ROW_AIM:   // OFF -> Asistido -> ON, y el ciclo da la vuelta
+            if (left)  { menus.settings_aim_mode = (menus.settings_aim_mode + 2) % 3; changed = true; }
+            if (right || confirm) { menus.settings_aim_mode = (menus.settings_aim_mode + 1) % 3; changed = true; }
+            break;
+        case MenuSystem::ROW_SENS:
+            if (left)  { menus.settings_sensitivity = std::max(1,  menus.settings_sensitivity - 1); changed = true; }
+            if (right) { menus.settings_sensitivity = std::min(10, menus.settings_sensitivity + 1); changed = true; }
+            break;
+        case MenuSystem::ROW_RUMBLE:
+            if (left || right || confirm) { menus.settings_rumble = !menus.settings_rumble; changed = true; }
+            break;
+        case MenuSystem::ROW_RSTICK:
+            if (left || right || confirm) { menus.settings_rstick = !menus.settings_rstick; changed = true; }
+            break;
+        case MenuSystem::ROW_SKIN: {
+            // Solo cicla entre las DESBLOQUEADAS: pasar por una que no tienes y verla
+            // rebotar seria peor que no ensenarla.
+            if (!left && !right && !confirm) break;
+            int dir = left ? -1 : 1;
+            int k = menus.settings_skin;
+            for (int tries = 0; tries < static_cast<int>(STAFF_SKIN_COUNT); tries++) {
+                k = (k + dir + static_cast<int>(STAFF_SKIN_COUNT)) % static_cast<int>(STAFF_SKIN_COUNT);
+                if (menus.settings_skins_mask & (1u << k)) break;
             }
+            menus.settings_skin = k;
+            changed = true;
+            break;
         }
+        case MenuSystem::ROW_LANG:
+            if (left || right || confirm) {
+                int n = static_cast<int>(Language::COUNT);
+                menus.settings_language = (menus.settings_language + (left ? n - 1 : 1)) % n;
+                changed = true;
+            }
+            break;
+        default:
+            break;
     }
 
-    // Confirm on "Volver" (last option) or Cancel -> return to origin
-    bool back = (input.is_action_just_pressed(Action::Confirm) && menus.selected_option == 3)
-             || input.is_action_just_pressed(Action::Cancel);
+    if (changed) {
+        commit_settings_from_mirror();
+        audio.play_sfx(SfxID::MenuSelect, 0.7f);
+        // Que se OIGA lo que se esta tocando: mover el volumen de efectos sin oir un
+        // efecto es ajustar a ciegas. Y la vibracion se prueba al encenderla.
+        if (row == MenuSystem::ROW_RUMBLE && menus.settings_rumble)
+            input.rumble(Config::Feel::RUMBLE_HIT, 120);
+    }
 
-    if (back) {
+    // "Volver" o Cancelar -> vuelve a donde se entro
+    if ((confirm && row == MenuSystem::ROW_BACK) ||
+        input.is_action_just_pressed(Action::Cancel)) {
+        commit_settings_from_mirror();
         menus.current = menus.settings_origin;
         menus.selected_option = 0;
     }
@@ -1933,12 +2505,30 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "walk")  { ss >> c.num >> c.num2; }
         else if (c.op == "seed")  { ss >> c.num; }
         else if (c.op == "chapter") { ss >> c.num; }
+        else if (c.op == "event")   { ss >> c.num; }             // abrir el encuentro de un capitulo
+        else if (c.op == "cine")  { ss >> c.num; }              // estampa del prologo (0..7)
         else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
         else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
         else if (c.op == "learn") { ss >> c.num >> c.num2; }    // id de milagro + slot
         else if (c.op == "faith") { ss >> c.num; }              // fijar la fe actual
+        else if (c.op == "fx")    { ss >> c.num >> c.num2 >> c.num3; }  // FxID + tamano + duracion
+        else if (c.op == "agesave") { ss >> c.num; }            // envejecer el guardado N horas
+        else if (c.op == "unlocks") { ss >> c.num; }            // fijar SaveData::unlocks
+        else if (c.op == "savedump") { }                       // volcar el guardado al log
+        else if (c.op == "lang")    { ss >> c.num; }            // 0 = ES, 1 = EN
+        else if (c.op == "defaults") { }                       // ajustes de fabrica
+        else if (c.op == "aimmode") { ss >> c.num; }           // 0 OFF / 1 Asistido / 2 ON
+        else if (c.op == "rstick")  { ss >> c.num; }           // 0/1: segundo joystick tactil
+        else if (c.op == "meta")    { ss >> c.num; }            // desbloquear una mejora de El Santuario
+        else if (c.op == "metareset") { }                      // volver a bloquear TODA la meta
+        // Toque sintetico: el raton NO genera eventos SDL_EVENT_FINGER_*, asi que sin
+        // esto los controles tactiles solo se podian probar en un telefono.
+        else if (c.op == "touch")   { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
+        else if (c.op == "drag")    { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
+        else if (c.op == "untouch") { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
         else if (c.op == "say")   { std::getline(ss, c.arg); }
         else if (c.op == "stats") { std::getline(ss, c.arg); }
+        else if (c.op == "feel")  { std::getline(ss, c.arg); }   // etiqueta del tramo medido
         cmds.push_back(c);
     }
     active = !cmds.empty();
@@ -2020,13 +2610,169 @@ void Engine::update_autoplay(f32 dt) {
                 }
                 continue;
             }
+            // Depuracion: abrir el encuentro de un capitulo sin caminar hasta su sala. La
+            // sala Event la sortea el generador, asi que sin esto verificar los diez
+            // encuentros depende de que el mapa los ponga a mano.
+            //   event <capitulo>
+            if (c.op == "event") {
+                if (state.scene == GameScene::Playing) {
+                    int ch = std::max(1, std::min(static_cast<int>(c.num),
+                                                  Config::CHAPTERS_ACT_I + Config::CHAPTERS_ACT_II));
+                    open_dialogue(ch);
+                    SDL_Log("event %d -> \"%s\" (retrato %d)", ch, get_event_def(ch).speaker,
+                            get_event_def(ch).portrait);
+                }
+                continue;
+            }
+            // Depuracion: disparar la Ascension sin tener que rematar al jefe del cap. 5
+            // y cruzar el arco de salida. Es el unico camino al Manto de Elias.
+            // Depuracion: retrasar el sello del guardado N horas para probar la caducidad
+            // de 48 h sin esperar dos dias. No re-sella el fichero (save(false)).
+            if (c.op == "agesave") {
+                u64 back = static_cast<u64>(std::max(0.0f, c.num) * 3600.0f);
+                if (save.data.save_timestamp > back) save.data.save_timestamp -= back;
+                else                                 save.data.save_timestamp = 1;
+                save.save(false);
+                refresh_continue_state();
+                SDL_Log("agesave: run aged %.0f h (expired=%d)", c.num, save.is_run_expired() ? 1 : 0);
+                continue;
+            }
+            // Depuracion: cerrar el capitulo sin rematar al jefe ni cruzar el arco. En el
+            // cap. 10 es lo que dispara la victoria (y con ella el epilogo, si toca).
+            if (c.op == "advance") {
+                if (state.scene == GameScene::Playing) advance_chapter();
+                continue;
+            }
+            // Depuracion: volver a bloquear toda la meta-progresion comprable. Sin esto,
+            // scripts/meta_check.txt solo servia la PRIMERA vez: las compras persisten
+            // entre partidas (esa es justamente su gracia) y en la segunda vuelta ya
+            // estaba todo desbloqueado. Misma razon que `defaults` para los ajustes.
+            if (c.op == "metareset") {
+                for (auto& u : progression.upgrades) u.unlocked = false;
+                save.data.items_unlocked = 0;
+                save.data.upgrades_bought = 0;
+                save.data.skins_unlocked = 1;   // la 0 es la de siempre y no se compra
+                save.data.skin_equipped  = 0;
+                // Los LOGROS tambien son meta y tambien hay que poder rebobinarlos: sin
+                // esto, scripts/logros_check.txt solo servia con el fichero de guardado
+                // recien borrado a mano (y `delete_save` NO los borra, por diseno).
+                achievements.unlocked = 0;
+                save.data.achievements = 0;
+                save.data.miracles_cast = 0;
+                save.data.total_kills = 0;
+                save.save(false);
+                SDL_Log("meta reset: upgrades, item unlocks and achievements cleared");
+                continue;
+            }
+            // Depuracion: comprar una mejora de El Santuario sin pasar por las ofrendas
+            if (c.op == "meta") {
+                u32 id = static_cast<u32>(std::max(0.0f, c.num));
+                for (auto& u : progression.upgrades) if (u.id == id) u.unlocked = true;
+                sync_progression_to_save();
+                SDL_Log("meta upgrade %u unlocked", id);
+                continue;
+            }
+            // Depuracion: encender o apagar el segundo joystick virtual sin pasar por
+            // Opciones (su fila solo existe en tactil, y la navegacion por indice de un
+            // guion no puede contar con que este ahi).
+            if (c.op == "rstick") {
+                if (c.num > 0.5f) save.data.settings_flags |=  SETTING_TOUCH_RSTICK;
+                else              save.data.settings_flags &= ~SETTING_TOUCH_RSTICK;
+                apply_settings_from_save();
+                SDL_Log("rstick = %d", input.touch_right_stick ? 1 : 0);
+                continue;
+            }
+            // Depuracion: fijar el modo de auto-mira sin pasar por Opciones. Lo pide
+            // scripts/mira_check.txt, que mide los tres modos seguidos en la misma partida.
+            if (c.op == "aimmode") {
+                int m = static_cast<int>(std::max(0.0f, c.num));
+                if (m > 2) m = 2;
+                save.data.aim_assist = m;
+                apply_settings_from_save();
+                SDL_Log("aimmode = %d", m);
+                continue;
+            }
+            // Depuracion: devolver los AJUSTES a fabrica. Existe porque las filas de
+            // Opciones que ciclan (auto-mira, idioma, vibracion) no tienen un valor
+            // absoluto al que llevarlas con `press`: sin esto, un guion que las toca da
+            // un resultado distinto en cada vuelta segun como quedaran en la anterior.
+            if (c.op == "defaults") {
+                SaveData fresh{};
+                save.data.music_volume   = fresh.music_volume;
+                save.data.sfx_volume     = fresh.sfx_volume;
+                save.data.aim_assist     = fresh.aim_assist;
+                save.data.sensitivity    = fresh.sensitivity;
+                save.data.language       = fresh.language;
+                save.data.settings_flags = fresh.settings_flags;
+                apply_settings_from_save();
+                load_settings_mirror();
+                save.save(false);
+                SDL_Log("settings reset to factory defaults");
+                continue;
+            }
+            // Depuracion: cambiar de idioma en caliente (0 = ES, 1 = EN). El texto se
+            // pide con `tr()` cuando se dibuja, asi que el cambio se ve en el frame
+            // siguiente sin recargar nada.
+            if (c.op == "lang") {
+                int l = static_cast<int>(std::max(0.0f, c.num));
+                if (l >= static_cast<int>(Language::COUNT)) l = 0;
+                set_language(static_cast<Language>(l));
+                SDL_Log("lang = %d (%s)", l, I18N::language_name(I18N::current));
+                continue;
+            }
+            // Depuracion: volcar el guardado al log. Es lo unico que permite comprobar
+            // desde un guion que una migracion de version NO ha perdido nada: la meta
+            // (ofrendas, mejoras, codice, logros, desbloqueos, ajustes) no se ve entera
+            // en ninguna pantalla del juego.
+            if (c.op == "savedump") {
+                const SaveData& d = save.data;
+                SDL_Log("SAVEDUMP v%u run=%d act=%d cap=%d sala=%d hp=%.0f fe=%.0f objetos=%d",
+                        SAVE_VERSION, d.run_active ? 1 : 0, d.current_act, d.current_chapter,
+                        d.current_room, d.hp, d.faith, d.item_count);
+                SDL_Log("SAVEDUMP meta ofrendas=%d mejoras=0x%X partidas=%d ganadas=%d "
+                        "codice=%X/%X/%X/%X unlocks=0x%X logros=0x%X milagros=0x%X bajas=%d",
+                        d.offerings, d.upgrades_bought, d.total_runs, d.runs_completed,
+                        d.codex_enemies, d.codex_items, d.codex_miracles, d.codex_chapters,
+                        d.unlocks, d.achievements, d.miracles_cast, d.total_kills);
+                SDL_Log("SAVEDUMP ajustes musica=%.2f efectos=%.2f mira=%d sens=%d idioma=%d "
+                        "banderas=0x%X items_desbloq=0x%X skins=0x%X/%u derechos=0x%X",
+                        d.music_volume, d.sfx_volume, d.aim_assist, d.sensitivity, d.language,
+                        d.settings_flags, d.items_unlocked, d.skins_unlocked, d.skin_equipped,
+                        d.entitlements);
+                continue;
+            }
+            // Depuracion: volver a bloquear el epilogo para poder probar las dos ramas
+            if (c.op == "unlocks") {
+                save.data.unlocks = static_cast<u32>(std::max(0.0f, c.num));
+                SDL_Log("unlocks = %u", save.data.unlocks);
+                continue;
+            }
+            // Toque sintetico en coordenadas de juego (320x180). `dedo` (tercer numero,
+            // 0 por defecto) permite dos dedos a la vez para el gesto de pausa.
+            if (c.op == "touch" || c.op == "drag" || c.op == "untouch") {
+                SDL_Event ev{};
+                ev.type = (c.op == "touch")  ? SDL_EVENT_FINGER_DOWN
+                        : (c.op == "drag")   ? SDL_EVENT_FINGER_MOTION
+                                             : SDL_EVENT_FINGER_UP;
+                ev.tfinger.fingerID = static_cast<SDL_FingerID>(1 + static_cast<int>(c.num3));
+                ev.tfinger.x = c.num / static_cast<f32>(Config::GAME_WIDTH);
+                ev.tfinger.y = c.num2 / static_cast<f32>(Config::GAME_HEIGHT);
+                input.process_event(ev);
+                SDL_Log("touch %s (%.0f,%.0f) finger %d", c.op.c_str(), c.num, c.num2,
+                        1 + static_cast<int>(c.num3));
+                continue;
+            }
+            if (c.op == "ascend") {
+                if (state.current_act == Act::Act_I && player.entity != ENTITY_NONE) trigger_ascension();
+                continue;
+            }
             if (c.op == "killall") {
                 // Lista primero, matanza despues: si no, los hijos que nacen al morir un
                 // enemigo (Agua Corrupta) caen dentro del mismo barrido y nunca se ven.
                 Entity list[MAX_ENTITIES];
                 int n = 0;
                 for (u32 e = 0; e < world.entity_count; e++) {
-                    if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+                    if (!world.is_alive(e) || !is_hostile(world, e) || !world.has(e, Component::Health)) continue;
                     if (!world.healths[e].is_alive()) continue;
                     list[n++] = static_cast<Entity>(e);
                 }
@@ -2057,6 +2803,24 @@ void Engine::update_autoplay(f32 dt) {
                 }
                 continue;
             }
+            // Depuracion: soltar UN efecto de la hoja propia (game/combat.h FxID) delante
+            // del profeta y nada mas. En plena pelea no hay forma de decir que efecto es
+            // cual, y sin esto el track de VFX no se puede verificar de verdad.
+            //   fx <id> [tamano_unidades] [duracion_s]
+            if (c.op == "fx") {
+                u32 id = static_cast<u32>(std::max(0.0f, c.num));
+                f32 size = (c.num2 > 0.0f) ? c.num2 : 48.0f;
+                f32 dur  = (c.num3 > 0.0f) ? c.num3 : 0.6f;
+                if (id < static_cast<u32>(FxID::COUNT) && player.entity != ENTITY_NONE &&
+                    world.has(player.entity, Component::Transform)) {
+                    Vec2 at = world.transforms[player.entity].position + Vec2{0, -34.0f};
+                    Entity fe = spawn_fx(world, at, static_cast<FxID>(id),
+                                         {255, 255, 255, 245}, size, dur, 11);
+                    SDL_Log("fx %u en (%.0f,%.0f) tam %.0f dur %.2f -> %s", id, at.x, at.y,
+                            size, dur, fe == ENTITY_NONE ? "SIN HOJA" : "ok");
+                }
+                continue;
+            }
             // Depuracion: montar el estado que hace falta para mirar un efecto concreto
             if (c.op == "give") {
                 const ItemDef* d = item_registry.get(static_cast<u32>(c.num));
@@ -2072,11 +2836,41 @@ void Engine::update_autoplay(f32 dt) {
                 }
                 continue;
             }
-            if (c.op == "cards")   { open_item_choice("ELIGE UNA BENDICIÓN"); continue; }
-            if (c.op == "mcards")  { open_miracle_choice("ORAS EN EL ALTAR"); continue; }
+            if (c.op == "cards")   { open_item_choice(tr("ELIGE UNA BENDICIÓN", "CHOOSE A BLESSING")); continue; }
+            if (c.op == "mcards")  { open_miracle_choice(tr("ORAS EN EL ALTAR", "YOU PRAY AT THE ALTAR")); continue; }
+            // El prologo no se lanza solo con --script (los guiones esperan el menu al
+            // arrancar), asi que para fotografiarlo hay que pedirlo. `cine <n>` salta
+            // directo a una estampa concreta.
+            if (c.op == "intro")   { start_intro(); continue; }
+            if (c.op == "cine") {
+                if (state.scene != GameScene::Intro) start_intro();
+                cinematic.go_to(static_cast<int>(c.num), renderer);
+                cinematic.auto_timer = 0.0f;   // se queda quieta hasta el siguiente comando
+                continue;
+            }
             if (c.op == "faith") {
                 faith.current = std::max(0.0f, std::min(faith.max, c.num));
                 faith.modify(0.0f);   // recalcula el nivel
+                continue;
+            }
+            // Sonda de TACTO (track 1 del plan de game feel). Imprime el TRAMO desde la
+            // ultima marca, no el acumulado: con `feel start` ... `feel end` alrededor de
+            // una pelea sale el TTK y los golpes encajados de ESA pelea, que es lo unico
+            // con lo que se puede decir si un ajuste ha mejorado algo o solo se ve bonito.
+            if (c.op == "feel") {
+                f32 dt_s   = state.run_time - feel_mark.t;
+                int dk     = run_kills - feel_mark.kills;
+                int dh     = run_hits_taken - feel_mark.hits;
+                int ds     = player.shots_fired - feel_mark.shots;
+                f32 d_out  = world.dmg_dealt - feel_mark.out;
+                f32 d_in   = world.dmg_taken - feel_mark.in_;
+                SDL_Log("FEEL %s | dt %.2fs | bajas %d | TTK %.2fs | golpes recibidos %d | "
+                        "tiros %d | dano hecho %.0f (%.1f/s) | dano recibido %.0f",
+                        c.arg.empty() ? "-" : c.arg.c_str(), dt_s, dk,
+                        dk > 0 ? dt_s / static_cast<f32>(dk) : 0.0f, dh, ds,
+                        d_out, dt_s > 0.01f ? d_out / dt_s : 0.0f, d_in);
+                feel_mark = {state.run_time, run_kills, run_hits_taken,
+                             player.shots_fired, world.dmg_dealt, world.dmg_taken};
                 continue;
             }
             if (c.op == "stats") {   // balance probe: one line per checkpoint in the log
@@ -2089,6 +2883,31 @@ void Engine::update_autoplay(f32 dt) {
                         c.arg.empty() ? "-" : c.arg.c_str(), state.current_chapter, state.current_room,
                         hp, hpmax, 100.0f * hp / hpmax, faith.current, run_kills,
                         static_cast<int>(player.items.size()), state.run_time);
+                // Segunda linea: el equipo. Sin esto, comprobar la Ascension (manto,
+                // milagro heredado, tercer slot) obligaba a leer capturas a ojo.
+                std::string loadout;
+                for (int s = 0; s < player.active_slot_count && s < Config::MAX_MIRACLE_SLOTS; s++) {
+                    MiracleID m = player.miracle_slots[s].miracle;
+                    loadout += (s ? " / " : "");
+                    loadout += (m == MiracleID::COUNT) ? "(vacio)" : get_miracle_def(m).name;
+                }
+                std::string owned;
+                for (u32 id : player.items) {
+                    const ItemDef* d = item_registry.get(id);
+                    if (d) { owned += owned.empty() ? "" : ", "; owned += d->name; }
+                }
+                // La reliquia y sus DOS efectos van en la linea: son lo unico que no se
+                // deduce de la lista de objetos, y sin ellos no hay forma de comprobar
+                // desde un guion que la sustitucion ha deshecho lo de la anterior.
+                const ItemDef* relic = (player.relic_slot != UINT32_MAX)
+                                     ? item_registry.get(player.relic_slot) : nullptr;
+                SDL_Log("LOADOUT %s | %s | slots %d [%s] | recarga x%.2f | reliquia %s "
+                        "(suelo fe %.0f, milagros x%.2f) | fe %.0f | objetos: %s",
+                        c.arg.empty() ? "-" : c.arg.c_str(),
+                        player.character == CharacterType::Elias ? "Elias" : "Eliseo",
+                        player.active_slot_count, loadout.c_str(), player.miracle_haste,
+                        relic ? relic->name : "-", faith.floor_value, player.miracle_power,
+                        faith.current, owned.empty() ? "-" : owned.c_str());
                 continue;
             }
             if (c.op == "quit") { state.is_running = false; break; }

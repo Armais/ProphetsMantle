@@ -4,6 +4,7 @@
 // MANTLE - Miracles System (GDD 3.3)
 // =============================================================================
 
+#include "core/i18n.h"
 #include "core/types.h"
 #include <vector>
 #include <string>
@@ -52,27 +53,27 @@ inline MiracleDef get_miracle_def(MiracleID id) {
     switch (id) {
         // Elias
         case MiracleID::CuervosDeQuerit:
-            return {"Cuervos de Querit", "Los cuervos traen sanación", 5, 1, Prophet::Elias, 8.0f, 0};
+            return {tr("Cuervos de Querit", "Ravens of Cherith"), tr("Los cuervos traen sanación", "The ravens bring healing"), 5, 1, Prophet::Elias, 8.0f, 0};
         case MiracleID::PalabraDeSequia:
-            return {"Palabra de Sequía", "Ralentiza enemigos 50%", 8, 1, Prophet::Elias, 12.0f, 5.0f};
+            return {tr("Palabra de Sequía", "Word of Drought"), tr("Ralentiza enemigos 50%", "Slows enemies by 50%"), 8, 1, Prophet::Elias, 12.0f, 5.0f};
         case MiracleID::FuegoDelCielo:
-            return {"Fuego del Cielo", "Fuego divino en área", 20, 3, Prophet::Elias, 20.0f, 0};
+            return {tr("Fuego del Cielo", "Fire from Heaven"), tr("Fuego divino en área", "Divine fire in an area"), 20, 3, Prophet::Elias, 20.0f, 0};
         case MiracleID::CarroDeFuego:
-            return {"Carro de Fuego", "Embestida devastadora", 25, 3, Prophet::Elias, 25.0f, 0};
+            return {tr("Carro de Fuego", "Chariot of Fire"), tr("Embestida devastadora", "Devastating charge"), 25, 3, Prophet::Elias, 25.0f, 0};
         case MiracleID::AltarConsumido:
-            return {"Altar Consumido", "Destruye toda la pantalla", 30, 4, Prophet::Elias, 45.0f, 0};
+            return {tr("Altar Consumido", "Altar Consumed"), tr("Destruye toda la pantalla", "Destroys the whole screen"), 30, 4, Prophet::Elias, 45.0f, 0};
 
         // Eliseo
         case MiracleID::SanarAguas:
-            return {"Sanar Aguas", "Zona de curación 5 HP/s", 5, 1, Prophet::Eliseo, 10.0f, 6.0f};
+            return {tr("Sanar Aguas", "Healing the Waters"), tr("Zona de curación 5 HP/s", "Healing zone, 5 HP/s"), 5, 1, Prophet::Eliseo, 10.0f, 6.0f};
         case MiracleID::AceiteInagotable:
-            return {"Aceite Inagotable", "+2 usos del consumible", 12, 2, Prophet::Eliseo, 30.0f, 15.0f};
+            return {tr("Aceite Inagotable", "Unfailing Oil"), tr("+2 usos del consumible", "+2 consumable charges"), 12, 2, Prophet::Eliseo, 30.0f, 15.0f};
         case MiracleID::OjosAbiertos:
-            return {"Ojos Abiertos", "Revela el mapa del capítulo", 15, 2, Prophet::Eliseo, 20.0f, 10.0f};
+            return {tr("Ojos Abiertos", "Opened Eyes"), tr("Revela el mapa del capítulo", "Reveals the chapter map"), 15, 2, Prophet::Eliseo, 20.0f, 10.0f};
         case MiracleID::EjercitoCelestial:
-            return {"Ejército Celestial", "Invoca 3 guerreros celestiales", 22, 3, Prophet::Eliseo, 35.0f, 10.0f};
+            return {tr("Ejército Celestial", "Heavenly Host"), tr("Invoca 3 guerreros celestiales", "Summons 3 heavenly warriors"), 22, 3, Prophet::Eliseo, 35.0f, 10.0f};
         case MiracleID::DoblePorcion:
-            return {"Doble Porción", "Duplica tus fuerzas 15 segundos", 30, 4, Prophet::Eliseo, 60.0f, 15.0f};
+            return {tr("Doble Porción", "Double Portion"), tr("Duplica tus fuerzas 15 segundos", "Doubles your strength for 15 seconds"), 30, 4, Prophet::Eliseo, 60.0f, 15.0f};
 
         default:
             return {"???", "???", 0, 0, Prophet::Elias, 0, 0};
@@ -107,13 +108,14 @@ struct MiracleSlot {
         }
     }
 
-    bool try_cast(f32 current_faith, int max_tier) {
+    // cooldown_mult: El Manto de Elias lo baja a 0.75 (Player::miracle_haste)
+    bool try_cast(f32 current_faith, int max_tier, f32 cooldown_mult = 1.0f) {
         if (is_empty() || !is_ready()) return false;
         auto def = get_miracle_def(miracle);
         if (def.faith_cost > current_faith) return false;
         if (def.tier > max_tier) return false;
 
-        cooldown_remaining = def.cooldown;
+        cooldown_remaining = def.cooldown * cooldown_mult;
         if (def.duration > 0.0f) {
             active = true;
             active_timer = def.duration;

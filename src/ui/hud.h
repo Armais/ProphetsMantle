@@ -14,12 +14,14 @@
 // =============================================================================
 
 #include "render/renderer.h"
+#include "render/sprites.h"   // namespace Portrait
 #include "game/faith.h"
 #include "game/player.h"
 #include "game/rooms.h"
 #include "game/items.h"
 #include "game/lore.h"
 #include "core/ecs.h"
+#include "input/input.h"   // TouchButton: en movil el HUD es tambien el mando
 
 struct HUDContext {
     const FloorMap* floor_map = nullptr;
@@ -36,6 +38,9 @@ struct HUDContext {
     bool            map_revealed = false;  // "Ojos Abiertos": todo el capitulo a la vista
     u32             tileset   = TEXTURE_NONE;
     const ItemRegistry* registry = nullptr;   // Needed to draw the inventory icons
+    // Controles tactiles: null o `touch_ui` apagado = no se dibuja ninguno y en
+    // escritorio el HUD queda exactamente igual que antes.
+    const Input*        input    = nullptr;
 };
 
 // Choice overlay (GameScene::Choice): up to 3 cards drawn over the frozen world.
@@ -52,8 +57,13 @@ struct ChoiceCard {
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,
                        int count, int selected, u32 tileset);
 // `defs[i]` may be null if an offer could not be rolled.
+// `act_one`: en el Acto II ya no hay a quien heredar, asi que la etiqueta se calla.
+// `held_relic`: nombre de la reliquia que se lleva puesta, o nullptr. Las reliquias van a
+// UN SOLO slot (GDD 7.3), asi que la carta tiene que decir a cual sustituye: sin eso, el
+// jugador toma la segunda sin saber que pierde la primera.
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],
-                      int count, int selected, u32 tileset);
+                      int count, int selected, u32 tileset, bool act_one = true,
+                      const char* held_relic = nullptr);
 // `extras[i]` is an optional line per card ("Sustituye a Cuervos de Querit").
 void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID* ids, int count,
                          int selected, u32 tileset, const char* const* extras);
@@ -63,6 +73,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
 // Con `option_count` > 0 se pintan las opciones; `selected` marca la activa.
 struct DialogueView {
     const char* speaker = "";
+    int  portrait = Portrait::NONE;             // indice en portraits.png, -1 = sin cara
     const char* body    = "";
     const char* options[2] = {nullptr, nullptr};
     const char* costs[2]   = {nullptr, nullptr};
@@ -70,7 +81,8 @@ struct DialogueView {
     int  selected     = 0;
     bool more_lines   = false;                  // Quedan lineas: el pie dice "seguir"
 };
-void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time);
+void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
+                   u32 portraits = TEXTURE_NONE);
 
 struct HUD {
     bool visible = true;
@@ -78,11 +90,16 @@ struct HUD {
     void render(Renderer& renderer, const Player& player,
                 const ECSWorld& world, const FaithSystem& faith, const HUDContext& ctx);
 
+    // Publica a proposito: en VERTICAL la llama Engine::render por separado, despues del
+    // letterbox, para pintar los botones en la banda negra (Renderer::begin_overlay).
+    void draw_touch_controls(Renderer& renderer, const Player& player, const HUDContext& ctx);
+    // Idem: en vertical las celdas de milagro se pintan en la banda, fuera del mundo.
+    void draw_miracle_slots(Renderer& renderer, const Player& player, const HUDContext& ctx,
+                            const FaithSystem& faith);
+
 private:
     void draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDContext& ctx);
     void draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUDContext& ctx);
-    void draw_miracle_slots(Renderer& renderer, const Player& player, const HUDContext& ctx,
-                            const FaithSystem& faith);
     void draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big);
     void draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss);
     void draw_banner(Renderer& renderer, const HUDContext& ctx);

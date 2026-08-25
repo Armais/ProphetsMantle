@@ -1,0 +1,102 @@
+# Verificacion Track 5: Sistema de Discipulos (GDD - Ejercito Celestial literal)
+# Uso:  MANTLE.exe --script scripts/discipulos_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Que hay que ver en el log:
+#   STATS antes_invocar / con_discipulos_encima  -> la MISMA vida: un discipulo no
+#       hace dano al jugador ni siquiera pegado a el (y va SIN god a proposito)
+#   STATS tras_pelea    -> kills > 0 sin que el profeta haya disparado un solo tiro
+#   "Sala despejada" con discipulos vivos -> no sellan la sala ni la mantienen en combate
+#   MiracleID 8 = Ejercito Celestial;  EnemyType 0 = Soldado de Acab
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+
+# =============================================================================
+# 1) Los discipulos no danan al jugador (sin god: la vida tiene que quedarse igual)
+# =============================================================================
+# El milagro se aprende en los TRES slots: su recarga es de 35 s y el guion lo lanza
+# tres veces; con un solo slot la segunda y la tercera se comian la recarga.
+learn 8 0
+learn 8 1
+learn 8 2
+faith 100
+wait 0.3
+stats antes_invocar
+press m1
+wait 0.8
+shot 100_ejercito_invocado
+wait 0.1
+wait 3.0
+stats con_discipulos_encima
+# Que se apaguen los tres primeros antes de seguir (duran 10 s)
+wait 7.0
+
+# =============================================================================
+# 2) Pelean solos: seis soldados caen sin que el profeta dispare
+# =============================================================================
+god
+faith 100
+press m2
+wait 0.4
+spawn 0 6
+wait 0.8
+shot 101_discipulos_vs_soldados
+wait 0.1
+wait 8.0
+shot 102_tras_la_pelea
+wait 0.1
+stats tras_pelea
+
+# =============================================================================
+# 3) killall solo mata hostiles y la sala se declara limpia con discipulos vivos
+# =============================================================================
+# Hace falta una sala de COMBATE (la de inicio no lo es y nunca se "despeja"), y
+# sin fijar la semilla el mapa cambia en cada partida.
+seed 4242
+chapter 1
+wait 3.0
+press confirm
+wait 2.5
+goto 3
+wait 1.5
+learn 8 2
+faith 100
+press m3
+wait 0.7
+shot 103_discipulos_en_sala_de_combate
+wait 0.1
+killall
+wait 1.5
+shot 104_sala_limpia_con_discipulos
+wait 0.1
+stats sala_limpia
+
+# =============================================================================
+# 4) "La Escuela de Profetas": Eliseo entra en cada sala acompanado
+# =============================================================================
+meta 7
+chapter 5
+wait 3.0
+press confirm
+wait 2.5
+ascend
+wait 9.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+shot 105_eliseo_con_discipulo
+wait 0.1
+goto 1
+wait 1.5
+shot 106_otra_sala_con_discipulo
+wait 0.1
+stats eliseo_escuela
+
+quit

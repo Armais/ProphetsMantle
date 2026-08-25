@@ -33,7 +33,10 @@ struct Player {
 
     // Inventory
     std::vector<u32> items;           // Item IDs picked up this run (choice screen)
-    u32 relic_slot = UINT32_MAX;      // Single relic slot
+    // GDD 7.3: "Reliquias — muy poderoso, 1 slot". UNA sola a la vez; tomar otra
+    // SUSTITUYE a la anterior y sus efectos se van con ella (ver apply_relic_effects).
+    u32 relic_slot = UINT32_MAX;
+    u32 relic_replaced = UINT32_MAX;  // La que acaba de salir, para poder nombrarla en el aviso
     u32 weapon_slot = UINT32_MAX;     // Secondary weapon
     u32 consumable_slot = UINT32_MAX; // Held consumable (R)
     // "Aceite Inagotable" (2 Reyes 4:6): el consumible que llevas tiene cargas y solo se
@@ -44,6 +47,13 @@ struct Player {
     // Item-driven modifiers
     f32 damage_buff_timer = 0.0f;     // Vino Nuevo: +25% damage while > 0
     f32 miracle_power     = 1.0f;     // Arca del Pacto: miracle damage multiplier
+    // El Manto de Elias: multiplicador de la recarga de los milagros (0.75 = 25% mas rapido).
+    // Se aplica al fijar el cooldown en MiracleSlot::try_cast, no al descontarlo, para que
+    // la barra del HUD y el propio contador cuenten lo mismo.
+    f32 miracle_haste     = 1.0f;
+    // Cosmetico: id de la skin del cayado (ver get_staff_skin). NO toca ninguna cifra.
+    // Lo fija Engine::apply_settings_from_save desde SaveData::skin_equipped.
+    u32 staff_skin        = 0;
     f32 secondary_cd      = 0.0f;     // Recarga del ataque secundario del arma equipada
 
     // Meta
@@ -69,6 +79,7 @@ struct Player {
     f32  chariot_timer = 0.0f;   // Estela de fuego del Carro mientras dura la embestida
     f32  trail_timer   = 0.0f;   // Cadencia de la estela
     f32  reveal_pulse  = 0.0f;   // Cadencia de las marcas de Ojos Abiertos
+    f32  dash_trail_timer = 0.0f;   // Cadencia de la estela del dash
 
     // Feedback for the Engine (consumed each frame). El motivo del fallo va separado
     // porque "no puedes" sin decir por que es la queja numero uno del sistema de fe.
@@ -83,6 +94,16 @@ struct Player {
     void init_as_elias(ECSWorld& world, u32 texture_id = TEXTURE_NONE);
     void init_as_eliseo(ECSWorld& world, u32 texture_id = TEXTURE_NONE);
     void update(ECSWorld& world, struct Input& input, struct FaithSystem& faith, f32 dt);
+
+    // Direccion en la que sale el disparo, ya resuelta segun el ajuste de auto-mira
+    // (Config::AimMode). Es el UNICO sitio donde se decide: el ataque principal y el
+    // secundario la llaman, y antes cada uno llevaba su copia de la misma decision.
+    Vec2 resolve_aim(ECSWorld& world, const struct Input& input) const;
+
+    // Efectos de reliquia. Se RECALCULAN desde relic_slot en vez de acumularse al
+    // conceder: es la unica forma de que quitar una reliquia deshaga lo suyo. Idempotente
+    // a proposito — se vuelve a llamar al reintentar capitulo, al cargar y en la Ascension.
+    void apply_relic_effects(struct FaithSystem& faith);
     void cast_miracle(ECSWorld& world, struct FaithSystem& faith, MiracleID id);
     // Ataque secundario del arma equipada (weapon_slot). Honda = piedra que atraviesa,
     // Vara = barrido de largo alcance. Devuelve true si llego a disparar.
@@ -91,7 +112,8 @@ struct Player {
     // Returns the message to show. `record` = false when re-applying inherited items.
     const char* grant_item(ECSWorld& world, struct FaithSystem& faith,
                            const struct ItemDef& def, bool record = true);
-    bool use_consumable(ECSWorld& world, const struct ItemRegistry& registry);
+    bool use_consumable(ECSWorld& world, struct FaithSystem& faith,
+                        const struct ItemRegistry& registry);
 };
 
 // =============================================================================
@@ -137,6 +159,10 @@ inline void Player::init_as_elias(ECSWorld& world, u32 texture_id) {
     // Movement
     world.add(entity, Component::Movement);
     world.movements[entity].speed = Config::ELIAS_SPEED;
+    // El profeta frena EN Player::update (aceleracion y frenada propias). Dejar
+    // aqui la friccion de system_movement hacia que las dos se pelearan y el tope
+    // de velocidad real se quedaba un tercio por debajo del de la ficha.
+    world.movements[entity].friction = 0.0f;
 
     // Collider
     world.add(entity, Component::Collider);
@@ -188,6 +214,10 @@ inline void Player::init_as_eliseo(ECSWorld& world, u32 texture_id) {
 
     world.add(entity, Component::Movement);
     world.movements[entity].speed = Config::ELISEO_SPEED;
+    // El profeta frena EN Player::update (aceleracion y frenada propias). Dejar
+    // aqui la friccion de system_movement hacia que las dos se pelearan y el tope
+    // de velocidad real se quedaba un tercio por debajo del de la ficha.
+    world.movements[entity].friction = 0.0f;
 
     world.add(entity, Component::Collider);
     world.colliders[entity].shape = ColliderComponent::Shape::Circle;

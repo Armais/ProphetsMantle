@@ -4,8 +4,8 @@
 // MANTLE - Códice: lo que el profeta ha visto
 // =============================================================================
 //
-// Cuatro pestañas (Capítulos / Bestiario / Milagros / Objetos) con las entradas
-// que el jugador ha encontrado. Cada entrada lleva su pasaje de 1-2 Reyes
+// Cinco pestañas (Capítulos / Bestiario / Milagros / Objetos / Logros) con las
+// entradas que el jugador ha encontrado. Cada entrada lleva su pasaje de 1-2 Reyes
 // (game/lore.h). El descubrimiento persiste entre partidas en los bitmasks de
 // SaveData, y el contador "Descubierto X/Y" cuenta las cuatro pestañas.
 //
@@ -15,14 +15,20 @@
 // =============================================================================
 
 #include "render/renderer.h"
+#include "render/sprites.h"   // namespace Portrait
 #include "input/input.h"
 #include "game/lore.h"
 #include "game/items.h"
 #include "systems/save.h"
+#include "systems/achievements.h"
 
 // La pestaña de milagros se llamaba "Relics" y listaba milagros: el nombre estaba
 // sencillamente equivocado. Las reliquias son objetos y viven en Items.
-enum class CodexTab : u8 { Chapters, Bestiary, Miracles, Items, COUNT };
+// Los logros son la quinta pestaña y no una pantalla aparte: el Códice ya ES "lo que el
+// profeta ha visto", y una pantalla nueva colgando del menú principal sería un sitio más
+// donde no mirar. Ojo: NO cuentan para el contador "Descubierto X/Y" — ese mide
+// contenido encontrado, y un logro es una proeza, no una entrada de bestiario.
+enum class CodexTab : u8 { Chapters, Bestiary, Miracles, Items, Achievements, COUNT };
 
 struct CodexScreen {
     CodexTab tab = CodexTab::Chapters;
@@ -31,7 +37,13 @@ struct CodexScreen {
 
     // true = el jugador ha pedido cerrar
     bool update(Input& input, const SaveData& save, const ItemRegistry& registry);
-    void render(Renderer& renderer, const SaveData& save, const ItemRegistry& registry, u32 tileset) const;
+    // `portraits` puede ser TEXTURE_NONE: el Codice se dibuja igual, solo que sin retrato.
+    void render(Renderer& renderer, const SaveData& save, const ItemRegistry& registry,
+                u32 tileset, u32 portraits = TEXTURE_NONE) const;
+
+    static bool knows_achievement(const SaveData& s, AchievementID a) {
+        return (s.achievements >> static_cast<u32>(a)) & 1u;
+    }
 
     int entry_count(const SaveData& save, const ItemRegistry& registry) const;
 };

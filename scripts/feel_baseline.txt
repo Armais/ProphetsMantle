@@ -1,0 +1,106 @@
+# Linea base de TACTO (track 1 del plan de game feel). NO es una regresion visual:
+# es una MEDIDA. Se ejecuta antes y despues de cada tanda de ajustes y se comparan las
+# lineas "FEEL" del log. Si una tanda empeora el TTK mas de un 15% o sube los golpes
+# recibidos, esa tanda se revierte entera.
+#
+# Uso:  MANTLE.exe --script scripts/feel_baseline.txt
+# Leer:  las lineas   FEEL <tramo> | dt .. | bajas .. | TTK .. | golpes recibidos ..
+#
+# EnemyType: 0 Soldado Acab, 1 Arquero, 2 Profeta Baal, 3 Leon,
+#            4 Soldado Sirio, 5 General Sirio, 6 Idolatra de Rimon, 7 Agua Corrupta
+#
+# Reglas de la medida, las tres importantes:
+#  - `seed` ANTES de empezar la partida: las dos pasadas juegan el mismo mapa.
+#  - Cada tramo arranca con `killall`: sin el, el bot arrastra supervivientes del tramo
+#    anterior y el TTK sale mezclado (fue el primer error de esta sonda).
+#  - El profeta NO va en god hasta el ultimo tramo: encajar golpes es la mitad de la medida.
+#  - `defaults` + `metareset` ANTES de nada, y son los dos IMPRESCINDIBLES:
+#      * `defaults` fija los ajustes (auto-mira, sensibilidad), que viven en el guardado y
+#        sobreviven entre sesiones.
+#      * `metareset` vuelve a bloquear las mejoras de El Santuario, que dan +10 HP, +2 de
+#        dano, +10% de velocidad y 60 de fe de salida. Con las ocho compradas los leones
+#        bajaban de 1,37 a 1,09 s y parecia una regresion del motor cuando lo unico que
+#        pasaba es que el profeta iba mas fuerte.
+#    OJO: `metareset` BORRA la meta-progresion real (mejoras, desbloqueos y logros). Es una
+#    sonda de laboratorio, no una partida.
+
+defaults
+metareset
+seed 20260825
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+
+# =========================================================================
+# Tramo 1: cuatro soldados de Acab (el enemigo mas comun del juego)
+# =========================================================================
+say ---- tramo: 4 soldados ----
+killall
+wait 0.6
+feel marca
+spawn 0 4
+wait 0.4
+bot 25
+wait 0.3
+feel soldados
+shot 90_feel_soldados
+wait 0.1
+
+# =========================================================================
+# Tramo 2: dos leones (el golpe duro del Acto I: 40 HP, 18 de dano)
+# =========================================================================
+say ---- tramo: 2 leones ----
+killall
+wait 0.6
+feel marca
+spawn 3 2
+wait 0.4
+bot 25
+wait 0.3
+feel leones
+shot 91_feel_leones
+wait 0.1
+
+# =========================================================================
+# Tramo 3: tres arqueros. Aqui lo que interesa son los GOLPES RECIBIDOS:
+# es el unico enemigo del Acto I que castiga quedarse quieto.
+# =========================================================================
+say ---- tramo: 3 arqueros ----
+killall
+wait 0.6
+feel marca
+spawn 1 3
+wait 0.4
+bot 25
+wait 0.3
+feel arqueros
+shot 92_feel_arqueros
+wait 0.1
+
+# =========================================================================
+# Tramo 4: el jefe del capitulo 3. Aqui NO se mide TTK (el bot no esta hecho
+# para jefes): se fotografia el hit-stop y la barra. `killall` no cuenta bajas
+# —limpia la sala en el mismo frame en que combat_events se reinicia—, asi que
+# va siempre FUERA de la ventana medida.
+# =========================================================================
+say ---- tramo: jefe cap 3 ----
+god
+chapter 3
+wait 2.5
+killall
+wait 1.5
+walk 160 40
+wait 2.5
+bot 20
+shot 93_feel_jefe
+wait 0.1
+
+stats fin_baseline
+say ---- fin de la linea base ----
+quit

@@ -23,14 +23,18 @@
 #include "ui/menus.h"
 #include "ui/hud.h"
 #include "ui/story.h"
+#include "ui/cinematic.h"
 #include "ui/codex.h"
+#include "core/i18n.h"
 #include "systems/save.h"
 #include "systems/progression.h"
+#include "systems/achievements.h"
 
 // =============================================================================
 // Game State
 // =============================================================================
 enum class GameScene : u8 {
+    Intro,       // Prologo cinematico "El Cielo Cerrado" (ui/cinematic.h)
     MainMenu,
     Playing,
     Paused,
@@ -51,7 +55,7 @@ struct ItemChoice {
     f32 auto_timer = 0.0f;   // > 0: autoplay picks for us after this delay
     bool miracles = false;   // true: ids are MiracleIDs, not item ids
     std::string extras[3];   // per-card note ("Sustituye a ...")
-    const char* title = "ELIGE UNA BENDICIÓN";
+    const char* title = tr("ELIGE UNA BENDICIÓN", "CHOOSE A BLESSING");
 };
 
 // Encuentro biblico en curso (GameScene::Dialogue). El texto sale de get_event_def().
@@ -91,6 +95,7 @@ struct AutoplayCmd {
     std::string arg;
     f32 num = 0.0f;
     f32 num2 = 0.0f;
+    f32 num3 = 0.0f;
 };
 
 struct Autoplay {
@@ -123,11 +128,18 @@ struct Engine {
     FaithSystem faith;
     MenuSystem  menus;
     StorySystem story;
+    CinematicSystem cinematic;
     CodexScreen codex;
     ProgressionSystem progression;
+    AchievementSystem achievements;
     HUD         hud;
     GameScene   codex_return = GameScene::MainMenu;   // Desde donde se abrio el codice
     int         sanctuary_sel = 0;
+    // Ventana visible del panel. Con 12 mejoras ya no caben todas en 180 unidades de alto
+    // (a 14,5 de paso son 174 y el titulo se come 47), asi que el panel SCROLLEA, igual
+    // que la lista del Codice. Poner dos columnas se descarto: las descripciones son
+    // frases enteras y a 150 unidades de ancho se truncarian en silencio.
+    int         sanctuary_scroll = 0;
     Player      player;
     SaveSystem  save;
     ItemRegistry item_registry;
@@ -137,6 +149,11 @@ struct Engine {
     // Efectos de run que fijan los encuentros biblicos (game/events.h)
     f32  boss_hp_scale = 1.0f;   // < 1: el jefe del capitulo entra debilitado
     bool has_revive    = false;  // El aposento sunamita: una muerte perdonada
+    // "El Reloj de Acaz" (item 20, 2 Reyes 20:11): perdona una muerte POR CAPITULO. Es un
+    // permiso aparte y no un `has_revive = true` al empezar el capitulo, porque asi no
+    // depende de en que orden se rehaga el equipo (concesion, reintento, carga, Ascension)
+    // ni pisa el perdon del encuentro sunamita: se pueden tener los dos.
+    bool relic_revive_ready = false;
     bool portable_altar_used = false;   // Mejora "Altar Portatil": una oracion por capitulo
 
     // Room / Map
@@ -149,6 +166,8 @@ struct Engine {
     u32 character_textures[2] = {TEXTURE_NONE, TEXTURE_NONE};            // by CharacterType
     u32 enemy_textures[static_cast<u32>(EnemyType::COUNT)] = {};         // by EnemyType
     u32 tileset_texture = TEXTURE_NONE;
+    u32 vfx_texture     = TEXTURE_NONE;   // assets/sprites/vfx.png (ver spawn_fx)
+    u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
 
     // Frame draw list (reused)
     std::vector<DrawCmd> draw_list;
@@ -163,8 +182,18 @@ struct Engine {
     u32 pending_seed = 0;        // != 0: use this seed for the next start_chapter (loading a save)
     CombatEvents combat_events;
     int  run_kills = 0;
+    int  run_hits_taken = 0;   // Golpes encajados en la partida (sonda de tacto `feel`)
+    // Margen sin transiciones justo despues de cargar una sala. Sin el, un paso en
+    // diagonal por una esquina podia encadenar dos cambios de sala en dos frames.
+    f32  room_change_grace = 0.0f;
+    // Marca de la ultima medida `feel`: el comando imprime el TRAMO, no el acumulado.
+    struct FeelMark { f32 t = 0.0f; int kills = 0, hits = 0, shots = 0; f32 out = 0.0f, in_ = 0.0f; };
+    FeelMark feel_mark;
     int  lock_hints_shown = 0;
     bool god_mode = false;
+    // Reglas de movil en escritorio (--touch): hoy solo la caducidad de la partida a las
+    // 48 h, que en PC no se aplica pero hay que poder probar.
+    bool mobile_rules = false;
     // Pista unica "[Q] milagro": el milagro es el corazon del juego y nadie lo pulsa
     // si nadie se lo dice. Cuenta atras mientras se juega el cap. 1.
     f32  miracle_hint_timer = 5.0f;
@@ -188,6 +217,11 @@ struct Engine {
     u32 frame_count    = 0;
 
     // Init / Shutdown
+    // Tamano de ventana forzado (0 = el que decida la plataforma). Lo usa `--window WxH`,
+    // que existe para poder probar la orientacion VERTICAL del GDD 4.5 en un escritorio:
+    // sin el, comprobar el reparto de bandas exigia un telefono.
+    int forced_win_w = 0, forced_win_h = 0;
+
     bool init(const char* title = "MANTLE - El Manto del Profeta");
     void shutdown();
     void load_sprites();   // Fill character_textures / enemy_textures (after renderer.init)
@@ -214,6 +248,11 @@ struct Engine {
     void finish_story();
     void finish_story_action(StoryThen then);
 
+    // Prologo cinematico (ui/cinematic.h). Lo arranca main.cpp cuando NO hay --script:
+    // el guion de autoplay se carga despues de init(), asi que dentro de init el flag
+    // todavia es false y los guiones de scripts/ esperan el menu al arrancar.
+    void start_intro();
+
     // Room loading
     void load_room(int room_index);
     void spawn_room_enemies();
@@ -227,6 +266,13 @@ struct Engine {
     void update_item_choice(f32 dt);            // Navigation + confirm on the choice screen
 
     // Feedback
+    // Exclamacion del profeta (GDD 6.4). Elige la toma segun quien juegue y NO deja que
+    // dos voces se pisen: `voice_cooldown` es lo unico que separa "el profeta se queja"
+    // de "el profeta no calla". Sin el, con i-frames de 1 s se oye un gemido por segundo.
+    enum class Voice { Esfuerzo, Dolor, Milagro, Jefe };
+    void play_voice(Voice v, f32 volume = 1.0f);
+    f32 voice_cooldown = 0.0f;
+
     void show_banner(const char* title, const char* sub, f32 seconds = 3.0f);
     void show_message(const char* text, f32 seconds = 2.0f);
     void update_music();
@@ -234,6 +280,24 @@ struct Engine {
     // Meta-progresion (systems/progression.h) y Santuario
     void sync_progression_from_save();   // save.data -> progression (arranque)
     void sync_progression_to_save();     // progression -> save.data
+    // Mejoras compradas -> SaveData::items_unlocked. Idempotente: se llama al comprar y al
+    // arrancar, y NUNCA quita bits (un objeto desbloqueado no se vuelve a bloquear solo).
+    void apply_meta_unlocks();
+
+    // Ajustes del jugador (GDD 4.2). Viven en SaveData (v7) porque son meta: sobreviven a
+    // delete_save y al reinicio. `apply_settings_from_save` los vuelca a los subsistemas
+    // que los usan (Audio, Input, i18n) y es lo unico que los aplica; el menu de Opciones
+    // escribe en save.data y vuelve a llamarla.
+    void apply_settings_from_save();
+    void set_language(Language l);       // cambia el idioma activo y lo guarda
+    void load_settings_mirror();         // SaveData -> MenuSystem::settings_*
+    void commit_settings_from_mirror();  // MenuSystem::settings_* -> SaveData -> subsistemas
+
+    // Logros (systems/achievements.h). `award` es el UNICO camino: desbloquea, avisa en
+    // pantalla, suena y escribe el guardado. Las llamadas estan sembradas donde ocurre
+    // cada cosa y muchas se repiten cada frame; AchievementSystem::unlock las filtra.
+    void award(AchievementID id);
+    void check_achievements();           // los que se comprueban por estado, no por evento
     void apply_meta_upgrades();          // Aplica lo comprado al empezar un run
     void award_offerings(bool victory);  // Ofrendas ganadas al terminar la partida
     void update_sanctuary();
@@ -243,6 +307,10 @@ struct Engine {
     void populate_save_data();
     void save_after_defeat();   // La derrota rebobina la partida al inicio del capitulo, no la borra
     void continue_run();
+    // Caducidad movil: recalcula si "Continuar" sigue siendo continuable o ya es una
+    // partida abandonada, y cobra las ofrendas de esta ultima.
+    void refresh_continue_state();
+    void claim_abandoned_run();
     void update_settings();
 
     // Debug

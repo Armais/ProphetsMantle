@@ -144,6 +144,57 @@ def build_humanoid(name, spec):
         horn = M('horn', '#e8dcc0')
         A(tube(f'{name}_horn_l', (0.10, 0, 1.80), (0.19, 0, 1.98), 0.03, 0.005, horn), 'head')
         A(tube(f'{name}_horn_r', (-0.10, 0, 1.80), (-0.19, 0, 1.98), 0.03, 0.005, horn), 'head')
+    if spec.get('crown') or spec.get('diadem'):
+        # Corona de rey (Acab) / diadema de reina (Jezabel). Se apoya SOBRE el casquete de
+        # pelo: el aro arranca en z 1.726, por encima de la ceja (1.712), asi que el rostro
+        # queda libre igual que con el casco.
+        thin = bool(spec.get('diadem'))
+        cr = M('crown', spec.get('crown') or spec['diadem'])
+        # La diadema va mas baja y mas ceñida que la corona: un aro fino y ancho deja ver el
+        # pelo por el hueco y lee como agujero en la coronilla, no como joya.
+        z0, h_band, r = (1.718, 0.052, 0.142) if thin else (1.726, 0.082, 0.150)
+        z1 = z0 + h_band
+        A(tube(f'{name}_crown', (0, 0, z0), (0, 0, z1), r, r, cr, caps=False, rim_round=0.015), 'head')
+        # Puntas al frente y a los lados: de perfil tambien tiene que leerse como corona
+        for i, deg in enumerate((0.0, 42.0, -42.0) if thin else (0.0, 34.0, -34.0, 70.0, -70.0)):
+            a = math.radians(deg)
+            h = (0.075 if thin else 0.090) if i == 0 else (0.044 if thin else 0.064)
+            A(box(f'{name}_crown_pt{i}', (math.sin(a) * r, -math.cos(a) * r, z1 + h * 0.5),
+                  (0.050, 0.038, h), cr, round=0.5, taper=(0.25, 0.35)), 'head')
+        if spec.get('gem'):
+            A(sphere(f'{name}_crown_gem', (0, -r - 0.010, z0 + h_band * 0.62), 0.032,
+                     M('gem', spec['gem']), scale=(1.0, 0.6, 1.1)), 'head')
+    if spec.get('headcloth'):
+        # Pano de cabeza (keffiyeh / velo). NO es la capucha: la capucha es un cuello
+        # redondo cerrado y esta cae a los LADOS de la cara. Hacen falta las dos siluetas
+        # porque cinco de los siete locutores de los encuentros llevan algo en la cabeza, y
+        # con una sola forma se parecerian todos en un retrato de 32 unidades.
+        # Arranca donde el casquete de pelo (z 1.700), asi la frente y las cejas quedan
+        # libres: la regla de que nada baje de z 1.60 por delante sigue en pie.
+        cloth = M('headcloth', spec['headcloth'])
+        drop = 0.34 if spec.get('headcloth_len') == 'long' else 0.20
+        A(sphere(f'{name}_cloth', (0, 0.030, 1.700), 0.152, cloth,
+                 scale=(1.03, 1.04, 0.66)), 'head')
+        A(box(f'{name}_cloth_brow', (0, -0.072, 1.724), (0.212, 0.096, 0.042), cloth,
+              round=0.8, taper=(0.86, 0.94)), 'head')
+        for s, x in (('L', 0.140), ('R', -0.140)):
+            A(box(f'{name}_cloth_side_{s}', (x, 0.012, 1.678 - drop * 0.5),
+                  (0.062, 0.150, drop), cloth, round=0.6, taper=(0.90, 1.08)), 'head')
+        A(box(f'{name}_cloth_back', (0, 0.120, 1.678 - drop * 0.55),
+              (0.245, 0.100, drop * 1.05), cloth, round=0.6, taper=(0.88, 1.0)), 'head')
+        if spec.get('headcloth_cord'):
+            A(tube(f'{name}_cloth_cord', (0, 0.006, 1.744), (0, 0.006, 1.780), 0.152, 0.152,
+                   M('cord', spec['headcloth_cord']), caps=False, rim_round=0.012), 'head')
+    if spec.get('band'):
+        # Cinta lisa: un aro y nada mas. La corona y la diadema llevan PUNTAS, y unas puntas
+        # sobre la mujer de Sunem la convertirian en reina, que es justo lo que no es
+        # (2 Reyes 4:8 dice "mujer importante", no reina).
+        bm = M('band', spec['band'])
+        A(tube(f'{name}_band', (0, 0, 1.718), (0, 0, 1.768), 0.150, 0.150, bm,
+               caps=False, rim_round=0.014), 'head')
+        if spec.get('gem'):
+            A(sphere(f'{name}_band_gem', (0, -0.154, 1.742), 0.030, M('gem', spec['gem']),
+                     scale=(1.0, 0.6, 1.1)), 'head')
     if spec.get('hood'):
         hood = M('hood', spec['hood'])
         # Cupula echada atras + capucho abierto alrededor de la cara. `hood_open` solo decide
@@ -158,9 +209,12 @@ def build_humanoid(name, spec):
               round=0.6, taper=(0.85, 0.9)), 'head')
 
     # --- torso ----------------------------------------------------------
-    A(box(f'{name}_torso_lo', (0, 0, 1.15), (0.34, 0.20, 0.22), tunic, round=0.55), 'spine')
+    # `slim` solo estrecha el tronco; hombros y brazos se quedan sobre sus huesos para no
+    # descolocar las animaciones. Con el pelo largo y la falda acampanada ya lee femenino.
+    slim = 0.85 if spec.get('slim') else 1.0
+    A(box(f'{name}_torso_lo', (0, 0, 1.15), (0.34 * slim, 0.20, 0.22), tunic, round=0.55), 'spine')
     chest_mat = M('armor', spec['armor']) if spec.get('armor') else tunic
-    A(box(f'{name}_torso_up', (0, 0, 1.36), (0.40, 0.22, 0.22), chest_mat,
+    A(box(f'{name}_torso_up', (0, 0, 1.36), (0.40 * slim, 0.22, 0.22), chest_mat,
           round=0.55, taper=(0.92, 0.95)), 'chest')
     for s, x in (('L', 0.22), ('R', -0.22)):
         A(sphere(f'{name}_shoulder_{s}', (x, 0, 1.42), 0.08, chest_mat), 'chest')
@@ -173,7 +227,8 @@ def build_humanoid(name, spec):
     # tunic skirt / robe
     if spec.get('tunic_len', 'short') == 'long':
         robe = M('robe', spec.get('robe', spec['tunic']))
-        A(tube(f'{name}_robe', (0, 0, 1.00), (0, 0, 0.10), 0.19, 0.30, robe, segs=32,
+        r_waist, r_hem = (0.165, 0.335) if spec.get('slim') else (0.19, 0.30)
+        A(tube(f'{name}_robe', (0, 0, 1.00), (0, 0, 0.10), r_waist, r_hem, robe, segs=32,
                rim_round=0.03), 'hips')
     else:
         A(tube(f'{name}_skirt', (0, 0, 1.00), (0, 0, 0.62), 0.19, 0.24, tunic, segs=32,
@@ -454,9 +509,106 @@ SPECS = {
         weapon=None, attack='raise')),
     'agua_corrupta': ('blob', dict(body='#2c3e50', vein='#3a2f5c', slime='#3fae7c', eye='#c0392b',
                                    place=dict(offset=(0, 0.2, 0), scale=0.9))),
+    # Rey de Israel: rojos oscuros y oro. NO lleva morados de Baal — el culto lo trae
+    # Jezabel; Acab lo consiente, que es justo lo que cuenta el prologo.
+    'acab': ('humanoid', dict(
+        skin='#d9a066', hair='#3a2418', beard='#3a2418',
+        eyes='#2a1c14', brow='angry',
+        crown='#d4a537', gem='#8e1f1f',
+        tunic='#7d2b3a', tunic_len='long', robe='#5a1e2a', sleeves='#7d2b3a',
+        armor='#8f3346', belt='#d4a537', cape='#6d1f2e', bracer='#d4a537', shoes='#3a2418',
+        weapon='sword', weapon_colors=dict(blade='#e0e4e8', guard='#d4a537'),
+        attack='swing')),
+    # Reina sidonia y patrona de Baal: morados, negro y oro, ojos rojos como el profeta.
+    'jezabel': ('humanoid', dict(
+        skin='#e8c49a', hair='#151015', hair_long=True, beard=None, slim=True,
+        eyes='#8e1f1f', brow='angry', brow_color='#151015', mouth_color='#8e2436',
+        diadem='#c9a24a', gem='#8e1f1f',
+        tunic='#5b2c83', tunic_len='long', robe='#3b1a45', sleeves='#8e44ad',
+        belt='#c9a24a', sash='#c9a24a', mantle='#1a1420', shoes='#1a1420',
+        # staff_top bajo: con el idolo a la altura de la cara le tapaba la mejilla
+        weapon='staff_idol', weapon_colors=dict(wood='#2a1a2a', tip='#7a1f1f'), staff_top=1.40,
+        attack='raise')),
+    # -------------------------------------------------------------------------
+    # Locutores de los encuentros (game/events.h). SOLO existen para su RETRATO:
+    # no andan por el mundo, asi que no llevan hoja de animacion (ver SHEET_NAMES).
+    # El encuadre del retrato corta por la cintura, asi que lo que los distingue tiene
+    # que estar de los hombros para arriba: pano de cabeza, pelo, barba y color de tunica.
+    # -------------------------------------------------------------------------
+    # Cap 2. Fenicia, y la mas pobre de las tres mujeres: lino crudo sin tenir y nada de oro.
+    'viuda_sarepta': ('humanoid', dict(
+        skin='#e0b080', hair='#3a2418', hair_long=True, beard=None, slim=True,
+        eyes='#3a2a1e', brow='sad', mouth_color='#8a4a44',
+        headcloth='#b07a62', headcloth_len='long',
+        tunic='#7a6a5e', tunic_len='long', robe='#5f5248', sleeves='#7a6a5e',
+        belt='#4e4038', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 6. Hombre de ciudad: el unico locutor con barba y pano corto con cordon.
+    'hombre_jerico': ('humanoid', dict(
+        skin='#c98c5a', hair='#3a2418', beard='#3a2418',
+        eyes='#241a14', brow='calm',
+        headcloth='#d8c9a4', headcloth_cord='#5a4634',
+        tunic='#7d8a4a', tunic_len='short', sleeves='#6b7740',
+        belt='#5a4a30', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 7. Viuda israelita de luto: mismo velo largo que la de Sarepta pero AZUL OSCURO,
+    # que es lo que separa a las dos de un vistazo.
+    'mujer_profeta': ('humanoid', dict(
+        skin='#d9a066', hair='#241a14', hair_long=True, beard=None, slim=True,
+        eyes='#2a2a34', brow='sad', mouth_color='#7a3a3a',
+        headcloth='#3c4a63', headcloth_len='long',
+        tunic='#5a6473', tunic_len='long', robe='#414b58', sleeves='#5a6473',
+        belt='#3a3a42', shoes='#2a2a2a',
+        weapon=None, attack='raise')),
+    # Cap 8. "Mujer importante" (2 Reyes 4:8): NO es pobre. Lino fino, verde jade y oro.
+    # Lleva `band` (aro liso) y no `diadem`: las puntas la harian reina.
+    'sunamita': ('humanoid', dict(
+        skin='#e4bc8e', hair='#2a1a12', hair_long=True, beard=None, slim=True,
+        eyes='#3a2a1e', brow='noble', mouth_color='#8e4a4a',
+        headcloth='#efe4cc', headcloth_len='long', band='#c9a24a', gem='#2e7d5b',
+        tunic='#2f8f6f', tunic_len='long', robe='#256b55', sleeves='#3aa885',
+        belt='#c9a24a', sash='#c9a24a', shoes='#5a4030',
+        weapon=None, attack='raise')),
+    # Cap 10. Guiezi ANTES de su castigo: joven y sin barba, que es todo lo que hay que
+    # leer. La lepra llega despues (2 Reyes 5:27), aqui todavia no.
+    'criado_eliseo': ('humanoid', dict(
+        skin='#d9a066', hair='#2a1a12', beard=None,
+        eyes='#3a2a1e', brow='calm', mouth_color='#7a4030',
+        headcloth='#7d6748',
+        tunic='#ddd2b4', tunic_len='short', sleeves='#c9bc9a',
+        belt='#6b5436', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 5. Eliseo cuando todavia ara con doce yuntas: misma cara que `eliseo` (esa es la
+    # gracia), pero ropa de faena. Sin el manto blanco y sin el cayado de luz, que son las
+    # dos cosas que aun no le han dado.
+    'eliseo_labrador': ('humanoid', dict(
+        skin='#d9a066', hair=None, beard='#4a3628',
+        eyes='#2d3f5e', brow='calm',
+        tunic='#a8814e', tunic_len='short', sleeves='#8d6a3f',
+        belt='#5a4028', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 9. Noble sirio, no oficial de tropa: sin casco ni penacho (asi se distingue del
+    # General Sirio), pelo y barba negros a la vista, cinta de oro, teal en vez de rojo y
+    # tunica larga. Sin arma: viene a que lo sanen.
+    'naaman': ('humanoid', dict(
+        skin='#c98c5a', hair='#151015', beard='#151015',
+        eyes='#241a14', brow='noble',
+        band='#d4a537',
+        tunic='#1f7a68', tunic_len='long', robe='#155a4d', sleeves='#2a9c85',
+        armor='#d4a537', belt='#d4a537', cape='#0f4f45', bracer='#d4a537', shoes='#2a2a2a',
+        weapon=None, attack='raise')),
 }
 
-NAMES = list(SPECS.keys())
+# Los que ANDAN por el mundo y por tanto tienen hoja de 896x1920 en assets/sprites/.
+# Los locutores de los encuentros salen solo en un retrato, asi que quedan fuera: sin esto
+# `run.main()` sin argumentos les fabricaria siete hojas de 15 filas que nadie carga, y una
+# regla del proyecto es que assets/ no crece.
+SHEET_NAMES = [
+    'elias', 'eliseo', 'soldado_acab', 'arquero_real', 'profeta_baal', 'leon_desierto',
+    'soldado_sirio', 'general_sirio', 'idolatra_rimon', 'agua_corrupta', 'acab', 'jezabel',
+]
+PORTRAIT_ONLY = [n for n in SPECS if n not in SHEET_NAMES]
+NAMES = SHEET_NAMES
 
 
 def build(name):

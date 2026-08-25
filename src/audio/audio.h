@@ -30,6 +30,7 @@ enum class MusicID : u32 {
     Victory,
     Death,
     Ascension,
+    Prologue,      // Prologo cinematico "El Cielo Cerrado" (ui/cinematic.h)
     COUNT
 };
 
@@ -42,11 +43,20 @@ enum class SfxID : u32 {
     CayadoSwing2,
     CayadoSwing3,
     CayadoHitEnemy,
+    // Variantes. Tienen que quedar CONSECUTIVAS al sonido base: play_sfx_variant
+    // suma un desplazamiento al id, igual que la terna CayadoSwing1..3.
     ProyectilFuego,
+    ProyectilFuego2,
+    ProyectilFuego3,
     ProyectilLuz,
+    ProyectilLuz2,
+    ProyectilLuz3,
     DashWoosh,
     EnemyHit,
+    EnemyHit2,
+    EnemyHit3,
     EnemyDeath,
+    EnemyDeath2,
     CriticalHit,
 
     // Miracles
@@ -66,6 +76,26 @@ enum class SfxID : u32 {
     FaithGain,
     FaithLoss,
     Notification,
+
+    // Voz (GDD 6.4). Las variantes van CONSECUTIVAS: play_sfx_variant suma al id.
+    // Elias y Eliseo tienen tomas propias — se separan por TONO y VOCAL (Elias grave y
+    // cerrado, Eliseo mas alto y abierto), que es lo que un jugador distingue a la
+    // primera; dos reverbs distintos, no.
+    VozEliasEsfuerzo1,
+    VozEliasEsfuerzo2,
+    VozEliasEsfuerzo3,
+    VozEliasDolor1,
+    VozEliasDolor2,
+    VozEliasDolor3,
+    VozEliseoEsfuerzo1,
+    VozEliseoEsfuerzo2,
+    VozEliseoEsfuerzo3,
+    VozEliseoDolor1,
+    VozEliseoDolor2,
+    VozEliseoDolor3,
+    VozMilagro1,
+    VozMilagro2,
+    VozJefe,
 
     // Ambient
     FootstepsSand,
@@ -100,6 +130,15 @@ struct Audio {
     f32 sfx_volume   = 1.0f;
     bool initialized = false;
 
+    // Ducking: un SFX fuerte agacha la musica un instante y la deja subir. Sin esto, el
+    // estallido de un milagro compite con la pista en vez de imponerse a ella.
+    f32 duck = 0.0f;              // 0..1, cuanto esta agachada ahora mismo
+    // Sorteo de la variante de SFX. NO usa rand(): ese es el generador de los mapas
+    // (core/types.h), y el audio no puede mover la partida. Ver play_sfx_variant.
+    u32 variant_rng = 0x9E3779B9u;
+    static constexpr f32 DUCK_DEPTH   = 0.45f;   // fraccion de volumen que se cede
+    static constexpr f32 DUCK_RELEASE = 2.2f;    // 1/s de recuperacion
+
     // Init / Shutdown
     bool init();
     void shutdown();
@@ -115,7 +154,16 @@ struct Audio {
     // SFX
     bool load_sfx(SfxID id, const char* path);
     void play_sfx(SfxID id, f32 volume_scale = 1.0f);
+    // Una de `count` tomas consecutivas a partir de `first`, al azar. Manteniendo el
+    // ataque se disparan tres o cuatro tiros por segundo: con un solo fichero el oido
+    // oye una ametralladora, no a un profeta lanzando fuego.
+    void play_sfx_variant(SfxID first, int count, f32 volume_scale = 1.0f);
     void set_sfx_volume(f32 volume);
+
+    // Agacha la musica durante un momento (0..1). Lo llama play_sfx solo cuando el
+    // sonido es lo bastante fuerte; el Engine solo tiene que llamar a update().
+    void duck_music(f32 amount);
+    void update(f32 dt);   // recuperacion del ducking
 
     // Convenience: load all from standard paths
     void load_all_music();

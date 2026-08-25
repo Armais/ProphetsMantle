@@ -1,0 +1,170 @@
+# Verificacion del track 3 (hoja de efectos propia, assets/sprites/vfx.png).
+#
+# Uso:  MANTLE.exe --script scripts/vfx_check.txt
+# Leer: en el log NO puede salir "hoja de efectos ausente", y cada linea `fx <n> ... -> ok`.
+#
+# Primera parte: cada efecto SOLO, en una sala vacia, fotografiado a mitad de su
+# animacion. En plena pelea no hay forma de decir que efecto es cual — por eso existe el
+# comando `fx <id> [tamano] [duracion]`.
+#
+# FxID (game/combat.h, mismo orden que LAYOUT en tools/blender/mantle_sprites/vfx.py):
+#   0 Impact  1 Explosion  2 Heal  3 Sparks  4 Smoke  5 Holy  6 Ring
+
+seed 20260825
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+killall
+wait 0.8
+walk 160 130
+wait 2.5
+
+say ---- efecto 0: impacto ----
+fx 0 64 1.2
+wait 0.45
+shot V0_fx_impacto
+wait 0.1
+wait 1.0
+say ---- efecto 1: estallido ----
+fx 1 64 1.2
+wait 0.45
+shot V1_fx_estallido
+wait 0.1
+wait 1.0
+say ---- efecto 2: curacion ----
+fx 2 64 1.2
+wait 0.45
+shot V2_fx_curacion
+wait 0.1
+wait 1.0
+say ---- efecto 3: chispas ----
+fx 3 64 1.2
+wait 0.45
+shot V3_fx_chispas
+wait 0.1
+wait 1.0
+say ---- efecto 4: humo ----
+fx 4 64 1.2
+wait 0.45
+shot V4_fx_humo
+wait 0.1
+wait 1.0
+say ---- efecto 5: luz_de_lo_alto ----
+fx 5 64 1.2
+wait 0.45
+shot V5_fx_luz_de_lo_alto
+wait 0.1
+wait 1.0
+say ---- efecto 6: onda ----
+fx 6 64 1.2
+wait 0.45
+shot V6_fx_onda
+wait 0.1
+wait 1.0
+
+# =========================================================================
+# Segunda parte: los mismos efectos DENTRO del juego, donde de verdad salen
+# =========================================================================
+say ---- fogonazo del disparo ----
+hold attack 0.05
+shot V7_fx_disparo
+wait 0.6
+
+say ---- impacto y muerte ----
+spawn 0 4
+wait 0.5
+bot 1.0
+shot V8_fx_impacto
+wait 0.1
+bot 6
+wait 0.12
+shot V9_fx_muerte
+wait 0.1
+
+say ---- Fuego del Cielo (haz + estallido) ----
+killall
+wait 0.6
+faith 100
+learn 2 0
+press m1
+wait 0.20
+shot VA_fx_fuego_del_cielo
+wait 0.1
+wait 1.0
+
+say ---- brasero del Idolatra (estallido + humo) ----
+spawn 6 3
+wait 0.6
+bot 6
+wait 0.25
+shot VB_fx_brasero
+wait 0.1
+
+# =========================================================================
+# Tercera parte: la paleta por capitulo. El MISMO soldado sirio en el cap. 6
+# (Jerico, verde enfermo) y en el 10 (ciudad sitiada, acero). Sin hojas nuevas:
+# es un tinte, y por eso `assets/` no crece ni un byte.
+# =========================================================================
+say ---- paleta: soldado sirio en el cap. 6 ----
+god
+chapter 6
+wait 2.5
+killall
+wait 0.6
+spawn 4 4
+wait 0.8
+shot VE_paleta_cap6
+wait 0.1
+
+say ---- paleta: el mismo enemigo en el cap. 10 ----
+chapter 10
+wait 2.5
+killall
+wait 0.6
+spawn 4 4
+wait 0.8
+shot VF_paleta_cap10
+wait 0.1
+
+# =========================================================================
+# Cuarta parte: los RETRATOS del Bestiario (assets/sprites/portraits.png).
+# El Bestiario es la segunda pestana: desde la PAUSA, "El Codice" es la segunda
+# fila; dentro, un `right` lleva de Capitulos a Bestiario. Va AL FINAL del guion a
+# proposito: salir del Codice deja el juego en el menu de pausa, y todo lo que
+# exige estar jugando (`chapter`, `spawn`) se descartaria en silencio.
+# =========================================================================
+say ---- retratos del bestiario ----
+spawn 3 1
+wait 0.4
+killall
+wait 0.5
+press pause
+wait 1.0
+press down
+wait 0.3
+press confirm
+wait 1.2
+press right
+wait 0.5
+shot VC_retrato_bestiario
+wait 0.1
+press down
+wait 0.3
+press down
+wait 0.3
+shot VD_retrato_bestiario_2
+wait 0.1
+# Salir del Codice devuelve al menu de PAUSA, no al juego: hace falta soltar la pausa
+# tambien, o los comandos que exigen estar jugando (`chapter`, `spawn`) se descartan.
+press cancel
+wait 0.8
+
+stats fin_vfx
+say ---- fin de la verificacion de efectos ----
+quit

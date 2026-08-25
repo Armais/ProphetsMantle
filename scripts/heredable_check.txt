@@ -1,0 +1,45 @@
+# Verificacion: la etiqueta de herencia solo aparece en el Acto I
+# Uso:  MANTLE.exe --script scripts/heredable_check.txt
+# Dando los objetos 0..9, el sorteo solo puede ofrecer los heredables (10,11,12).
+# Captura 1 (Elias, cap 1): las cartas llevan "PASA A ELISEO".
+# Captura 2 (Eliseo, cap 6): las mismas cartas SIN etiqueta.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+
+god
+give 0
+give 1
+give 2
+give 3
+give 4
+give 5
+give 6
+give 7
+give 8
+give 9
+wait 0.5
+
+# --- Acto I: la etiqueta debe verse ---
+# Con --script las cartas se eligen solas a los 0.7 s (choice.auto_timer): la
+# captura tiene que caer antes, y luego no hace falta confirmar nada.
+cards
+wait 0.35
+shot
+wait 1.5
+
+# --- Acto II: las mismas cartas, sin etiqueta ---
+chapter 6
+wait 3.0
+press confirm
+wait 2.5
+cards
+wait 0.35
+shot
+wait 0.4
+quit

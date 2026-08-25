@@ -1,0 +1,49 @@
+# Verificacion Track 6: orientacion VERTICAL en movil (GDD 4.5, "vertical opcional")
+# Uso:  MANTLE.exe --touch --window 540x960 --script scripts/vertical_check.txt
+#       (--touch es OBLIGATORIO: sin el no hay controles tactiles que recolocar)
+#
+# La forma elegida: el area de juego SIGUE siendo 320x180 y se centra. Recortar el mundo
+# visible cambiaria el juego, no la presentacion. El letterbox ya centraba cualquier
+# proporcion de ventana, asi que en vertical el mundo se ve entero sin tocar nada; lo que
+# cambia es DONDE caben los controles.
+#
+# Con 540x960 la escala es 540/320 = 1,6875, asi que el area de juego mide 540x303 y
+# quedan (960-303)/2 = 328 px de banda arriba y abajo = 194 unidades de juego. Como es
+# mas que las 62 que piden las dos filas de botones, BAJAN a la banda de abajo.
+#
+# Que hay que ver en las capturas (que en vertical son de la VENTANA entera, no del
+# objetivo interno de 1280x720):
+#   V0  el mundo se ve ENTERO, centrado, y los botones estan FUERA de el, en la banda
+#   V1  un dedo sobre un boton de la banda lo pulsa: el hit-test usa las mismas unidades
+#   V2  el minimapa y la barra de jefe siguen dentro del area de juego, sin que los pise nadie
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+wait 0.5
+shot V0_vertical_mundo_y_banda
+wait 0.1
+
+# --- Un toque sobre la celda de milagro Q, ya en la banda ---
+# En vertical los botones estan en y = 180 + banda - 6 - 36 y siguientes, o sea FUERA del
+# area de juego. Las coordenadas de `touch` son unidades de juego y `window_to_game` las
+# devuelve igual, asi que el hit-test no necesita saber nada de la banda.
+touch 303 338
+wait 0.2
+shot V1_boton_en_la_banda
+wait 0.1
+untouch 303 338
+wait 0.8
+
+# --- El mapa grande, para ver que el area de juego no se ha recortado ---
+hold map 0.8
+shot V2_mapa_vertical
+wait 0.1
+wait 0.4
+
+quit

@@ -1,0 +1,179 @@
+# Verificacion Track 4: la meta-progresion DESBLOQUEA objetos (GDD 3.1, paso 7)
+# Uso:  MANTLE.exe --script scripts/meta_check.txt
+#
+# Hasta ahora las 8 mejoras de El Santuario eran solo cifras y el unico desbloqueo entre
+# partidas era el epilogo. Ahora hay 12 mejoras y cuatro de ellas meten un objeto en el
+# sorteo de cartas:
+#   [8]  El Arco del Rey        ->  16 Arco de Joas        90
+#   [9]  El Remedio del Profeta ->  17 Higos de Ezequias  110
+#   [10] La Mesa de Eliseo      ->  21 Panes de Cebada    140
+#   [11] La Sombra que Vuelve   ->  20 El Reloj de Acaz   260
+#
+# Que hay que ver en el LOG:
+#   SAVEDUMP ... items_desbloq=0x0        <- de partida, los cuatro bloqueados
+#   Meta unlock: item 16 (Arco de Joás)   <- al comprar
+#   SAVEDUMP ... items_desbloq=0x330000   <- bits 16, 17, 20 y 21 puestos
+#   ... y el mismo valor DESPUES de borrar la partida: es meta, no se pierde al morir.
+#
+# Gates:
+#   1. `unlocks 0` + los cuatro bits a cero: los objetos bloqueados no salen en `cards`.
+#   2. Comprar pone el bit y lo dice en pantalla.
+#   3. El desbloqueo sobrevive a delete_save.
+#   4. El panel se lee entero a 320x180 CON 12 filas (capturas 50 y 51: hay scroll).
+
+# `metareset` vuelve a bloquear TODA la meta comprable. Sin el, este guion solo servia la
+# PRIMERA vez: las compras persisten entre partidas —esa es justamente su gracia— y en la
+# segunda vuelta ya estaba todo desbloqueado. Misma razon que `defaults` en ajustes_check.
+wait 1.0
+metareset
+wait 0.3
+savedump
+
+# --- El Santuario (fila 2 del menu principal) ---
+press down
+wait 0.15
+press down
+wait 0.15
+press confirm
+wait 0.8
+shot 50_santuario_arriba
+wait 0.1
+
+# --- Bajar hasta el final: se ve la flecha de scroll y las cuatro mejoras nuevas ---
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+shot 51_santuario_abajo
+wait 0.1
+# --- Comprar por el camino REAL (ENTER sobre la fila), no con el comando ---
+# La navegacion de arriba deja la seleccion en la ULTIMA fila (la 11, El Reloj de Acaz).
+press confirm
+wait 0.8
+shot 52_compra_real
+wait 0.1
+press cancel
+wait 0.6
+
+# --- Las otras tres con el atajo `meta`, que salta las ofrendas ---
+meta 8
+wait 0.2
+meta 9
+wait 0.2
+meta 10
+wait 0.3
+savedump
+
+# --- Gate duro: un objeto bloqueado NO sale en las cartas ---
+# Se le dan TODOS los sorteables que no estan bloqueados y se piden varias tiradas. La
+# linea "Item choice: ..." del log dice lo que se OFRECIO, no solo lo que se tomo, que es
+# lo unico que permite comprobar esto desde un guion.
+#
+# Ojo: las dos reliquias no pueden estar las dos en la mano (un solo slot, GDD 7.3), asi
+# que la que quedo fuera SIGUE siendo candidata. Por eso el gate NO es "no se ofrece
+# nada", sino "en lo ofrecido no hay ninguno de los cuatro bloqueados".
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+give 0
+wait 0.12
+give 1
+wait 0.12
+give 2
+wait 0.12
+give 3
+wait 0.12
+give 4
+wait 0.12
+give 5
+wait 0.12
+give 6
+wait 0.12
+give 7
+wait 0.12
+give 8
+wait 0.12
+give 9
+wait 0.12
+give 10
+wait 0.12
+give 11
+wait 0.12
+give 12
+wait 0.12
+give 18
+wait 0.12
+give 19
+wait 0.12
+wait 0.4
+metareset
+wait 0.3
+say --- BLOQUEADOS: las siguientes tiradas NO pueden traer Arco/Higos/Panes/Reloj ---
+cards
+wait 1.2
+cards
+wait 1.2
+cards
+wait 1.2
+shot 53_pool_bloqueado
+wait 0.1
+
+# --- Con las cuatro mejoras compradas, SI salen ---
+meta 8
+wait 0.2
+meta 9
+wait 0.2
+meta 10
+wait 0.2
+meta 11
+wait 0.3
+say --- DESBLOQUEADOS: ahora si tienen que aparecer ---
+cards
+wait 1.2
+cards
+wait 1.2
+cards
+wait 1.2
+cards
+wait 1.2
+shot 54_pool_desbloqueado
+wait 0.1
+stats tras_desbloquear
+
+# --- Y que el desbloqueo sobreviva a borrar la partida ---
+chapter 10
+wait 3.0
+press confirm
+wait 2.5
+advance
+wait 3.0
+wait 9.0
+press confirm
+wait 2.0
+press confirm
+wait 1.5
+savedump
+
+quit

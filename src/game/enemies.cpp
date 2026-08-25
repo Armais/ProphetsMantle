@@ -2,6 +2,7 @@
 // MANTLE - Enemy Implementation
 // =============================================================================
 
+#include "core/i18n.h"
 #include "game/enemies.h"
 #include "game/combat.h"
 #include "game/faith.h"
@@ -32,7 +33,11 @@ static Entity spawn_common(ECSWorld& world, EnemyType type, Vec2 position, u32 t
     world.sprites[e].texture_id = texture_id;
     world.sprites[e].src_rect = {0, 0, static_cast<f32>(SHEET_FRAME_SIZE), static_cast<f32>(SHEET_FRAME_SIZE)};
     world.sprites[e].z_order = 5;
-    world.sprites[e].tint = (texture_id == TEXTURE_NONE) ? def.color : Color::white();
+    // Las hojas vienen a todo color, asi que el tinte solo pinta la PALETA DEL CAPITULO
+    // (get_enemy_chapter_tint). El destello del golpe y el aura del General lo pisan en
+    // ECSWorld::collect_draws, que arranca justo de este valor.
+    world.sprites[e].tint = (texture_id == TEXTURE_NONE) ? def.color
+                                                         : get_enemy_chapter_tint(chapter);
 
     // Animation
     world.add(e, Component::Animation);
@@ -150,7 +155,7 @@ static void shoot_at(ECSWorld& world, Entity e, Vec2 dir, ProjectileKind kind, f
 static int count_alive_enemies(const ECSWorld& world) {
     int n = 0;
     for (u32 i = 0; i < world.entity_count; i++) {
-        if (!world.is_alive(i) || !world.has(i, Component::EnemyAI)) continue;
+        if (!world.is_alive(i) || !is_hostile(world, i)) continue;
         if (world.has(i, Component::Health) && !world.healths[i].is_alive()) continue;
         if (world.enemy_ais[i].is_boss) continue;
         n++;
@@ -225,7 +230,7 @@ static int buff_allies(ECSWorld& world, Entity general) {
 
     for (u32 a = 0; a < world.entity_count; a++) {
         if (a == general || !world.is_alive(a)) continue;
-        if (!world.has(a, Component::EnemyAI) || !world.has(a, Component::Transform)) continue;
+        if (!is_hostile(world, a) || !world.has(a, Component::Transform)) continue;
         if (!world.has(a, Component::Health) || !world.healths[a].is_alive()) continue;
         if (world.enemy_ais[a].is_boss) continue;   // los jefes van a su propio balance
         if (world.transforms[a].position.distance_to(at) > RADIUS) continue;
@@ -470,6 +475,68 @@ static void update_boss_ai(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_p
     }
 }
 
+// =============================================================================
+// Discipulos (ver enemies.h)
+// =============================================================================
+Entity spawn_disciple(ECSWorld& world, Vec2 position, u32 texture_id, f32 life_seconds,
+                      f32 hp, f32 damage) {
+    // Se monta sobre el chasis del soldado —hoja, animaciones y collider ya cuadran—
+    // y se le sobrescribe todo lo que importa. Igual que hace spawn_boss.
+    Entity e = spawn_common(world, EnemyType::SoldadoDeAcab, position, texture_id, 1);
+    if (e == ENTITY_NONE) return e;
+
+    world.healths[e].max = hp;
+    world.healths[e].current = hp;
+    world.combats[e].damage = damage;
+    world.movements[e].speed = 165.0f;
+    world.sprites[e].tint = {200, 225, 255, 255};   // frio y luminoso: no se confunde con un sirio
+
+    auto& ai = world.enemy_ais[e];
+    ai.ally           = true;
+    ai.name           = tr("Discípulo", "Disciple");
+    ai.aggro_range    = 190.0f;
+    ai.attack_range   = 14.0f;
+    ai.think_interval = 0.12f;   // reacciona antes que un enemigo: es el que persigue
+    ai.think_timer    = randf_range(0.0f, 0.12f);
+    ai.life_left      = life_seconds;
+    return e;
+}
+
+// Persigue al hostil que elegiria el auto-apuntado; sin ninguno, escolta al profeta.
+// El golpe no se da aqui: lo resuelve la colision (game/combat.cpp).
+static void update_ally_ai(ECSWorld& world, Entity e, Vec2 player_pos, f32 dt) {
+    auto& ai = world.enemy_ais[e];
+    auto& transform = world.transforms[e];
+
+    bool dead = world.has(e, Component::Health) && !world.healths[e].is_alive();
+    if (ai.life_left > 0.0f) ai.life_left -= dt;
+    // Se va cuando se le agota la invocacion o cuando lo derriban: en los dos casos
+    // desaparece del todo (no deja cadaver ni cuenta para nada).
+    if (dead || (ai.life_left < 0.0f)) {
+        spawn_particles(world, transform.position, {190, 220, 255, 255}, 8, 70.0f, 0.4f);
+        world.destroy(e);
+        return;
+    }
+    if (!world.has(e, Component::Movement)) return;
+    auto& movement = world.movements[e];
+
+    ai.think_timer -= dt;
+    if (ai.think_timer > 0.0f) return;
+    ai.think_timer = ai.think_interval;
+
+    Entity target = pick_target(world, transform.position, ai.aggro_range);
+    Vec2 goal = (target != ENTITY_NONE) ? world.transforms[target].position : player_pos;
+    f32 dist = transform.position.distance_to(goal);
+    // Sin enemigo a la vista se queda a media distancia del profeta en vez de pegarsele
+    f32 stop = (target != ENTITY_NONE) ? 9.0f : 24.0f;
+    if (dist > stop) {
+        Vec2 dir = (goal - transform.position).normalized();
+        movement.velocity = dir * movement.speed;
+    } else {
+        movement.velocity = movement.velocity * 0.25f;
+    }
+}
+
 void update_enemy_ai(ECSWorld& world, f32 dt) {
     Entity player = world.player;
     if (player == ENTITY_NONE) return;
@@ -479,6 +546,9 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
     for (u32 e = 0; e < world.entity_count; e++) {
         if (!world.is_alive(e)) continue;
         if (!world.has(e, Component::EnemyAI) || !world.has(e, Component::Transform)) continue;
+        // Los discipulos van antes de los filtros de cadaver: son ellos quienes tienen que
+        // retirarse del tablero al caer o al agotarse la invocacion.
+        if (world.enemy_ais[e].ally) { update_ally_ai(world, static_cast<Entity>(e), player_pos, dt); continue; }
         if (!world.has(e, Component::Movement)) continue;   // corpses
         if (world.has(e, Component::Health) && !world.healths[e].is_alive()) continue;
 
@@ -620,7 +690,7 @@ static constexpr int SPLIT_MAX_ALIVE = 18;      // MAX_ENTITIES es un techo comp
 static constexpr u8  SPLIT_MAX_GEN   = 2;       // 1 padre -> 2 -> 4 y se acaba
 
 void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
-    if (!world.is_alive(enemy) || !world.has(enemy, Component::EnemyAI)) return;
+    if (!world.is_alive(enemy) || !is_hostile(world, enemy)) return;
     auto& ai = world.enemy_ais[enemy];
     if (ai.is_boss) return;   // los jefes ya mueren con su propio patron
 
@@ -696,6 +766,9 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
     SDL_Log("Brasero de Rimon estalla en (%.0f,%.0f) dano %.1f  t=%.2f", at.x, at.y, dmg, world.time);
     spawn_particles(world, at, {255, 140, 40, 255}, 18, 130.0f, 0.5f);
     world.shake_request = std::max(world.shake_request, 3.0f);
+    // El brasero prendido: estallido de verdad + humo que sube del cadaver
+    spawn_fx(world, at, FxID::Explosion, {255, 214, 170, 240}, 58.0f, 0.42f);
+    spawn_fx(world, at - Vec2{0, 6.0f}, FxID::Smoke, {190, 170, 155, 190}, 44.0f, 0.85f, 7);
 
     for (u32 v = 0; v < world.entity_count; v++) {
         if (v == e || !world.is_alive(v)) continue;
@@ -703,8 +776,9 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
         if (!world.healths[v].is_alive()) continue;
 
         bool is_player = (static_cast<Entity>(v) == world.player);
-        bool is_enemy  = world.has(v, Component::EnemyAI);
-        if (!is_player && !is_enemy) continue;   // pickups y proyectiles no cuentan
+        bool is_enemy  = is_hostile(world, v);
+        bool is_disc   = is_ally(world, v);      // el brasero tampoco perdona a un discipulo
+        if (!is_player && !is_enemy && !is_disc) continue;   // pickups y proyectiles no cuentan
         if (world.transforms[v].position.distance_to(at) > BRASERO_RADIUS) continue;
 
         Vec2 away = (world.transforms[v].position - at).normalized();
@@ -715,6 +789,10 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
             if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 150.0f;
             faith.on_take_damage();
             events.player_hits++;
+        } else if (is_disc) {
+            // Un discipulo cae sin dar fe ni botin: no es un enemigo abatido
+            if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 90.0f;
+            apply_damage(world, e, v, dmg);
         } else {
             if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 90.0f;
             if (apply_damage(world, e, v, dmg)) on_enemy_killed(world, faith, v, events);

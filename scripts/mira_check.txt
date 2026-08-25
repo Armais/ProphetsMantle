@@ -1,0 +1,105 @@
+# Verificacion Track 1 (fase 3): la auto-mira "Asistida" NO es ni ON ni OFF
+# Uso:  MANTLE.exe --script scripts/mira_check.txt
+#
+# La medida de `feel` con el bot NO sirve para esto: el bot apunta a mano y perfecto, asi
+# que los tres modos le dan el mismo TTK. Lo que separa los modos es la GEOMETRIA, y por
+# eso aqui se dispara UNA sola vez con el profeta mirando a un sitio fijo y el enemigo
+# puesto a un angulo conocido.
+#
+# La posicion y el rumbo se fijan con `walk` (que ES bloqueante hasta llegar) y NO con
+# `hold up`: cada `hold` desplazaba al profeta un poco mas y al tercer caso la geometria
+# ya no era la misma. Esa fue la primera version de este guion y daba resultados
+# distintos en cada vuelta.
+#
+# `spawn <tipo> 1` deja al enemigo SIEMPRE en (-20, -54) respecto al jugador:
+#   * llegando desde ABAJO (rumbo = arriba)     -> 20,3 grados: DENTRO del cono de 22
+#   * llegando desde la IZQUIERDA (rumbo = dcha) -> 110 grados:  FUERA del cono
+#
+# Que hay que ver en el LOG (la cifra que importa es "dano hecho"):
+#   A_OFF_dentro     0     sin ayuda el tiro se va recto y falla
+#   B_ASIST_dentro  >0     el iman corrige y acierta          => Asistido != OFF
+#   C_ON_dentro     >0     fija el objetivo
+#   D_ASIST_fuera    0     fuera del cono no ayuda en nada    => Asistido != ON
+#   E_ON_fuera      >0     ON acierta igual, mires donde mires
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+faith 50
+
+# ---------------- A_OFF_dentro ----------------
+aimmode 0
+killall
+wait 0.5
+walk 160 130
+walk 160 100
+wait 0.4
+spawn 0 1
+wait 0.2
+feel marca
+press attack
+wait 0.7
+feel A_OFF_dentro
+
+# ---------------- B_ASIST_dentro ----------------
+aimmode 1
+killall
+wait 0.5
+walk 160 130
+walk 160 100
+wait 0.4
+spawn 0 1
+wait 0.2
+feel marca
+press attack
+wait 0.7
+feel B_ASIST_dentro
+
+# ---------------- C_ON_dentro ----------------
+aimmode 2
+killall
+wait 0.5
+walk 160 130
+walk 160 100
+wait 0.4
+spawn 0 1
+wait 0.2
+feel marca
+press attack
+wait 0.7
+feel C_ON_dentro
+
+# ---------------- D_ASIST_fuera ----------------
+aimmode 1
+killall
+wait 0.5
+walk 120 100
+walk 160 100
+wait 0.4
+spawn 0 1
+wait 0.2
+feel marca
+press attack
+wait 0.7
+feel D_ASIST_fuera
+
+# ---------------- E_ON_fuera ----------------
+aimmode 2
+killall
+wait 0.5
+walk 120 100
+walk 160 100
+wait 0.4
+spawn 0 1
+wait 0.2
+feel marca
+press attack
+wait 0.7
+feel E_ON_fuera
+
+quit

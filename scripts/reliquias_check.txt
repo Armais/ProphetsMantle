@@ -1,0 +1,107 @@
+# Verificacion Track 2: las reliquias van a UN SOLO slot (GDD 7.3)
+# Uso:  MANTLE.exe --script scripts/reliquias_check.txt
+#
+# Las dos reliquias del juego:
+#   id 6  Tablas de la Ley  -> FaithSystem::floor_value = 25 (la fe no baja de 25)
+#   id 7  Arca del Pacto    -> Player::miracle_power  = 1.5 (+50% dano de milagros)
+#
+# El GDD decia "1 slot" y el codigo lo documentaba pero no lo imponia: se podian llevar
+# las dos y sus efectos se ACUMULABAN, porque grant_item los aplicaba al conceder. Ahora
+# se RECALCULAN desde relic_slot (Player::apply_relic_effects), que es la unica forma de
+# que quitar una reliquia deshaga lo suyo.
+#
+# Que hay que ver en el LOG (lineas LOADOUT de `stats`, que ahora traen la reliquia y sus
+# DOS efectos: son lo unico que no se deduce de la lista de objetos):
+#   sin_reliquia     reliquia -                  (suelo fe 0,  milagros x1.00) objetos: -
+#   con_tablas       reliquia Tablas de la Ley   (suelo fe 25, milagros x1.00) objetos: Tablas
+#   con_arca         reliquia Arca del Pacto     (suelo fe 0,  milagros x1.50) objetos: Arca
+#   vuelta_a_tablas  reliquia Tablas de la Ley   (suelo fe 25, milagros x1.00) objetos: Tablas
+#
+# Los tres gates estan en esas lineas: el efecto de la reliquia SUSTITUIDA vuelve a su
+# base (suelo 0 / x1.00), la lista de `objetos` no acumula las dos, y la cosa es
+# reversible. En las capturas, la fila de objetos del HUD marca con un recuadro claro la
+# que llevas puesta, y la carta de eleccion de una reliquia dice a cual sustituye.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+
+# --- Sin reliquia: la fe baja hasta donde se le diga ---
+faith 5
+wait 0.4
+stats sin_reliquia
+
+# --- Tablas de la Ley: el suelo de fe sube a 25 ---
+give 6
+wait 0.4
+faith 5
+wait 0.4
+stats con_tablas
+shot 60_tablas
+wait 0.1
+
+# --- Arca del Pacto: sustituye a las Tablas, y el suelo se va con ellas ---
+give 7
+wait 0.4
+faith 5
+wait 0.4
+stats con_arca
+shot 61_arca_sustituye
+wait 0.1
+
+# --- Volver a las Tablas: sustituye al Arca (el x1.5 de milagros se va) ---
+give 6
+wait 0.4
+stats vuelta_a_tablas
+shot 62_vuelta_a_tablas
+wait 0.1
+
+# --- La carta lo dice: "SUSTITUYE A TABLAS DE LA LEY" ---
+# Para que salga SEGURO y no a la suerte del sorteo: se le dan todos los objetos
+# sorteables MENOS el Arca. `roll_choices` nunca ofrece lo que ya llevas, asi que el pool
+# se queda con una sola carta y es la que interesa.
+give 0
+wait 0.15
+give 1
+wait 0.15
+give 2
+wait 0.15
+give 3
+wait 0.15
+give 4
+wait 0.15
+give 5
+wait 0.15
+give 8
+wait 0.15
+give 9
+wait 0.15
+give 10
+wait 0.15
+give 11
+wait 0.15
+give 12
+wait 0.15
+give 13
+wait 0.15
+give 14
+wait 0.15
+give 6
+wait 0.4
+stats antes_de_la_carta
+# OJO con la espera: en autoplay la carta se toma sola a los 0,7 s
+# (Engine::open_item_choice fija `choice.auto_timer` para que un guion no se atasque),
+# asi que la captura tiene que caer ANTES.
+cards
+wait 0.45
+shot 63_carta_sustituye
+wait 0.1
+wait 0.6
+stats tras_la_carta
+
+quit

@@ -5,6 +5,10 @@
 # Se descubren unos cuantos objetos con `give` (que llama a codex_see_item) para
 # que la pestaña tenga filas conocidas y filas con ??????, y se comprueba que el
 # contador "Descubierto X/Y" cuadra con las cuatro pestañas.
+#
+# El TOTAL del contador es 10 capitulos + 8 enemigos + 10 milagros + 22 objetos = 50.
+# (Eran 44 hasta que el catalogo paso de 16 a 22 objetos.) Los LOGROS no cuentan: esa
+# pestaña mide metas, no contenido encontrado, y lleva su propio "Logros N/18".
 
 wait 1.0
 press confirm
@@ -24,6 +28,11 @@ wait 0.3
 give 6
 wait 0.3
 give 13
+wait 0.3
+# Dos de los seis objetos nuevos (16..21), para que la pestaña los ensene descubiertos
+give 20
+wait 0.3
+give 21
 wait 0.5
 
 # --- Abrir El Codice desde la pausa (opcion 1) ---
@@ -51,33 +60,49 @@ wait 0.4
 shot 43_codice_objetos
 wait 0.1
 
-# La lista tiene 15 objetos y solo caben 8: bajar hasta el final comprueba el scroll
+# La lista tiene 22 objetos y solo caben 8: bajar hasta el final comprueba el scroll
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
 press down
-wait 0.15
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
 shot 44_codice_objetos_scroll
 wait 0.1
 

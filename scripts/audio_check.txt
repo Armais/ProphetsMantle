@@ -1,0 +1,136 @@
+# Verificacion del track 2 (audio). Recorre TODAS las escenas que cambian de pista y
+# dispara los SFX de cada familia. El criterio de exito es NEGATIVO: en el log no puede
+# aparecer ni un solo "Failed to load".
+#
+# Uso:  MANTLE.exe --script scripts/audio_check.txt
+# Leer: grep -i "failed to load" en la salida. Cero lineas = correcto.
+#
+# Recordatorio: los 47 ficheros son .ogg. `Audio::load_*` cae a .wav si falta el .ogg,
+# asi que un fichero roto NO da error de carga sino silencio; por eso el guion pasa por
+# todas las escenas en vez de fiarse del arranque.
+
+seed 20260825
+
+# --- Menu (MusicID::Menu) ---
+wait 1.5
+shot A0_audio_menu
+wait 0.1
+
+# --- Prologo (MusicID::Prologue, 88 s) ---
+press confirm
+wait 3.0
+shot A1_audio_prologo
+wait 0.1
+
+# --- Capitulo 1: exploracion ---
+press confirm
+wait 3.0
+press confirm
+wait 2.0
+shot A2_audio_exploracion
+wait 0.1
+
+# --- Combate: disparo con variantes (mantener K NO debe sonar a metralleta) ---
+god
+spawn 0 4
+wait 0.5
+hold attack 2.5
+wait 0.3
+bot 8
+wait 0.5
+
+# --- Muertes con sonido propio: Idolatra (brasero) y Agua Corrupta (se derrama) ---
+killall
+wait 0.5
+spawn 6 2
+wait 0.4
+bot 8
+wait 0.5
+killall
+wait 0.5
+spawn 7 2
+wait 0.4
+bot 10
+wait 0.5
+
+# --- Milagros: los que mas ducking piden ---
+faith 100
+learn 2 0
+learn 4 1
+press m1
+wait 1.2
+press m2
+wait 1.5
+shot A3_audio_milagros
+wait 0.1
+
+# --- Jefe (MusicID::BossTheme) + grito de jefe ---
+# `goto` entra directo en la sala del jefe: esta en el indice gw/2, y OJO — gw depende
+# del capitulo (`get_chapter_def`). El cap. 1 es 3x3, asi que es la sala 1; el cap. 3 es
+# 4x3 y seria la 2. Caminar hasta alli dependia de que el mapa dejara el paso libre.
+chapter 1
+wait 2.5
+goto 1
+wait 3.0
+shot A4_audio_jefe
+wait 0.1
+
+# --- Voz (GDD 6.4): Elias. `play_voice` deja 2,2 s entre exclamaciones (con i-frames
+#     de 1 s, sin esa espera se oiria un gemido por segundo), asi que los tiempos son
+#     holgados a proposito. El grito de jefe se salta la espera.
+say ---- voz: Elias, esfuerzo / dolor / milagro grande ----
+chapter 1
+wait 2.5
+press dash
+wait 2.6
+god
+spawn 3 4
+wait 4.0
+god
+killall
+# Espera larga a proposito: `play_voice` deja 2,2 s entre exclamaciones, asi que sin esto
+# la voz del milagro se la comia el "dolor" de los leones de arriba.
+wait 2.6
+faith 100
+learn 2 0
+wait 0.3
+press m1
+wait 3.0
+
+# --- Ascension (MusicID::Ascension) ---
+chapter 5
+wait 2.0
+ascend
+wait 3.0
+shot A5_audio_ascension
+wait 0.1
+press confirm
+wait 2.0
+press confirm
+wait 4.0
+
+# --- Voz: Eliseo. Las tomas son OTRAS (mas altas y abiertas), no las de Elias con un
+#     filtro: es lo que un jugador distingue a la primera.
+say ---- voz: Eliseo, esfuerzo / dolor ----
+press dash
+wait 2.6
+god
+spawn 4 4
+wait 4.0
+god
+killall
+wait 0.5
+
+# --- Victoria (MusicID::Victory). Ojo al margen: tras la Ascension el motor pasa por
+#     banner + carta de capitulo, y un `chapter` lanzado antes de volver a Playing se
+#     descarta en silencio (se quedaba en el cap. 7 sin avisar de nada).
+chapter 10
+wait 3.0
+advance
+wait 4.0
+shot A6_audio_victoria
+wait 0.1
+
+stats fin_audio
+say ---- fin de la verificacion de audio ----
+quit

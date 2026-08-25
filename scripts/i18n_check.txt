@@ -1,0 +1,230 @@
+# Verificacion Track 5 (fase 3): el juego entero en ingles, sin cajas desbordadas
+# Uso:  MANTLE.exe --script scripts/i18n_check.txt
+#
+# El fallo que hay que cazar NO es "falta una traduccion" (eso lo da el compilador: a
+# `tr` le falta un argumento y no compila). Es el OTRO: `Renderer::wrap_text` TRUNCA EN
+# SILENCIO lo que no cabe, y el ingles no siempre es mas corto que el espanol.
+#
+# Como leerlo: cada pantalla se fotografia DOS VECES, primero en espanol (ES_) y luego en
+# ingles (EN_). Se comparan las dos capturas del mismo numero buscando frases cortadas.
+#
+# Zonas cubiertas: menu principal, Opciones, Controles, El Santuario, HUD en partida,
+# carta de eleccion, encuentro biblico (la caja mas apretada del juego: con retrato la
+# columna pierde ~35 unidades de ancho) y las cinco pestanas del Codice.
+
+wait 1.0
+defaults
+
+# =====================  ESPANOL  =====================
+lang 0
+wait 0.3
+shot ES_10_menu
+wait 0.1
+
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.8
+shot ES_11_santuario
+wait 0.1
+press cancel
+wait 0.5
+
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.6
+shot ES_12_opciones
+wait 0.1
+press cancel
+wait 0.5
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.6
+shot ES_13_controles
+wait 0.1
+press cancel
+wait 0.6
+
+press confirm
+wait 3.0
+shot ES_14_carta_capitulo
+wait 0.1
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+shot ES_15_hud
+wait 0.1
+cards
+wait 0.45
+shot ES_16_carta_objeto
+wait 0.1
+wait 0.6
+event 8
+wait 1.2
+shot ES_17_encuentro
+wait 0.1
+press confirm
+wait 0.8
+shot ES_18_encuentro_decision
+wait 0.1
+press confirm
+wait 0.8
+
+press pause
+wait 0.5
+press down
+wait 0.25
+press confirm
+wait 0.8
+shot ES_19_codice_capitulos
+wait 0.1
+press right
+wait 0.35
+shot ES_20_codice_bestiario
+wait 0.1
+press right
+wait 0.35
+shot ES_21_codice_milagros
+wait 0.1
+press right
+wait 0.35
+shot ES_22_codice_objetos
+wait 0.1
+press right
+wait 0.35
+shot ES_23_codice_logros
+wait 0.1
+press cancel
+wait 0.6
+press cancel
+wait 0.8
+
+# =====================  INGLES  =====================
+# El mismo recorrido, cambiando solo el idioma: `lang 1` no recarga nada, porque el texto
+# se pide con tr() en el momento de dibujar.
+lang 1
+wait 0.4
+shot EN_15_hud
+wait 0.1
+cards
+wait 0.45
+shot EN_16_carta_objeto
+wait 0.1
+wait 0.6
+event 8
+wait 1.2
+shot EN_17_encuentro
+wait 0.1
+press confirm
+wait 0.8
+shot EN_18_encuentro_decision
+wait 0.1
+press confirm
+wait 0.8
+
+press pause
+wait 0.5
+press down
+wait 0.25
+press confirm
+wait 0.8
+shot EN_19_codice_capitulos
+wait 0.1
+press right
+wait 0.35
+shot EN_20_codice_bestiario
+wait 0.1
+press right
+wait 0.35
+shot EN_21_codice_milagros
+wait 0.1
+press right
+wait 0.35
+shot EN_22_codice_objetos
+wait 0.1
+press right
+wait 0.35
+shot EN_23_codice_logros
+wait 0.1
+press cancel
+wait 0.6
+
+# Volver al menu para las pantallas que solo existen ahi
+press down
+wait 0.2
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 1.5
+shot EN_10_menu
+wait 0.1
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.8
+shot EN_11_santuario
+wait 0.1
+press cancel
+wait 0.5
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.6
+shot EN_12_opciones
+wait 0.1
+press cancel
+wait 0.5
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.6
+shot EN_13_controles
+wait 0.1
+
+quit

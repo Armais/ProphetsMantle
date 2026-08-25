@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "ui/hud.h"
+#include "core/i18n.h"
 #include "core/config.h"
 #include <cstdio>
 #include <cstring>
@@ -75,10 +76,10 @@ static Color rarity_color(ItemRarity r) { return item_rarity_color(r); }   // ga
 
 static const char* rarity_name(ItemRarity r) {
     switch (r) {
-        case ItemRarity::Common:    return "COMÚN";
-        case ItemRarity::Uncommon:  return "POCO COMÚN";
-        case ItemRarity::Rare:      return "RARO";
-        default:                    return "LEGENDARIO";
+        case ItemRarity::Common:    return tr("COMÚN", "COMMON");
+        case ItemRarity::Uncommon:  return tr("POCO COMÚN", "UNCOMMON");
+        case ItemRarity::Rare:      return tr("RARO", "RARE");
+        default:                    return tr("LEGENDARIO", "LEGENDARY");
     }
 }
 
@@ -153,13 +154,14 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
             centred(dl[l], cx, ty + 2.0f + l * 6.5f, {180, 172, 160, 255}, 0.62f);
     }
 
-    renderer.draw_text_centered("[A/D] elegir     [ENTER] tomar", H - 14.0f, {170, 160, 150, 220}, 0.7f);
+    renderer.draw_text_centered(tr("[A/D] elegir     [ENTER] tomar", "[A/D] choose     [ENTER] take"), H - 14.0f, {170, 160, 150, 220}, 0.7f);
 }
 
 // =============================================================================
 // Encuentro biblico: caja de dialogo sobre el mundo congelado
 // =============================================================================
-void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time) {
+void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
+                   u32 portraits) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
     renderer.draw_rect({0, 0, W, H}, {8, 6, 12, 130});
@@ -172,18 +174,43 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
     renderer.draw_rect({bx, by, bw, box_h}, {24, 19, 28, 248});
     renderer.draw_rect({bx, by, bw, 1.0f}, {255, 255, 255, 40});
 
-    // Nombre de quien habla, sobre una placa que muerde el borde superior
+    // Retrato de quien habla, si lo tiene. La celda mide 24 unidades (96 px) y se dibuja a
+    // PORTRAIT_W: por encima de ~34 se ve blanda, y el Codice ya la estira a 34.
+    // Sin retrato (o sin hoja) TODO lo de abajo cae en las coordenadas de siempre.
+    const f32 PORTRAIT_W = 32.0f;
+    const bool has_portrait = view.portrait >= 0 && view.portrait < Portrait::COUNT &&
+                              portraits != TEXTURE_NONE;
+    f32 text_x = bx + 8.0f;
+    f32 text_w = bw - 16.0f;
+    if (has_portrait) {
+        const f32 pxx = bx + 5.0f, pyy = by + 5.0f;
+        renderer.draw_rect({pxx - 1.0f, pyy - 1.0f, PORTRAIT_W + 2.0f, PORTRAIT_W + 2.0f},
+                           {150, 122, 80, 200});
+        renderer.draw_rect({pxx, pyy, PORTRAIT_W, PORTRAIT_W}, {14, 11, 18, 240});
+        renderer.draw_sprite_rect(portraits, Portrait::src(view.portrait),
+                                  {pxx, pyy, PORTRAIT_W, PORTRAIT_W}, Color::white());
+        renderer.draw_rect({pxx, pyy, PORTRAIT_W, 0.7f}, {255, 240, 200, 90});
+        text_x = pxx + PORTRAIT_W + 7.0f;
+        text_w = bx + bw - 8.0f - text_x;
+    }
+
+    // Nombre de quien habla, sobre una placa que muerde el borde superior. Va alineado con
+    // el texto, no con el borde: el nombre y sus palabras se leen en la misma columna.
     if (view.speaker && view.speaker[0]) {
         f32 nw = renderer.measure_text(view.speaker, 0.85f);
-        renderer.draw_rect({bx + 5.0f, by - 7.0f, nw + 10.0f, 12.0f}, {180, 150, 95, 245});
-        renderer.draw_rect({bx + 6.0f, by - 6.0f, nw + 8.0f, 10.0f}, {40, 31, 24, 250});
-        renderer.draw_text(view.speaker, bx + 10.0f, by - 5.0f, {245, 218, 160, 255}, 0.85f);
+        f32 nx = has_portrait ? text_x - 5.0f : bx + 5.0f;
+        renderer.draw_rect({nx, by - 7.0f, nw + 10.0f, 12.0f}, {180, 150, 95, 245});
+        renderer.draw_rect({nx + 1.0f, by - 6.0f, nw + 8.0f, 10.0f}, {40, 31, 24, 250});
+        renderer.draw_text(view.speaker, nx + 5.0f, by - 5.0f, {245, 218, 160, 255}, 0.85f);
     }
-    // Cuerpo del dialogo (hasta 3 lineas)
-    std::string lines[3];
-    int n = renderer.wrap_text(view.body, bw - 16.0f, 0.8f, lines, 3);
+    // Cuerpo del dialogo. Con retrato la columna es ~35 unidades mas estrecha, asi que se
+    // le concede una CUARTA linea: `wrap_text` trunca en silencio lo que no le cabe, y la
+    // caja tiene hueco de sobra en vertical (4 lineas + 2 opciones = 70 de 78).
+    std::string lines[4];
+    const int max_lines = has_portrait ? 4 : 3;
+    int n = renderer.wrap_text(view.body, text_w, 0.8f, lines, max_lines);
     for (int i = 0; i < n; i++)
-        renderer.draw_text(lines[i].c_str(), bx + 8.0f, by + 8.0f + i * 9.0f, {224, 216, 204, 250}, 0.8f);
+        renderer.draw_text(lines[i].c_str(), text_x, by + 8.0f + i * 9.0f, {224, 216, 204, 250}, 0.8f);
 
     // Opciones
     if (view.option_count > 0) {
@@ -191,10 +218,13 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
         for (int i = 0; i < view.option_count && i < 2; i++) {
             bool on = (i == view.selected);
             Color c = on ? Color{250, 215, 130, 255} : Color{160, 152, 142, 235};
-            if (on) renderer.draw_rect({bx + 5.0f, oy + i * 11.0f - 1.0f, bw - 10.0f, 10.0f}, {70, 56, 34, 200});
+            // El borde derecho es el de siempre (bx+bw-5): sin retrato la banda tiene que
+            // quedar exactamente donde estaba antes de que existiera este campo.
+            if (on) renderer.draw_rect({text_x - 3.0f, oy + i * 11.0f - 1.0f,
+                                        (bx + bw - 5.0f) - (text_x - 3.0f), 10.0f}, {70, 56, 34, 200});
             char buf[96];
             snprintf(buf, sizeof(buf), "%s%s", on ? "> " : "  ", view.options[i]);
-            renderer.draw_text(buf, bx + 8.0f, oy + i * 11.0f, c, 0.8f);
+            renderer.draw_text(buf, text_x, oy + i * 11.0f, c, 0.8f);
             // Coste a la derecha, en rojo: la decision tiene que doler antes de tomarla
             if (view.costs[i] && view.costs[i][0]) {
                 f32 cw = renderer.measure_text(view.costs[i], 0.7f);
@@ -202,23 +232,32 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
                                    on ? Color{240, 130, 110, 255} : Color{150, 90, 80, 220}, 0.7f);
             }
         }
-        renderer.draw_text_centered("[W/S] elegir     [ENTER] decidir", H - 6.0f, {160, 150, 140, 200}, 0.65f);
+        renderer.draw_text_centered(tr("[W/S] elegir     [ENTER] decidir", "[W/S] choose     [ENTER] decide"), H - 6.0f, {160, 150, 140, 200}, 0.65f);
     } else {
         f32 blink = 0.55f + 0.45f * std::sin(time * 3.4f);
-        const char* prompt = view.more_lines ? "[ENTER] seguir" : "[ENTER] continuar";
+        const char* prompt = view.more_lines ? tr("[ENTER] seguir", "[ENTER] continue") : tr("[ENTER] continuar", "[ENTER] continue");
         renderer.draw_text_centered(prompt, H - 6.0f, {200, 185, 160, static_cast<u8>(210 * blink)}, 0.65f);
     }
     (void)tileset;
 }
 
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],
-                      int count, int selected, u32 tileset) {
+                      int count, int selected, u32 tileset, bool act_one,
+                      const char* held_relic) {
     ChoiceCard cards[3];
+    char swap[3][40];
     for (int i = 0; i < count && i < 3; i++) {
         if (!defs[i]) continue;
         cards[i].name   = defs[i]->name;
         cards[i].tag    = rarity_name(defs[i]->rarity);
-        cards[i].extra  = defs[i]->heredable ? "HEREDABLE" : "";
+        // La herencia solo significa algo mientras juegas con Elias: siendo ya Eliseo,
+        // "pasa a Eliseo" no tiene a quien pasar
+        cards[i].extra  = (defs[i]->heredable && act_one) ? tr("PASA A ELISEO", "PASSES TO ELISHA") : "";
+        // Solo hay un slot de reliquia: tomar esta deja la otra. Se dice en la carta.
+        if (defs[i]->category == ItemCategory::Relic && held_relic && *held_relic) {
+            snprintf(swap[i], sizeof(swap[i]), tr("SUSTITUYE A %s", "REPLACES %s"), held_relic);
+            cards[i].extra = swap[i];
+        }
         cards[i].desc   = defs[i]->description;
         cards[i].accent = rarity_color(defs[i]->rarity);
         cards[i].icon   = category_icon(defs[i]->category);
@@ -235,7 +274,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
     char tags[3][28];
     for (int i = 0; i < count && i < 3; i++) {
         MiracleDef d = get_miracle_def(ids[i]);
-        snprintf(tags[i], sizeof(tags[i]), "TIER %d  ·  %.0f FE", d.tier, d.faith_cost);
+        snprintf(tags[i], sizeof(tags[i]), tr("TIER %d  ·  %.0f FE", "TIER %d  ·  %.0f FAITH"), d.tier, d.faith_cost);
         cards[i].name   = d.name;
         cards[i].tag    = tags[i];
         cards[i].extra  = (extras && extras[i]) ? extras[i] : "";
@@ -261,12 +300,17 @@ void HUD::render(Renderer& renderer, const Player& player,
 
     draw_faith_bar(renderer, faith, ctx);
     draw_inventory(renderer, player, ctx);
-    draw_miracle_slots(renderer, player, ctx, faith);
+    // En VERTICAL las celdas de milagro se han ido a la banda negra con el resto de los
+    // botones, y ahi no llega el objetivo de 320x180: las pinta la pasada de superposicion
+    // (Engine::render), igual que dash y consumible.
+    const bool slots_in_band = ctx.input && ctx.input->touch_ui && ctx.input->touch_band >= 62.0f;
+    if (!slots_in_band) draw_miracle_slots(renderer, player, ctx, faith);
     draw_minimap(renderer, ctx, ctx.show_map);
     if (!ctx.show_map) draw_objective(renderer, ctx);
     if (ctx.boss != ENTITY_NONE) draw_boss_bar(renderer, world, ctx.boss);
     draw_message(renderer, ctx);
     draw_banner(renderer, ctx);
+    draw_touch_controls(renderer, player, ctx);
 }
 
 void HUD::draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDContext& ctx) {
@@ -358,10 +402,14 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
     f32 x = 3.0f;
     int shown = 0;
     for (u32 id : player.items) {
-        if (shown >= 12) break;
+        // Tope de la fila: con el catalogo en 22 objetos una run larga pasa de 12. A 9
+        // unidades por celda + 2 de hueco, 20 celdas ocupan 220 de las 320 de ancho y no
+        // llegan al minimapa.
+        if (shown >= 20) break;
         const ItemDef* def = ctx.registry->get(id);
         if (!def) continue;
-        bool held = (id == player.consumable_slot);
+        bool held  = (id == player.consumable_slot);
+        bool relic = (id == player.relic_slot);
         // Frame carries the rarity colour; the icon stays untinted so it reads at 9 units
         renderer.draw_rect({x - 1, Y - 1, S + 2, S + 2}, held ? Color{245, 205, 90, 230} : rarity_color(def->rarity));
         renderer.draw_rect({x, Y, S, S}, {22, 16, 26, 220});
@@ -372,11 +420,115 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
             snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
             renderer.draw_text(n, x + S - 3.0f, Y + S - 5.0f, {255, 235, 180, 250}, 0.6f);
         }
+        // La reliquia que llevas puesta: solo cabe una (GDD 7.3), y sin marca la fila de
+        // objetos no distingue "la que me hace efecto" de "una legendaria mas".
+        if (relic) {
+            renderer.draw_rect({x - 2, Y - 2, S + 4, S + 4}, {0, 0, 0, 0});
+            renderer.draw_rect({x - 2, Y - 2, S + 4, 1.0f}, {255, 235, 180, 235});
+            renderer.draw_rect({x - 2, Y + S + 1.0f, S + 4, 1.0f}, {255, 235, 180, 235});
+            renderer.draw_rect({x - 2, Y - 2, 1.0f, S + 4}, {255, 235, 180, 235});
+            renderer.draw_rect({x + S + 1.0f, Y - 2, 1.0f, S + 4}, {255, 235, 180, 235});
+        }
         x += S + 2.0f;
         shown++;
     }
     if (player.consumable_slot != UINT32_MAX)
         renderer.draw_text("R", x + 1.0f, Y + 1.5f, {245, 205, 90, 230}, 0.6f);
+}
+
+// =============================================================================
+// Controles tactiles (GDD 4.2)
+// =============================================================================
+// Solo con `Input::touch_ui` (movil, pantalla tactil detectada o --touch). En
+// escritorio no se dibuja nada y el HUD queda exactamente igual que antes. Poca
+// opacidad: el pulgar tiene que ver donde pulsa sin que los botones tapen el juego.
+// Los tres botones de milagro NO se dibujan aqui: son las propias celdas del HUD
+// (mismos rects que Input::init_touch_layout).
+// En VERTICAL esto NO se llama desde HUD::render sino desde Engine::render, ya despues
+// del letterbox y dentro de Renderer::begin_overlay(), para poder pintar en la banda negra
+// de abajo. La funcion es la misma: los rects vienen de Input::init_touch_layout, que es
+// quien decide si estan dentro del mundo o en la banda.
+void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HUDContext& ctx) {
+    const Input* in = ctx.input;
+    if (!in || !in->touch_ui || ctx.tileset == TEXTURE_NONE) return;
+    // Si los botones se han ido a la banda, los pinta la pasada de superposicion: aqui se
+    // dibujarian recortados por el borde del area de juego.
+    if (in->touch_band >= 62.0f && !renderer.in_overlay()) return;
+
+    // --- Joystick de movimiento: la base nace donde bajo el dedo ---
+    if (in->joystick_move.active) {
+        Vec2 o = in->joystick_move.origin;
+        Vec2 k = o + in->joystick_move.get_axis() * 13.0f;
+        renderer.draw_rect({o.x - 17, o.y - 17, 34, 34}, {255, 245, 220, 60});
+        renderer.draw_rect({o.x - 15, o.y - 15, 30, 30}, {20, 16, 26, 110});
+        renderer.draw_rect({k.x - 7, k.y - 7, 14, 14}, {250, 230, 190, 205});
+    }
+
+    // --- Apuntado manual (hold + drag en la mitad derecha) ---
+    // Se dibuja el origen, un rastro de puntos y la mira: sin el rastro no se distingue
+    // de un tap y no se sabe hacia donde se esta disparando.
+    if (in->joystick_aim.active) {
+        Vec2 o = in->joystick_aim.origin;
+        Vec2 dir = in->joystick_aim.get_axis();
+        renderer.draw_rect({o.x - 9, o.y - 9, 18, 18}, {245, 205, 90, 70});
+        renderer.draw_rect({o.x - 7, o.y - 7, 14, 14}, {20, 16, 26, 90});
+        for (int d = 1; d <= 4; d++) {
+            Vec2 p = o + dir * (7.0f * d);
+            renderer.draw_rect({p.x - 1.5f, p.y - 1.5f, 3, 3},
+                               {250, 225, 160, static_cast<u8>(210 - d * 30)});
+        }
+        Vec2 t = o + dir * 34.0f;
+        renderer.draw_rect({t.x - 5, t.y - 1, 10, 2}, {255, 235, 175, 235});
+        renderer.draw_rect({t.x - 1, t.y - 5, 2, 10}, {255, 235, 175, 235});
+    }
+
+    // --- Dash y consumible ---
+    for (int i = 0; i < 2 && i < TOUCH_BUTTON_COUNT; i++) {
+        const TouchButton& b = in->touch_buttons[i];
+        bool cons = (b.action == Action::Consumable);
+        if (cons && player.consumable_slot == UINT32_MAX) continue;   // no hay nada que usar
+
+        renderer.draw_rect({b.rect.x - 1, b.rect.y - 1, b.rect.w + 2, b.rect.h + 2},
+                           b.down ? Color{250, 225, 160, 225} : Color{200, 180, 140, 120});
+        renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 145)});
+
+        TileSprite icon = TileSprite::Arrow;
+        if (cons && ctx.registry) {
+            const ItemDef* d = ctx.registry->get(player.consumable_slot);
+            if (d) icon = category_icon(d->category);
+        }
+        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon),
+                                  {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6},
+                                  b.down ? Color::white() : Color{230, 225, 215, 200});
+        if (cons && player.consumable_charges > 1) {
+            char n[4];
+            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
+            renderer.draw_text(n, b.rect.right() - 5.0f, b.rect.bottom() - 7.0f, {255, 235, 180, 250}, 0.65f);
+        }
+        // La etiqueta va ENCIMA: debajo de estos botones estan las placas de coste de las
+        // celdas de milagro y los dos textos se pisaban.
+        const char* label = cons ? tr("USAR", "USE") : "DASH";
+        f32 lw = renderer.measure_text(label, 0.55f);
+        renderer.draw_text(label, b.rect.x + (b.rect.w - lw) * 0.5f, b.rect.y - 6.0f,
+                           {225, 205, 165, 200}, 0.55f);
+    }
+
+    // --- Ficha del milagro: mantener pulsada su celda en vez de lanzarlo (GDD) ---
+    if (in->touch_info_slot >= 0 && in->touch_info_slot < Config::MAX_MIRACLE_SLOTS) {
+        const MiracleSlot& s = player.miracle_slots[in->touch_info_slot];
+        if (!s.is_empty()) {
+            auto def = get_miracle_def(s.miracle);
+            const f32 w = 152.0f, h = 34.0f;
+            f32 x = (Config::GAME_WIDTH - w) * 0.5f, y = 96.0f;
+            renderer.draw_rect({x - 1, y - 1, w + 2, h + 2}, {245, 205, 90, 190});
+            renderer.draw_rect({x, y, w, h}, {18, 14, 24, 238});
+            renderer.draw_text(def.name, x + 5, y + 3, {250, 225, 160, 250}, 0.8f);
+            char sub[64];
+            snprintf(sub, sizeof(sub), tr("Tier %d   %.0f de fe", "Tier %d   %.0f faith"), def.tier, def.faith_cost);
+            renderer.draw_text(sub, x + 5, y + 13, {200, 185, 150, 225}, 0.6f);
+            renderer.draw_text(def.description, x + 5, y + 22, {215, 210, 200, 230}, 0.6f);
+        }
+    }
 }
 
 static TileSprite miracle_icon(MiracleID id) {
@@ -399,9 +551,19 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
                              const FaithSystem& faith) {
     static const char* keys[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
     const f32 S = 22.0f;   // slot size
+    // En tactil, la celda del HUD **es** el boton, asi que la posicion se toma de
+    // `Input::init_touch_layout` en vez de recalcularla aqui. Antes estaban en dos sitios
+    // y solo un comentario las mantenia iguales; en vertical, donde los botones bajan a la
+    // banda negra, esa duplicidad separaba el dibujo del hit-test (se veia la celda dentro
+    // del mundo y se pulsaba 160 unidades mas abajo).
+    const Input* tin = (ctx.input && ctx.input->touch_ui) ? ctx.input : nullptr;
     for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++) {
         f32 x = static_cast<f32>(Config::GAME_WIDTH) - 28.0f - i * 27.0f;
         f32 y = static_cast<f32>(Config::GAME_HEIGHT) - 36.0f;
+        if (tin && (2 + i) < TOUCH_BUTTON_COUNT) {
+            x = tin->touch_buttons[2 + i].rect.x;
+            y = tin->touch_buttons[2 + i].rect.y;
+        }
 
         const auto& slot = player.miracle_slots[i];
         // Dos bloqueos distintos, y el jugador tiene que poder distinguirlos de un vistazo:
@@ -498,7 +660,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
 
     if (big) {
         renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)}, {0, 0, 0, 160});
-        renderer.draw_text_centered("MAPA DEL CAPÍTULO", oy - 16.0f, {240, 220, 160, 255});
+        renderer.draw_text_centered(tr("MAPA DEL CAPÍTULO", "CHAPTER MAP"), oy - 16.0f, {240, 220, 160, 255});
     } else {
         renderer.draw_rect({ox - 2, oy - 2, total_w + 4, total_h + 4}, {0, 0, 0, 110});
     }
@@ -545,12 +707,12 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
         if (big) {
             const char* label = nullptr;
             switch (node.type) {
-                case RoomType::Start:    label = "INICIO"; break;
-                case RoomType::Boss:     label = "JEFE"; break;
-                case RoomType::Treasure: label = (visited || adjacent) ? "TESORO" : nullptr; break;
+                case RoomType::Start:    label = tr("INICIO", "START"); break;
+                case RoomType::Boss:     label = tr("JEFE", "BOSS"); break;
+                case RoomType::Treasure: label = (visited || adjacent) ? tr("TESORO", "TREASURE") : nullptr; break;
                 case RoomType::Altar:    label = (visited || adjacent) ? "ALTAR" : nullptr; break;
-                case RoomType::Elite:    label = (visited || adjacent) ? "ELITE" : nullptr; break;
-                case RoomType::Event:    label = (visited || adjacent) ? "RELATO" : nullptr; break;
+                case RoomType::Elite:    label = (visited || adjacent) ? tr("ELITE", "ELITE") : nullptr; break;
+                case RoomType::Event:    label = (visited || adjacent) ? tr("RELATO", "STORY") : nullptr; break;
                 default: break;
             }
             if (label) renderer.draw_text(label, x + 1, y + ch + 1, {220, 210, 190, 255}, 0.6f);
@@ -558,8 +720,8 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     }
 
     if (big) {
-        renderer.draw_text_centered("Llega al JEFE (rojo) y derrótalo para abrir la salida", oy + total_h + 12.0f, {200, 200, 200, 255}, 0.75f);
-        renderer.draw_text_centered("Suelta TAB para volver", oy + total_h + 22.0f, {160, 160, 160, 255}, 0.75f);
+        renderer.draw_text_centered(tr("Llega al JEFE (rojo) y derrótalo para abrir la salida", "Reach the BOSS (red) and beat it to open the exit"), oy + total_h + 12.0f, {200, 200, 200, 255}, 0.75f);
+        renderer.draw_text_centered(tr("Suelta TAB para volver", "Release TAB to go back"), oy + total_h + 22.0f, {160, 160, 160, 255}, 0.75f);
     }
 }
 
@@ -575,18 +737,20 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     char buf[48];
     if (dx == 0 && dy == 0) {
         bool cleared = ctx.room && ctx.room->cleared;
-        snprintf(buf, sizeof(buf), cleared ? "Salida abierta" : "!! JEFE !!");
+        snprintf(buf, sizeof(buf), cleared ? tr("Salida abierta", "Exit open") : tr("!! JEFE !!", "!! BOSS !!"));
     } else {
         // e.g. "Jefe: 2N 1E"
         char part1[12] = "", part2[12] = "";
         if (dy != 0) snprintf(part1, sizeof(part1), "%d%c", std::abs(dy), dy < 0 ? 'N' : 'S');
-        if (dx != 0) snprintf(part2, sizeof(part2), "%s%d%c", dy != 0 ? " " : "", std::abs(dx), dx < 0 ? 'O' : 'E');
-        snprintf(buf, sizeof(buf), "Jefe: %s%s", part1, part2);
+        // La inicial del punto cardinal tambien se traduce: en ingles Oeste es West.
+        if (dx != 0) snprintf(part2, sizeof(part2), "%s%d%c", dy != 0 ? " " : "", std::abs(dx),
+                              dx < 0 ? tr("O", "W")[0] : 'E');
+        snprintf(buf, sizeof(buf), tr("Jefe: %s%s", "Boss: %s%s"), part1, part2);
     }
     f32 tw = renderer.measure_text(buf, 0.75f);
     f32 y = 4.0f + fm->grid_h * 8.0f + 3.0f;
     renderer.draw_text(buf, Config::GAME_WIDTH - tw - 5.0f, y, {230, 215, 170, 255}, 0.75f);
-    renderer.draw_text("TAB: mapa", Config::GAME_WIDTH - renderer.measure_text("TAB: mapa", 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
+    renderer.draw_text(tr("TAB: mapa", "TAB: map"), Config::GAME_WIDTH - renderer.measure_text(tr("TAB: mapa", "TAB: map"), 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
 }
 
 void HUD::draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss) {
@@ -594,7 +758,7 @@ void HUD::draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss) 
     const auto& h = world.healths[boss];
     if (!h.is_alive()) return;
     f32 w = 160.0f, x = (Config::GAME_WIDTH - w) * 0.5f, y = Config::GAME_HEIGHT - 14.0f;
-    const char* name = world.has(boss, Component::EnemyAI) ? world.enemy_ais[boss].name : "JEFE";
+    const char* name = world.has(boss, Component::EnemyAI) ? world.enemy_ais[boss].name : tr("JEFE", "BOSS");
     // Name plate + framed red bar with a skull badge on the left
     f32 nw = renderer.measure_text(name, 0.8f);
     renderer.draw_rect({(Config::GAME_WIDTH - nw) * 0.5f - 6, y - 11.0f, nw + 12, 9.0f}, {0, 0, 0, 120});
@@ -604,7 +768,7 @@ void HUD::draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss) 
     draw_bar(renderer, {x, y, w, 6}, h.ratio(), bar_c, 1.25f);
     draw_badge(renderer, world.tileset, TileSprite::Skull, x - 6.0f, y + 3.0f, 11.0f);
     if (h.invulnerable)
-        renderer.draw_text_centered("INTOCABLE — acércate", y - 19.0f, {215, 190, 230, 235}, 0.7f);
+        renderer.draw_text_centered(tr("INTOCABLE — acércate", "UNTOUCHABLE — get closer"), y - 19.0f, {215, 190, 230, 235}, 0.7f);
 }
 
 void HUD::draw_banner(Renderer& renderer, const HUDContext& ctx) {

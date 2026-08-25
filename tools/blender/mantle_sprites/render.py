@@ -1,9 +1,12 @@
 """Orthographic Workbench render -> numpy post -> 896x1920 sheet (128 px cells).
 
-Two post-processing styles:
-  * soft (default): anti-aliased edges, no palette, thin anti-aliased outline -> smooth
-    "toon figurine" look drawn with linear filtering at 4 texels per game unit.
-  * pixel (quantize=True): legacy palette snap + hard alpha + 1 px outline (32 px era).
+Post-processing: `post_soft` -- anti-aliased edges, no palette snap, thin anti-aliased
+outline. That is THE style of the game: a smooth "3D figurine" drawn with linear
+filtering at 4 texels per game unit.
+
+`quantize=True` is the LEGACY 32 px path (palette snap + hard alpha + 1 px outline) from
+the abandoned pixel-art era. It is kept only so an old sheet can be reproduced; nothing
+that ships calls it (run.main defaults to quantize=False).
 """
 import math
 import os
@@ -153,9 +156,14 @@ def _bleed(rgb, a, iters=3):
     return rgb
 
 
-def post_soft(hi, px, ss, outline=True, gain=None, outline_px=None):
-    """(px*ss, px*ss, 4) float -> (px, px, 4) float smooth frame: soft alpha, no palette,
-    anti-aliased dark outline (computed at render res, then box-filtered)."""
+def post_soft_rect(hi, w, h, ss, outline=True, gain=None, outline_px=None, bleed=True):
+    """(h*ss, w*ss, 4) float -> (h, w, 4) float smooth image: soft alpha, no palette,
+    anti-aliased dark outline (computed at render res, then box-filtered).
+
+    Same look as post_soft, but for non-square frames (cinematic panels are 16:9).
+    `bleed=False` skips the colour bleed: on an opaque layer there are no alpha edges to
+    sangrar and it is the expensive step at panel resolution.
+    """
     gain = GAIN if gain is None else gain
     outline_px = OUTLINE_PX if outline_px is None else outline_px
     a_hi = hi[..., 3]
@@ -167,15 +175,21 @@ def post_soft(hi, px, ss, outline=True, gain=None, outline_px=None):
         a_hi = a_hi.copy()
         a_hi[ring] = 1.0
     prem = rgb_hi * a_hi[..., None]
-    prem = prem.reshape(px, ss, px, ss, 3).mean(axis=(1, 3))
-    a = a_hi.reshape(px, ss, px, ss).mean(axis=(1, 3))
+    prem = prem.reshape(h, ss, w, ss, 3).mean(axis=(1, 3))
+    a = a_hi.reshape(h, ss, w, ss).mean(axis=(1, 3))
     rgb = np.where(a[..., None] > 1e-4, prem / np.maximum(a[..., None], 1e-4), 0.0)
     rgb = np.clip(rgb * gain, 0.0, 1.0)
-    rgb = _bleed(rgb, a)
-    out = np.zeros((px, px, 4), dtype=np.float32)
+    if bleed:
+        rgb = _bleed(rgb, a)
+    out = np.zeros((h, w, 4), dtype=np.float32)
     out[..., :3] = rgb
     out[..., 3] = np.clip(a, 0.0, 1.0)
     return out
+
+
+def post_soft(hi, px, ss, outline=True, gain=None, outline_px=None):
+    """Square frame (sprite cells, tileset cells). See post_soft_rect."""
+    return post_soft_rect(hi, px, px, ss, outline=outline, gain=gain, outline_px=outline_px)
 
 
 def post_process(hi, palette=None, outline=True):
@@ -218,7 +232,7 @@ def post_process(hi, palette=None, outline=True):
 # =============================================================================
 # Sheet
 # =============================================================================
-def render_sheet(char, out_path, quantize=True, outline=True, log=print):
+def render_sheet(char, out_path, quantize=False, outline=True, log=print):
     sc = bpy.context.scene
     arm = char['arm']
     sheet = np.zeros((ROWS * FRAME, COLS * FRAME, 4), dtype=np.float32)

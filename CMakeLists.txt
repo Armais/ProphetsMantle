@@ -99,6 +99,7 @@ set(MANTLE_SOURCES
     src/main.cpp
     src/core/engine.cpp
     src/core/ecs.cpp
+    src/core/i18n.cpp
     src/render/renderer.cpp
     src/render/sprites.cpp
     src/render/camera.cpp
@@ -114,9 +115,11 @@ set(MANTLE_SOURCES
     src/ui/hud.cpp
     src/ui/menus.cpp
     src/ui/story.cpp
+    src/ui/cinematic.cpp
     src/ui/codex.cpp
     src/systems/save.cpp
     src/systems/progression.cpp
+    src/systems/achievements.cpp
 )
 
 # =============================================================================

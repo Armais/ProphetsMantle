@@ -1,0 +1,142 @@
+# Verificacion del track 1: el retrato en la caja de dialogo (game/events.h)
+# Uso:  MANTLE.exe --script scripts/encuentros_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Criterio: los diez encuentros se leen igual de bien y los diez llevan imagen. Siete son
+# RETRATOS de persona (caps 2, 5, 6, 7, 8, 9 y 10) y tres son VINETAS de la escena
+# (caps 1, 3 y 4), porque ahi el locutor es el sitio y no alguien con cara.
+# La rama sin imagen (`Portrait::NONE`) sigue viva en el codigo y tiene que verse
+# EXACTAMENTE como antes de que EventDef tuviera el campo `portrait`.
+#
+# Cada capitulo se fotografia dos veces: (a) una linea del cuerpo, (b) la decision
+# con sus dos opciones y sus costes, que es la caja alta y el caso apretado.
+#
+# `event <n>` abre el encuentro sin caminar hasta su sala: el generador la sortea, y
+# sin el comando verificar los diez dependia de la suerte del mapa.
+
+seed 1234
+wait 1.0
+press confirm
+wait 3.5
+press confirm
+wait 2.0
+
+# --- Cap 1: vineta (cuervos_querit: el cuervo con el pan en el pico) ---
+event 1
+wait 0.3
+shot 01_cap01_cuervos_linea
+wait 0.1
+wait 2.6
+shot 02_cap01_cuervos_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 2: con retrato (viuda_sarepta) ---
+chapter 2
+wait 4.0
+press confirm
+wait 1.5
+event 2
+wait 0.3
+shot 03_cap02_viuda_linea
+wait 0.1
+wait 2.6
+shot 04_cap02_viuda_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 3: vineta (altar_carmelo: las doce piedras, la lena y la zanja con agua) ---
+event 3
+wait 0.3
+shot 05_cap03_altar_linea
+wait 0.1
+wait 2.6
+shot 06_cap03_altar_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 4: vineta (boca_cueva: el vano de Horeb) ---
+event 4
+wait 0.3
+shot 07_cap04_cueva_linea
+wait 0.1
+wait 2.6
+shot 08_cap04_cueva_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 5: con retrato (eliseo_labrador: la misma cara que Eliseo, ropa de faena) ---
+# Con retrato la columna pierde ~35 unidades de ancho y `wrap_text` TRUNCA en silencio lo
+# que no le cabe, asi que aqui se fotografian las TRES lineas, no una: la comprobacion es
+# que ninguna acabe cortada. Por eso el cuerpo admite 4 lineas cuando hay retrato.
+event 5
+wait 0.3
+shot 09a_cap05_labrador_linea1
+wait 0.1
+wait 0.9
+shot 09b_cap05_labrador_linea2
+wait 0.1
+wait 0.8
+shot 09c_cap05_labrador_linea3
+wait 0.1
+wait 0.7
+shot 10_cap05_labrador_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 6 a 8: con retrato (hombre_jerico / mujer_profeta / sunamita) ---
+event 6
+wait 0.3
+shot 11_cap06_jerico_linea
+wait 0.1
+wait 2.6
+shot 12_cap06_jerico_opciones
+wait 0.1
+wait 3.0
+
+event 7
+wait 0.3
+shot 13_cap07_mujer_linea
+wait 0.1
+wait 2.6
+shot 14_cap07_mujer_opciones
+wait 0.1
+wait 3.0
+
+event 8
+wait 0.3
+shot 15_cap08_sunamita_linea
+wait 0.1
+wait 2.6
+shot 16_cap08_sunamita_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 9: con retrato (naaman: noble sirio, sin casco, para no confundirlo con el General) ---
+# Su linea 2 es la mas larga de los diez encuentros: es EL caso de truncado.
+event 9
+wait 0.3
+shot 17a_cap09_naaman_linea1
+wait 0.1
+wait 0.9
+shot 17b_cap09_naaman_linea2
+wait 0.1
+wait 0.8
+shot 17c_cap09_naaman_linea3
+wait 0.1
+wait 0.7
+shot 18_cap09_naaman_opciones
+wait 0.1
+wait 3.0
+
+# --- Cap 10: con retrato (criado_eliseo: Guiezi joven y sin barba, antes de su castigo) ---
+event 10
+wait 0.3
+shot 19_cap10_criado_linea
+wait 0.1
+wait 2.6
+shot 20_cap10_criado_opciones
+wait 0.1
+wait 2.0
+
+quit

@@ -1,0 +1,278 @@
+# Verificacion del track 4 (logros). Desbloquea LOS 18 por guion y comprueba que
+# sobreviven a guardar y cargar. La regla de admision del sistema es que un logro que no
+# se pueda comprobar asi NO entra, y este fichero es la prueba.
+#
+# Uso:  MANTLE.exe --script scripts/logros_check.txt
+# Leer: las lineas "Achievement unlocked: <nombre> (<como>)  [n/18]" del log.
+#       Al final tienen que ser 18/18.
+#
+# Notas de las que depende que esto funcione:
+#  - El altar de Baal de la sala inicial esta SIEMPRE en el tile (14,3) = mundo (232,56).
+#    Se dispara desde justo debajo, porque el tiro va en la ULTIMA DIRECCION DE MOVIMIENTO.
+#  - La sala del jefe es el indice `gw/2` (fila 0, columna central): en un 3x3, la 1.
+#  - Una sala ya despejada NO vuelve a disparar su logro (`!room.cleared`), asi que cada
+#    logro de sala necesita una sala VIRGEN.
+#  - Los milagros se prueban de UNO EN UNO en el slot 0: encadenarlos en dos slots hacia
+#    que alguno se perdiera por coste o por recarga y "Los Diez Prodigios" no saltaba.
+#  - `award` guarda con save(false): un logro no resella la fecha ni reinicia la
+#    caducidad de 48 h de la partida.
+
+# `metareset` borra logros, mejoras y desbloqueos de objeto. Va PRIMERO porque un logro
+# que ya se tiene no vuelve a avisar (`AchievementSystem::unlock` devuelve false), asi que
+# sin esto el guion solo servia con el fichero de guardado recien borrado a mano — y
+# `delete_save` NO borra los logros, por diseno.
+metareset
+seed 20260825
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+
+# =========================================================================
+# "El Fuego Responde": derribar el altar de Baal de la sala inicial
+# =========================================================================
+say ---- altar de Baal ----
+walk 232 92
+wait 3.0
+hold up 0.4
+hold attack 2.5
+wait 1.0
+
+# =========================================================================
+# "La Palabra" (primer milagro) y "Celo del Senor" (100 de fe)
+# =========================================================================
+say ---- primer milagro y fe al maximo ----
+faith 100
+wait 0.3
+press m1
+wait 1.5
+
+# =========================================================================
+# "Los Diez Prodigios": los diez milagros, de uno en uno en el slot 0
+# =========================================================================
+say ---- los diez milagros ----
+faith 100
+learn 0 0
+press m1
+wait 0.9
+faith 100
+learn 1 0
+press m1
+wait 0.9
+faith 100
+learn 2 0
+press m1
+wait 0.9
+faith 100
+learn 3 0
+press m1
+wait 1.2
+faith 100
+learn 4 0
+press m1
+wait 0.9
+faith 100
+learn 5 0
+press m1
+wait 0.9
+faith 100
+learn 6 0
+press m1
+wait 0.9
+faith 100
+learn 7 0
+press m1
+wait 0.9
+faith 100
+learn 8 0
+press m1
+wait 1.5
+faith 100
+learn 9 0
+press m1
+wait 1.5
+
+# =========================================================================
+# "Mas son los que Estan": los tres discipulos del Ejercito Celestial siguen vivos
+# =========================================================================
+say ---- tres discipulos ----
+faith 100
+learn 8 0
+press m1
+wait 1.5
+
+# =========================================================================
+# "Reliquia" (Tablas de la Ley, id 12) y "El Arca" (ocho objetos)
+# =========================================================================
+say ---- reliquia y ocho objetos ----
+give 12
+wait 0.3
+give 0
+give 1
+give 2
+give 3
+give 4
+give 5
+give 6
+give 7
+wait 1.0
+
+# =========================================================================
+# "El Leon del Camino" y "Sin un Rasguno": sala de COMBATE virgen (la 4 es
+# Normal en esta semilla). `killall` NADA MAS ENTRAR, sin esperas: la sala trae
+# sus propios enemigos y en dos segundos te alcanzan — aunque en god la vida no
+# baje, el golpe cuenta como recibido y "Sin un Rasguno" no salta nunca.
+# =========================================================================
+say ---- leon y sala limpia sin dano ----
+goto 4
+wait 0.4
+killall
+wait 2.0
+spawn 3 2
+wait 0.4
+killall
+wait 2.0
+
+# =========================================================================
+# "Bajo la Retama": otra sala de COMBATE virgen, con la fe apagada.
+# Ojo: tiene que ser Normal/Elite/Boss — en una sala de tipo Altar o Tesoro
+# `is_combat_room` es falso y el bloque de "sala despejada" no corre siquiera.
+# =========================================================================
+say ---- sala limpia con la fe apagada ----
+goto 6
+faith 1
+wait 0.4
+killall
+wait 2.0
+
+# =========================================================================
+# "Cien Caidos": 100 bajas acumuladas. `killall` YA cuenta (combat_events se
+# reinicia al principio del frame, antes del autoplay).
+# =========================================================================
+say ---- cien caidos ----
+goto 5
+wait 1.2
+spawn 0 12
+wait 0.4
+killall
+wait 0.4
+spawn 0 12
+wait 0.4
+killall
+wait 0.4
+spawn 4 12
+wait 0.4
+killall
+wait 0.4
+spawn 4 12
+wait 0.4
+killall
+wait 0.4
+spawn 0 12
+wait 0.4
+killall
+wait 0.4
+spawn 0 12
+wait 0.4
+killall
+wait 0.4
+spawn 4 12
+wait 0.4
+killall
+wait 0.4
+spawn 4 12
+wait 0.4
+killall
+wait 0.4
+spawn 0 12
+wait 0.4
+killall
+wait 0.4
+spawn 4 12
+wait 0.4
+killall
+wait 1.0
+
+# =========================================================================
+# "Ante el Rey": el jefe del capitulo (sala indice 1 en una rejilla 3x3)
+# =========================================================================
+say ---- jefe de capitulo ----
+goto 1
+wait 2.5
+killall
+wait 2.5
+
+# =========================================================================
+# "El Carro de Fuego" (Ascension), "El Manto del Profeta" y "Triple Porcion"
+# =========================================================================
+say ---- ascension, manto y tercer slot ----
+chapter 5
+wait 2.5
+ascend
+wait 3.0
+press confirm
+wait 2.0
+press confirm
+wait 4.0
+learn 5 0
+learn 8 1
+learn 0 2
+wait 0.5
+stats tras_ascension
+
+# =========================================================================
+# "El Ejercito Celestial" (victoria) y "Doble Porcion" (con la fe alta)
+# =========================================================================
+say ---- victoria con la fe en Profeta Ungido ----
+chapter 10
+wait 3.0
+faith 100
+wait 0.5
+advance
+wait 4.0
+
+# =========================================================================
+# El Codice, pestana de LOGROS (la quinta). Desde la victoria: ENTER devuelve al
+# menu principal, y ahi "El Codice" es la CUARTA fila (Nueva Partida / Continuar /
+# El Santuario / El Codice / Prologo / Opciones / Controles) -> tres `down`.
+# Dentro, la pestana de Logros es la quinta -> cuatro `right`.
+# =========================================================================
+say ---- codice: pestana de logros ----
+press confirm
+wait 2.5
+press down
+wait 0.3
+press down
+wait 0.3
+press down
+wait 0.3
+press confirm
+wait 1.5
+press right
+wait 0.25
+press right
+wait 0.25
+press right
+wait 0.25
+press right
+wait 0.6
+shot L0_logros_codice
+wait 0.1
+press down
+wait 0.3
+press down
+wait 0.3
+shot L1_logros_detalle
+wait 0.1
+press cancel
+wait 0.8
+
+stats fin_logros
+say ---- fin de la verificacion de logros ----
+quit

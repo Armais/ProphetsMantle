@@ -4,6 +4,7 @@
 // MANTLE - Faith System "El Celo del Senor" (GDD 3.2)
 // =============================================================================
 
+#include "core/i18n.h"
 #include "core/types.h"
 #include "core/config.h"
 
@@ -27,12 +28,12 @@ struct FaithLevelInfo {
 
 inline FaithLevelInfo get_faith_level_info(FaithLevel level) {
     switch (level) {
-        case FaithLevel::BajoLaRetama:  return {"Bajo la Retama",  0.70f, 0};
-        case FaithLevel::EnElDesierto:  return {"En el Desierto",  0.85f, 1};
-        case FaithLevel::FeVacilante:   return {"Fe Vacilante",    1.00f, 2};
-        case FaithLevel::SiervoFiel:    return {"Siervo Fiel",     1.10f, 3};
-        case FaithLevel::ProfetaUngido: return {"Profeta Ungido",  1.25f, 4};
-        case FaithLevel::FuegoDelCielo: return {"Fuego del Cielo", 1.40f, 4};
+        case FaithLevel::BajoLaRetama:  return {tr("Bajo la Retama", "Under the Juniper"),  0.70f, 0};
+        case FaithLevel::EnElDesierto:  return {tr("En el Desierto", "In the Wilderness"),  0.85f, 1};
+        case FaithLevel::FeVacilante:   return {tr("Fe Vacilante", "Wavering Faith"),    1.00f, 2};
+        case FaithLevel::SiervoFiel:    return {tr("Siervo Fiel", "Faithful Servant"),     1.10f, 3};
+        case FaithLevel::ProfetaUngido: return {tr("Profeta Ungido", "Anointed Prophet"),  1.25f, 4};
+        case FaithLevel::FuegoDelCielo: return {tr("Fuego del Cielo", "Fire from Heaven"), 1.40f, 4};
     }
     return {"???", 1.0f, 0};
 }

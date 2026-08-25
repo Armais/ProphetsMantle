@@ -1,0 +1,57 @@
+# Verificacion Track 3: el epilogo "El Legado" es contenido desbloqueble
+# Uso:  MANTLE.exe --script scripts/epilogo_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Que hay que ver en el log:
+#   Victory without the epilogue (faith 10 < 75)  -> pantalla de victoria CON la nota
+#   Victory: epilogue unlocked (faith 100)        -> paginas del epilogo y luego victoria
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+unlocks 0
+
+# --- Victoria con la fe por los suelos: no hay epilogo, pero si pantalla final ---
+chapter 10
+wait 3.0
+press confirm
+wait 2.5
+faith 10
+wait 0.3
+advance
+wait 2.0
+shot 80_victoria_sin_epilogo
+wait 0.1
+
+# --- Volver al menu y empezar de nuevo ---
+press confirm
+wait 1.5
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- Victoria con la fe en Profeta Ungido: se desbloquea y se narra ---
+chapter 10
+wait 3.0
+press confirm
+wait 2.5
+faith 100
+wait 0.3
+advance
+wait 2.0
+shot 81_epilogo_pagina
+wait 0.1
+wait 8.0
+shot 82_victoria_con_epilogo
+wait 0.1
+
+quit

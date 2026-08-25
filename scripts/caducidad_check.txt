@@ -1,0 +1,52 @@
+# Verificacion Track 2: la partida movil caduca a las 48 h (GDD 4.4)
+# Uso:  MANTLE.exe --touch --script scripts/caducidad_check.txt
+# --touch es OBLIGATORIO: en escritorio la regla no se aplica (Engine::mobile_rules).
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Que hay que ver en el log:
+#   agesave: run aged 1 h  (expired=0)   -> el menu sigue diciendo "Continuar"
+#   agesave: run aged 49 h (expired=1)   -> el menu dice "Partida abandonada"
+#   Abandoned run claimed: +N offerings  -> y el guardado queda borrado
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- Guardar la partida y volver al menu (opcion "Salir" de la pausa) ---
+press pause
+wait 0.6
+press down
+wait 0.2
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 1.5
+
+# --- 1 h: nada cambia, la partida se continua ---
+agesave 1
+wait 0.4
+shot 70_menu_1h
+wait 0.1
+
+# --- 49 h: la fila pasa a ser una partida abandonada con sus ofrendas ---
+agesave 48
+wait 0.4
+shot 71_menu_49h
+wait 0.1
+
+# --- Aceptarla ingresa el 50% y borra el guardado ---
+press down
+wait 0.3
+press confirm
+wait 1.0
+shot 72_ofrendas_cobradas
+wait 0.1
+
+quit

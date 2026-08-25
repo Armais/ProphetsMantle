@@ -4,6 +4,8 @@
 
 #include "ui/menus.h"
 #include "core/config.h"
+#include "core/i18n.h"
+#include "game/items.h"
 
 void MenuSystem::update(Input& input) {
     if (input.is_action_just_pressed(Action::MoveUp)) {
@@ -47,13 +49,14 @@ void MenuSystem::render_title(Renderer& renderer) {
     renderer.draw_text("MANTLE", (W - title_w) * 0.5f, 22.0f, Color::elias_gold(), 3.0f);
 
     // Subtitle
-    renderer.draw_text_centered("El Manto del Profeta", 56, {180, 160, 120, 200});
-    renderer.draw_text_centered("Desafía reyes. Destruye altares. Hereda el manto.", 70, {120, 105, 80, 200}, 0.75f);
+    renderer.draw_text_centered(tr("El Manto del Profeta", "The Prophet's Mantle"), 56, {180, 160, 120, 200});
+    renderer.draw_text_centered(tr("Desafía reyes. Destruye altares. Hereda el manto.", "Defy kings. Tear down altars. Inherit the mantle."), 70, {120, 105, 80, 200}, 0.75f);
 
-    // Menu options
-    option_count = 6;
-    const char* options[] = {"Nueva Partida", "Continuar", "El Santuario", "El Códice",
-                             "Opciones", "Controles"};
+    // Menu options. Con 7 filas hay que apretar el interlineado: a 11 unidades la ultima
+    // se comia la linea de ofrendas.
+    option_count = 7;
+    const char* options[] = {tr("Nueva Partida", "New Game"), tr("Continuar", "Continue"), tr("El Santuario", "The Sanctuary"), tr("El Códice", "The Codex"),
+                             tr("Prólogo", "Prologue"), tr("Opciones", "Options"), tr("Controles", "Controls")};
 
     for (int i = 0; i < option_count; i++) {
         Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 130, 120, 255};
@@ -66,17 +69,26 @@ void MenuSystem::render_title(Renderer& renderer) {
         const char* prefix = (i == selected_option) ? "> " : "  ";
 
         char buf[64];
-        snprintf(buf, sizeof(buf), "%s%s", prefix, options[i]);
-        renderer.draw_text_centered(buf, 90.0f + i * 11.0f, c, 0.95f);
+        // Una partida caducada ya no se continua: lo unico que queda de ella son ofrendas.
+        // La recompensa va EN la fila: entre las 7 filas, las ofrendas y la ayuda de teclas
+        // no queda hueco para una linea suelta en 180 unidades de alto.
+        if (i == 1 && has_continue && continue_expired) {
+            snprintf(buf, sizeof(buf), tr("%sPartida abandonada  +%d", "%sAbandoned run  +%d"), prefix, abandoned_offerings);
+            if (i != selected_option) c = {150, 118, 100, 235};
+        } else {
+            snprintf(buf, sizeof(buf), "%s%s", prefix, options[i]);
+        }
+        renderer.draw_text_centered(buf, 87.0f + i * 10.2f, c, 0.95f);
     }
+
 
     // Ofrendas acumuladas: es lo que se gasta en El Santuario
     if (offerings > 0) {
         char buf[48];
-        snprintf(buf, sizeof(buf), "%d ofrendas", offerings);
-        renderer.draw_text_centered(buf, 158, {200, 175, 115, 220}, 0.75f);
+        snprintf(buf, sizeof(buf), tr("%d ofrendas", "%d offerings"), offerings);
+        renderer.draw_text_centered(buf, 160, {200, 175, 115, 220}, 0.75f);
     }
-    renderer.draw_text_centered("[ENTER] Seleccionar", 168, {100, 90, 80, 180}, 0.8f);
+    renderer.draw_text_centered(tr("[ENTER] Seleccionar", "[ENTER] Select"), 170, {100, 90, 80, 180}, 0.8f);
 }
 
 void MenuSystem::render_pause(Renderer& renderer) {
@@ -85,10 +97,10 @@ void MenuSystem::render_pause(Renderer& renderer) {
         static_cast<f32>(Config::GAME_WIDTH),
         static_cast<f32>(Config::GAME_HEIGHT)}, {0, 0, 0, 150});
 
-    renderer.draw_text_centered("PAUSA", 50, Color::white(), 2);
+    renderer.draw_text_centered(tr("PAUSA", "PAUSED"), 50, Color::white(), 2);
 
     option_count = 4;
-    const char* options[] = {"Reanudar", "El Códice", "Opciones", "Salir"};
+    const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"), tr("Salir", "Quit")};
 
     for (int i = 0; i < option_count; i++) {
         Color c = (i == selected_option) ? Color::elias_gold() : Color{180, 180, 180, 255};
@@ -101,17 +113,17 @@ void MenuSystem::render_pause(Renderer& renderer) {
 void MenuSystem::render_game_over(Renderer& renderer) {
     renderer.clear({15, 8, 8, 255});
 
-    renderer.draw_text_centered("DERROTA", 44, {192, 57, 43, 255}, 2);
-    renderer.draw_text_centered("El profeta ha caído", 72, {160, 120, 120, 255});
+    renderer.draw_text_centered(tr("DERROTA", "DEFEAT"), 44, {192, 57, 43, 255}, 2);
+    renderer.draw_text_centered(tr("El profeta ha caído", "The prophet has fallen"), 72, {160, 120, 120, 255});
 
     char buf[80];
-    snprintf(buf, sizeof(buf), "Capítulo %d  ·  %d enemigos  ·  %d:%02d",
+    snprintf(buf, sizeof(buf), tr("Capítulo %d  ·  %d enemigos  ·  %d:%02d", "Chapter %d  ·  %d enemies  ·  %d:%02d"),
              stats_chapter, stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
     renderer.draw_text_centered(buf, 92, {170, 150, 130, 255}, 0.9f);
 
     // Menu de verdad: morir y volver al menu por error costaba la partida entera
     option_count = 2;
-    const char* options[] = {"Reintentar capítulo", "Volver al menú"};
+    const char* options[] = {tr("Reintentar capítulo", "Retry chapter"), tr("Volver al menú", "Back to menu")};
     for (int i = 0; i < option_count; i++) {
         Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 122, 112, 255};
         char line[64];
@@ -119,24 +131,26 @@ void MenuSystem::render_game_over(Renderer& renderer) {
         renderer.draw_text_centered(line, 118.0f + i * 14.0f, c);
     }
 
-    renderer.draw_text_centered("Tu partida sigue guardada al principio del capítulo",
+    renderer.draw_text_centered(tr("Tu partida sigue guardada al principio del capítulo", "Your run is still saved at the chapter start"),
                                 152, {125, 110, 98, 210}, 0.7f);
-    renderer.draw_text_centered("[W/S] elegir   [ENTER] aceptar   [R] reintentar",
+    renderer.draw_text_centered(tr("[W/S] elegir   [ENTER] aceptar   [R] reintentar", "[W/S] choose   [ENTER] accept   [R] retry"),
                                 168, {100, 90, 80, 190}, 0.75f);
 }
 
 void MenuSystem::render_victory(Renderer& renderer) {
     renderer.clear({18, 24, 44, 255});
 
-    renderer.draw_text_centered("EL LEGADO", 40, {245, 225, 150, 255}, 2);
-    renderer.draw_text_centered("Israel ha visto la mano de Dios", 72, {200, 200, 220, 255});
-    renderer.draw_text_centered("Elías y Eliseo cumplieron su llamado", 86, {160, 170, 200, 220});
+    renderer.draw_text_centered(tr("EL LEGADO", "THE LEGACY"), 40, {245, 225, 150, 255}, 2);
+    renderer.draw_text_centered(tr("Israel ha visto la mano de Dios", "Israel has seen the hand of God"), 72, {200, 200, 220, 255});
+    renderer.draw_text_centered(tr("Elías y Eliseo cumplieron su llamado", "Elijah and Elisha fulfilled their calling"), 86, {160, 170, 200, 220});
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "%d enemigos  ·  tiempo %d:%02d",
+    snprintf(buf, sizeof(buf), tr("%d enemigos  ·  tiempo %d:%02d", "%d enemies  ·  time %d:%02d"),
              stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
     renderer.draw_text_centered(buf, 110, {170, 180, 200, 255}, 0.9f);
-    renderer.draw_text_centered("[ENTER] Volver al menú", 150, {120, 130, 150, 220});
+    if (victory_note)
+        renderer.draw_text_centered(victory_note, 128, {190, 160, 110, 225}, 0.75f);
+    renderer.draw_text_centered(tr("[ENTER] Volver al menú", "[ENTER] Back to menu"), 150, {120, 130, 150, 220});
 }
 
 void MenuSystem::render_settings(Renderer& renderer) {
@@ -150,71 +164,102 @@ void MenuSystem::render_settings(Renderer& renderer) {
         renderer.clear({15, 12, 25, 255});
     }
 
-    renderer.draw_text_centered("OPCIONES", 30, Color::elias_gold(), 2);
+    renderer.draw_text_centered(tr("OPCIONES", "OPTIONS"), 26, Color::elias_gold(), 2);
 
-    option_count = 4;
-    const char* labels[] = {"Música", "Efectos", "Auto-mira", "Volver"};
-    f32 volumes[] = {settings_music_vol, settings_sfx_vol, 0.0f, 0.0f};
+    // Las filas se montan en una TABLA de ids y no por indice fijo: la del stick derecho
+    // solo existe en tactil, y sin esto anadir o quitar una fila desplazaba el significado
+    // de todas las de abajo tanto al pintar como al ajustar (update_settings).
+    option_count = 0;
+    for (int r = 0; r < ROW_COUNT; r++) {
+        if (r == ROW_RSTICK && !settings_show_rstick) continue;
+        // La fila del cayado solo aparece cuando hay MAS DE UNA skin desbloqueada: una
+        // fila que solo ofrece lo que ya llevas puesto no es una opcion, es ruido.
+        if (r == ROW_SKIN && (settings_skins_mask & ~1u) == 0) continue;
+        settings_rows[option_count++] = r;
+    }
+    if (selected_option >= option_count) selected_option = option_count - 1;
 
+    // A 15 unidades de paso, 8 filas desde y=52 acaban en 157 y dejan la ayuda en 166.
     for (int i = 0; i < option_count; i++) {
+        const int row = settings_rows[i];
         Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 130, 120, 255};
-        f32 y = 66.0f + i * 16.0f;
+        f32 y = 52.0f + i * 15.0f;
+        const char* prefix = (i == selected_option) ? "> " : "  ";
+        const char* label =
+            row == ROW_MUSIC  ? tr("Música", "Music") :
+            row == ROW_SFX    ? tr("Efectos", "Effects") :
+            row == ROW_AIM    ? tr("Auto-mira", "Auto-aim") :
+            row == ROW_SENS   ? tr("Sensibilidad", "Sensitivity") :
+            row == ROW_RUMBLE ? tr("Vibración", "Rumble") :
+            row == ROW_RSTICK ? tr("Stick dcho.", "Right stick") :
+            row == ROW_SKIN   ? tr("Cayado", "Staff") :
+            row == ROW_LANG   ? tr("Idioma", "Language") :
+                                tr("Volver", "Back");
+        const char* si = tr("  SÍ  ", "  ON  ");
+        const char* no = tr("  NO  ", " OFF  ");
+        char buf[96];
 
-        if (i == 2) {
-            // Auto-aim toggle (on by default on mobile, off on desktop)
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%s%-8s [%s]",
-                     (i == selected_option) ? "> " : "  ",
-                     labels[i], settings_auto_aim ? "  SI  " : "  NO  ");
-            renderer.draw_text_centered(buf, y, c);
-        } else if (i < 2) {
-            // Volume bar: "Label  [||||......] XX%"
-            int pct = static_cast<int>(volumes[i] * 100.0f + 0.5f);
-            int filled = static_cast<int>(volumes[i] * 10.0f + 0.5f);
-
+        if (row == ROW_MUSIC || row == ROW_SFX) {
+            // Barra de volumen: "Etiqueta  [||||......] XX%"
+            f32 v = (row == ROW_MUSIC) ? settings_music_vol : settings_sfx_vol;
+            int pct = static_cast<int>(v * 100.0f + 0.5f);
+            int filled = static_cast<int>(v * 10.0f + 0.5f);
             char bar[12];
-            for (int b = 0; b < 10; b++) {
-                bar[b] = (b < filled) ? '|' : '.';
-            }
+            for (int b = 0; b < 10; b++) bar[b] = (b < filled) ? '|' : '.';
             bar[10] = '\0';
-
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%s%-8s [%s] %3d%%",
-                     (i == selected_option) ? "> " : "  ",
-                     labels[i], bar, pct);
-            renderer.draw_text_centered(buf, y, c);
+            snprintf(buf, sizeof(buf), "%s%-12s [%s] %3d%%", prefix, label, bar, pct);
+        } else if (row == ROW_AIM) {
+            // Tres estados (GDD 4.2). "Asistido" no es un punto medio decorativo: es el
+            // unico modo en el que el disparo sigue siendo del jugador y aun asi perdona
+            // el error de apuntar.
+            const char* mode = (settings_aim_mode == 2) ? si
+                             : (settings_aim_mode == 1) ? tr("ASIST.", "ASSIST") : no;
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, mode);
+        } else if (row == ROW_SENS) {
+            char bar[12];
+            for (int b = 0; b < 10; b++) bar[b] = (b < settings_sensitivity) ? '|' : '.';
+            bar[10] = '\0';
+            snprintf(buf, sizeof(buf), "%s%-12s [%s] %2d", prefix, label, bar, settings_sensitivity);
+        } else if (row == ROW_RUMBLE) {
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, settings_rumble ? si : no);
+        } else if (row == ROW_RSTICK) {
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, settings_rstick ? si : no);
+        } else if (row == ROW_SKIN) {
+            StaffSkin sk = get_staff_skin(static_cast<u32>(settings_skin));
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, tr(sk.name, sk.name_en));
+        } else if (row == ROW_LANG) {
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label,
+                     I18N::language_label(static_cast<Language>(settings_language)));
         } else {
-            // "Volver" option
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%s%s",
-                     (i == selected_option) ? "> " : "  ", labels[i]);
-            renderer.draw_text_centered(buf, y, c);
+            snprintf(buf, sizeof(buf), "%s%s", prefix, label);
         }
+        renderer.draw_text_centered(buf, y, c);
     }
 
-    renderer.draw_text_centered("[</>] Ajustar   [ENTER] Volver", 140, {100, 90, 80, 180});
+    renderer.draw_text_centered(tr("[</>] Ajustar   [ENTER] Volver",
+                                   "[</>] Adjust   [ENTER] Back"), 168, {100, 90, 80, 180});
 }
 
 void MenuSystem::render_controls(Renderer& renderer) {
     renderer.clear({15, 12, 25, 255});
 
-    renderer.draw_text_centered("CONTROLES", 20, Color::elias_gold(), 2);
+    renderer.draw_text_centered(tr("CONTROLES", "CONTROLS"), 20, Color::elias_gold(), 2);
 
     Color label = {200, 180, 140, 255};
     Color value = {140, 130, 120, 255};
 
-    renderer.draw_text_centered("Movimiento", 50, label);
-    renderer.draw_text_centered("WASD / Flechas", 62, value);
+    renderer.draw_text_centered(tr("Movimiento", "Movement"), 50, label);
+    renderer.draw_text_centered(tr("WASD / Flechas", "WASD / Arrows"), 62, value);
 
-    renderer.draw_text_centered("Ataque", 74, label);
-    renderer.draw_text_centered("K (mantener) — dispara hacia donde te mueves", 86, value, 0.9f);
+    renderer.draw_text_centered(tr("Ataque", "Attack"), 74, label);
+    renderer.draw_text_centered(tr("K (mantener) — dispara hacia donde te mueves", "K (hold) — shoots where you move"), 86, value, 0.9f);
 
-    renderer.draw_text_centered("Arma secundaria", 100, label);
-    renderer.draw_text_centered("I / clic derecho — Honda o Vara, si la llevas", 112, value, 0.9f);
+    renderer.draw_text_centered(tr("Arma secundaria", "Secondary weapon"), 100, label);
+    renderer.draw_text_centered(tr("I / clic derecho — Honda o Vara, si la llevas", "I / right click — Sling or Rod, if you have one"), 112, value, 0.9f);
 
-    renderer.draw_text_centered("Dash: ESPACIO / J     Consumible: R     Orar: P", 130, value, 0.8f);
-    renderer.draw_text_centered("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", 142, value, 0.8f);
-    renderer.draw_text_centered("Objetivo: limpia salas, llega al JEFE y cruza el arco", 156, label, 0.75f);
+    renderer.draw_text_centered(tr("Dash: ESPACIO / J     Consumible: R     Orar: P", "Dash: SPACE / J     Consumable: R     Pray: P"), 130, value, 0.8f);
+    renderer.draw_text_centered(tr("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", "Miracles: Q / E / F     Map: TAB     Pause: ESC"), 142, value, 0.8f);
+    renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 156, label, 0.75f);
 
-    renderer.draw_text_centered("[ENTER/ESC] Volver", 170, {100, 90, 80, 180}, 0.85f);
+    renderer.draw_text_centered(tr("[ENTER/ESC] Volver", "[ENTER/ESC] Back"), 170, {100, 90, 80, 180}, 0.85f);
 }

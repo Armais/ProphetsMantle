@@ -29,7 +29,7 @@ constexpr int MIN_FPS        = 30;
 // Player - Elias
 // =============================================================================
 constexpr float ELIAS_HP          = 80.0f;
-constexpr float ELIAS_SPEED       = 100.0f;  // pixels/sec at base resolution
+constexpr float ELIAS_SPEED       = 100.0f;  // game units/sec (the 320x180 logical space)
 constexpr float ELIAS_DAMAGE      = 12.0f;
 constexpr int   ELIAS_MIRACLE_SLOTS = 1;     // 2 from chapter 4+
 // Techo de slots de milagro: 3, el que promete la mejora meta 6 para Eliseo (Q / E / F)
@@ -79,7 +79,7 @@ constexpr float DASH_COOLDOWN     = 0.8f;
 constexpr float IFRAMES_DURATION  = 0.3f;    // invulnerability after dash
 
 constexpr float PROJECTILE_SPEED  = 280.0f;
-constexpr float PROJECTILE_RANGE  = 120.0f;  // Max distance in pixels before despawn
+constexpr float PROJECTILE_RANGE  = 120.0f;  // Max distance in game units before despawn
 constexpr float ATTACK_COOLDOWN   = 0.25f;
 
 // =============================================================================
@@ -117,6 +117,88 @@ constexpr float ENEMY_WATER_HP       = 35.0f;
 constexpr float ENEMY_WATER_DMG      = 10.0f;
 
 // =============================================================================
+// Game feel - tacto (pasada del 2026-08-25)
+// =============================================================================
+// Nada de aqui toca el balance: ni dano, ni vida, ni cadencia. Solo gobierna cuanto
+// PESA un golpe en pantalla. Se afinan contra scripts/feel_baseline.txt, que mide TTK y
+// golpes recibidos; una tanda que empeore esa medida se revierte entera.
+namespace Feel {
+
+// Curva de una sacudida de camara: magnitud (unidades), duracion (s) y frecuencia
+// (rad/s). Corta y rapida para un golpe, larga y lenta para un estallido: con una sola
+// magnitud para todo, un roce y un jefe muerto se sentian igual.
+struct Shake { float mag, dur, freq; };
+
+// -- Impacto ------------------------------------------------------------------
+// Congelacion del mundo al conectar, escalada por el mordisco que el golpe le pega a la
+// vida del objetivo: un roce apenas se nota, un remate pesa.
+constexpr float HITSTOP_MIN      = 0.012f;
+constexpr float HITSTOP_PER_BITE = 0.085f;  // segundos por 100% de la vida del objetivo
+constexpr float HITSTOP_MAX      = 0.070f;
+constexpr float HITSTOP_BOSS     = 0.050f;  // suelo para los jefes (lo que habia antes)
+constexpr float HITSTOP_PLAYER   = 0.060f;  // recibir tambien pesa
+
+constexpr float HIT_FLASH_TIME   = 0.075f;  // corto y casi blanco al empezar
+constexpr float SHOT_RECOIL      = 18.0f;   // retroceso del disparo en el profeta
+
+// -- Sacudidas ----------------------------------------------------------------
+constexpr Shake SHAKE_HIT        = {0.9f, 0.12f, 55.0f};
+constexpr Shake SHAKE_BOSS_HIT   = {1.6f, 0.18f, 46.0f};
+constexpr Shake SHAKE_PLAYER_HIT = {2.4f, 0.30f, 34.0f};
+constexpr Shake SHAKE_KILL       = {1.2f, 0.18f, 44.0f};
+constexpr Shake SHAKE_BOSS_KILL  = {5.0f, 0.70f, 20.0f};
+constexpr Shake SHAKE_EXPLOSION  = {3.2f, 0.40f, 24.0f};
+constexpr Shake SHAKE_ALTAR      = {2.0f, 0.22f, 30.0f};
+constexpr Shake SHAKE_DASH       = {0.7f, 0.10f, 60.0f};
+
+// -- Muerte del enemigo -------------------------------------------------------
+constexpr float DEATH_PUSH       = 130.0f;  // el cadaver sale despedido y frena
+constexpr float DEATH_FADE_FRAC  = 0.40f;   // ultimo tramo de la animacion: se apaga
+
+// -- Movimiento ---------------------------------------------------------------
+constexpr float MOVE_ACCEL       = 22.0f;   // 1/s hacia la velocidad pedida (~0,13 s al tope)
+constexpr float MOVE_BRAKE       = 10.0f;   // identico a la friccion que tenia el profeta
+constexpr float DASH_TRAIL_RATE  = 0.022f;  // segundos entre estelas del dash
+constexpr float COYOTE_TIME      = 0.12f;   // margen sin transiciones tras cambiar de sala
+
+// -- Rumble de mando (0..1) ---------------------------------------------------
+constexpr float RUMBLE_HIT        = 0.22f;
+constexpr float RUMBLE_PLAYER_HIT = 0.75f;
+constexpr float RUMBLE_DASH       = 0.30f;
+constexpr float RUMBLE_KILL       = 0.35f;
+constexpr float RUMBLE_BOSS_KILL  = 1.00f;
+
+// -- Auto-mira "Asistida" (GDD 4.2 pide tres estados, no un interruptor) ------
+// ON fija el objetivo y el tiro deja de ser tuyo; OFF no ayuda en nada. "Asistido" es el
+// termino medio: el disparo sale en TU direccion, y solo si hay un objetivo dentro de un
+// cono estrecho se corrige el angulo una fraccion hacia el. Un cono ancho lo convierte en
+// ON con otro nombre; uno estrecho no se nota. 22 grados es aproximadamente lo que separa
+// dos de las ocho direcciones del teclado (45 grados), asi que corrige el error de apuntar
+// y no elige objetivo por ti.
+constexpr float AIM_ASSIST_CONE_DEG = 22.0f;
+constexpr float AIM_ASSIST_PULL     = 0.65f;   // 0 = no corrige, 1 = corrige del todo (= ON)
+
+// -- Sensibilidad de apuntado (1..10, 5 = 1.0) --------------------------------
+// El ajuste NO cambia una velocidad de camara (aqui no hay camara que apuntar): cambia
+// CUANTO hay que arrastrar el dedo (o desviar el stick) para que el apuntado registre y
+// llegue a su tope. Multiplicador = 1 + (valor - 5) * SENSITIVITY_STEP.
+constexpr float SENSITIVITY_STEP     = 0.14f;   // 1 -> x0.44, 5 -> x1.0, 10 -> x1.70
+constexpr int   SENSITIVITY_DEFAULT  = 5;
+
+} // namespace Feel
+
+// =============================================================================
+// Ajustes del jugador (GDD 4.2)
+// =============================================================================
+// Vive aqui y no en save.h porque lo nombran Input, Player y el menu de Opciones, y
+// ninguno de ellos tiene por que saber que existe un fichero de guardado.
+enum class AimMode : u8 {
+    Off      = 0,   // apuntas tu y solo tu
+    Assisted = 1,   // iman suave dentro de AIM_ASSIST_CONE_DEG
+    On       = 2    // fija el objetivo (el comportamiento de siempre en movil)
+};
+
+// =============================================================================
 // Rooms
 // =============================================================================
 constexpr int ROOM_WIDTH          = GAME_WIDTH;
@@ -139,7 +221,7 @@ constexpr int   CHAPTERS_ACT_II  = 5;
 // =============================================================================
 constexpr float MOBILE_ENEMY_SPEED_MULT  = 0.9f;   // -10% enemy speed on mobile
 constexpr float WATER_SPEED_MULT         = 0.6f;   // Wading through a shallow-water tile
-constexpr float MOBILE_AUTOAIM_RANGE     = 80.0f;   // pixels
+constexpr float MOBILE_AUTOAIM_RANGE     = 80.0f;   // game units
 constexpr float MOBILE_SAVE_TIMEOUT_H    = 48.0f;   // hours before run expires
 constexpr float MOBILE_ABANDONED_REWARD  = 0.5f;    // 50% offerings from abandoned runs
 
@@ -150,7 +232,7 @@ constexpr float INHERITANCE_FAITH_RATIO  = 0.5f;    // 50% of accumulated faith
 constexpr float INHERITED_MIRACLE_POWER  = 0.7f;    // Elias miracles at 70% power for Eliseo
 
 // =============================================================================
-// Sprite sizes (in pixels, base resolution)
+// Sprite sizes (in game units; the sheets hold ASSET_SCALE texels per unit)
 // =============================================================================
 constexpr int SPRITE_CHAR_SIZE  = 32;  // Characters: 32x32
 constexpr int SPRITE_ENEMY_SIZE = 32;  // Enemies: 32x32

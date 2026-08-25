@@ -2,6 +2,7 @@
 // MANTLE - Pantallas de historia
 // =============================================================================
 
+#include "core/i18n.h"
 #include "ui/story.h"
 #include "game/rooms.h"
 #include <algorithm>
@@ -179,7 +180,7 @@ void StorySystem::render(Renderer& renderer) const {
     // Pie: solo cuando ya se ha revelado todo
     if (all_revealed()) {
         f32 blink = 0.55f + 0.45f * std::sin(clock * 3.4f);
-        const char* prompt = (page + 1 < page_count) ? "[ENTER] seguir leyendo" : "[ENTER] continuar";
+        const char* prompt = (page + 1 < page_count) ? tr("[ENTER] seguir leyendo", "[ENTER] keep reading") : tr("[ENTER] continuar", "[ENTER] continue");
         renderer.draw_text_centered(prompt, 166.0f, {210, 190, 150, static_cast<u8>(200 * blink)}, 0.8f);
         if (page_count > 1) {
             char pages_lbl[24];
@@ -196,10 +197,10 @@ void story_prologue(StorySystem& s) {
     ChapterLore l = get_prologue_lore();
     StoryPage p;
     p.title = "MANTLE";
-    p.subtitle = "Israel, siglo IX a.C.";
+    p.subtitle = tr("Israel, siglo IX a.C.", "Israel, 9th century BC");
     p.verse = l.verse;
     for (int i = 0; i < 4; i++) p.body[i] = l.lines[i];
-    p.footer = "Su nombre es Elías.";
+    p.footer = tr("Su nombre es Elías.", "His name is Elijah.");
     s.add(p);
 }
 
@@ -207,7 +208,7 @@ void story_chapter_card(StorySystem& s, int chapter) {
     ChapterDef def = get_chapter_def(chapter);
     ChapterLore l = get_chapter_lore(chapter);
     char title[32];
-    snprintf(title, sizeof(title), "CAPÍTULO %d", chapter);
+    snprintf(title, sizeof(title), tr("CAPÍTULO %d", "CHAPTER %d"), chapter);
 
     StoryPage p;
     p.title = title;
@@ -218,9 +219,9 @@ void story_chapter_card(StorySystem& s, int chapter) {
     // Acto II en azul/verde, Acto I en oro (paleta del GDD). Los capitulos que abren
     // acto llevan el acto en el subtitulo: son los dos unicos saltos de protagonista.
     if (chapter == 1) {
-        p.subtitle = std::string("ACTO I  ·  ") + def.name;
+        p.subtitle = std::string(tr("ACTO I  ·  ", "ACT I  ·  ")) + def.name;
     } else if (chapter == Config::CHAPTERS_ACT_I + 1) {
-        p.subtitle = std::string("ACTO II  ·  ") + def.name;
+        p.subtitle = std::string(tr("ACTO II  ·  ", "ACT II  ·  ")) + def.name;
     }
     if (chapter > Config::CHAPTERS_ACT_I) p.accent = {150, 205, 225, 255};
     s.add(p);
@@ -231,7 +232,7 @@ void story_chapter_outro(StorySystem& s, int chapter) {
     ChapterLore l = get_chapter_lore(chapter);
 
     StoryPage p;
-    p.title = "ESTÁ ESCRITO";
+    p.title = tr("ESTÁ ESCRITO", "IT IS WRITTEN");
     p.subtitle = def.name;
     p.verse = {nullptr, l.outro};
     p.footer = nullptr;
@@ -243,11 +244,11 @@ void story_ascension(StorySystem& s) {
     for (int page = 0; page < 3; page++) {
         ChapterLore l = get_ascension_lore(page);
         StoryPage p;
-        p.title = (page == 0) ? "EL ASCENSO" : "";
-        p.subtitle = (page == 0) ? "El torbellino del Jordán" : "";
+        p.title = (page == 0) ? tr("EL ASCENSO", "THE ASCENT") : "";
+        p.subtitle = (page == 0) ? tr("El torbellino del Jordán", "The whirlwind of the Jordan") : "";
         p.verse = l.verse;
         for (int i = 0; i < 4; i++) p.body[i] = l.lines[i];
-        if (page == 2) p.footer = "Heredas la mitad de su fe, su manto y dos milagros.";
+        if (page == 2) p.footer = tr("Heredas la mitad de su fe, su manto y dos milagros.", "You inherit half his faith, his mantle and two miracles.");
         p.accent = {245, 220, 160, 255};
         s.add(p);
     }
@@ -256,8 +257,8 @@ void story_ascension(StorySystem& s) {
 void story_epilogue(StorySystem& s) {
     ChapterLore l = get_epilogue_lore();
     StoryPage p;
-    p.title = "EL LEGADO";
-    p.subtitle = "Israel ha visto la mano de Dios";
+    p.title = tr("EL LEGADO", "THE LEGACY");
+    p.subtitle = tr("Israel ha visto la mano de Dios", "Israel has seen the hand of God");
     p.verse = l.verse;
     for (int i = 0; i < 4; i++) p.body[i] = l.lines[i];
     p.accent = {225, 220, 245, 255};

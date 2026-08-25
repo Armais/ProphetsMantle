@@ -1,0 +1,111 @@
+# Verificacion Track 1: los tres ajustes del GDD 4.2 + volumenes + idioma
+# Uso:  MANTLE.exe --script scripts/ajustes_check.txt
+#       (y luego OTRA VEZ el mismo guion: la segunda vuelta demuestra que persisten,
+#        porque su primer SAVEDUMP lee lo que dejo la primera)
+#
+# Que hay que ver en el LOG:
+#   SAVEDUMP ajustes musica=... efectos=... mira=... sens=... idioma=... banderas=0x...
+#     - mira:     0 OFF / 1 Asistido / 2 ON
+#     - banderas: bit 0 = vibracion. 0x1 = encendida, 0x0 = apagada
+#
+# Gates:
+#   1. Las seis filas se ajustan y el SAVEDUMP final las refleja.
+#   2. Al volver a entrar en Opciones se ensenan los valores nuevos (captura 92).
+#   3. Con Idioma = English el menu entero esta en ingles y NADA sale truncado.
+#   4. Los dos SAVEDUMP son los mismos en cada vuelta (el guion arranca con `defaults`).
+#      Para comprobar que PERSISTEN entre sesiones: correr el guion, y luego cualquier
+#      otro que empiece con `savedump` — traera musica=0.40 mira=1 sens=8 idioma=1
+#      banderas=0x0, que es como lo dejo este.
+
+# `defaults` deja los ajustes de fabrica: sin el, las filas que CICLAN (auto-mira,
+# vibracion, idioma) darian un resultado distinto en cada vuelta segun como quedaran
+# en la anterior, y el guion dejaria de ser una regresion.
+wait 1.0
+defaults
+wait 0.3
+savedump
+
+# --- Entrar en Opciones (fila 5 del menu principal) ---
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press confirm
+wait 0.6
+shot 90_opciones_es
+wait 0.1
+
+# --- Fila 0: Musica al 40% ---
+press left
+wait 0.15
+press left
+wait 0.15
+press left
+wait 0.15
+press left
+wait 0.15
+
+# --- Fila 2: Auto-mira OFF -> Asistido ---
+press down
+wait 0.15
+press down
+wait 0.15
+press right
+wait 0.3
+shot 91_auto_mira_asistido
+wait 0.1
+
+# --- Fila 3: Sensibilidad 5 -> 8 ---
+press down
+wait 0.15
+press right
+wait 0.15
+press right
+wait 0.15
+press right
+wait 0.15
+
+# --- Fila 4: Vibracion SI -> NO ---
+press down
+wait 0.15
+press confirm
+wait 0.3
+
+# --- Fila 5: Idioma Espanol -> English ---
+press down
+wait 0.15
+press right
+wait 0.5
+shot 92_opciones_en
+wait 0.1
+
+# --- Salir por "Volver" y comprobar que quedo guardado ---
+press down
+wait 0.15
+press confirm
+wait 0.5
+savedump
+
+# --- Volver a entrar: las filas ensenan lo que se dejo ---
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press confirm
+wait 0.6
+shot 93_opciones_persistidas
+wait 0.1
+
+quit

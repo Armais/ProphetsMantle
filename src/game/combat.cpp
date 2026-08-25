@@ -10,9 +10,10 @@
 #include "render/sprites.h"
 #include <SDL3/SDL.h>
 #include <cmath>
+#include <algorithm>
 
 static constexpr f32 PLAYER_HIT_IFRAMES = 1.0f;   // Invulnerability after taking a hit
-static constexpr f32 HIT_FLASH_TIME     = 0.12f;
+static constexpr f32 HIT_FLASH_TIME     = Config::Feel::HIT_FLASH_TIME;
 static constexpr f32 PLAYER_KNOCKBACK   = 160.0f;
 static constexpr f32 ENEMY_KNOCKBACK    = 90.0f;
 
@@ -140,8 +141,12 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
             // --- Handle collision based on entity types (order-independent) ---
             bool i_proj   = world.has(i, Component::Projectile);
             bool j_proj   = world.has(j, Component::Projectile);
-            bool i_enemy  = world.has(i, Component::EnemyAI);
-            bool j_enemy  = world.has(j, Component::EnemyAI);
+            // "enemy" = HOSTIL. Un discipulo lleva EnemyAI y no es un enemigo: ni hace
+            // dano al jugador, ni lo recibe de el, ni lo empuja.
+            bool i_enemy  = is_hostile(world, i);
+            bool j_enemy  = is_hostile(world, j);
+            bool i_ally   = is_ally(world, i);
+            bool j_ally   = is_ally(world, j);
             bool i_player = (i == world.player);
             bool j_player = (j == world.player);
             bool i_item   = world.has(i, Component::Item) && world.items[i].type == ItemComponent::Type::Pickup;
@@ -162,6 +167,7 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                     pr.mark_hit(enemy);
                     knock(world, enemy, pr.direction, ENEMY_KNOCKBACK);
                     events.enemy_hits++;
+                    if (world.enemy_ais[enemy].is_boss) events.boss_hits++;
                     if (apply_damage(world, proj, enemy, pr.damage)) on_enemy_killed(world, faith, enemy, events);
                 }
                 if (!pr.pierce) world.destroy(proj);
@@ -184,6 +190,14 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                     events.player_hits++;
                 }
                 world.destroy(j);
+            }
+            // Proyectil hostil contra un discipulo
+            else if ((i_proj && j_ally && !world.projectiles[i].friendly) ||
+                     (j_proj && i_ally && !world.projectiles[j].friendly)) {
+                Entity proj = i_proj ? i : j;
+                Entity ally = i_proj ? j : i;
+                apply_damage(world, proj, ally, world.projectiles[proj].damage);
+                world.destroy(proj);
             }
             // Enemy touches player (contact damage)
             else if ((i_enemy && j_player) || (j_enemy && i_player)) {
@@ -208,8 +222,41 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                     push(world, j, normal * ( overlap * 0.5f));
                 }
             }
-            // Enemy vs Enemy (push apart only)
-            else if (i_enemy && j_enemy) {
+            // Discipulo golpea a un hostil al tocarlo. Es todo su cuerpo a cuerpo: no
+            // hace falta codigo de ataque aparte, la colision ya es el golpe.
+            else if ((i_ally && j_enemy) || (j_ally && i_enemy)) {
+                Entity ally  = i_ally ? i : j;
+                Entity enemy = i_ally ? j : i;
+                Vec2 away = (world.transforms[enemy].position - world.transforms[ally].position);
+                if (world.has(ally, Component::Combat) && world.combats[ally].can_attack()) {
+                    knock(world, enemy, away, ENEMY_KNOCKBACK);
+                    events.enemy_hits++;
+                    if (world.enemy_ais[enemy].is_boss) events.boss_hits++;
+                    if (apply_damage(world, ally, enemy, world.combats[ally].damage))
+                        on_enemy_killed(world, faith, enemy, events);
+                    world.combats[ally].attack_timer = 0.8f;
+                    if (world.has(ally, Component::Animation))
+                        play_anim(world.animations[ally],
+                                  facing_anim(AnimID::AttackDown, world.transforms[ally].facing), true);
+                }
+                // Y el hostil le devuelve el golpe: un discipulo tiene vida propia y se
+                // puede perder, no es un escudo invulnerable
+                if (world.is_alive(enemy) && world.has(enemy, Component::Combat) &&
+                    world.combats[enemy].can_attack() && world.has(ally, Component::Health) &&
+                    world.healths[ally].is_alive()) {
+                    apply_damage(world, enemy, ally, world.combats[enemy].damage);
+                    world.combats[enemy].attack_timer = 1.0f;
+                }
+                push(world, i, normal * (-overlap * 0.5f));
+                push(world, j, normal * ( overlap * 0.5f));
+            }
+            // Un discipulo y el jugador se atraviesan: empujarse mutuamente en un pasillo
+            // era la forma mas rapida de convertir la ayuda en un estorbo.
+            else if ((i_ally && j_player) || (j_ally && i_player)) {
+                continue;
+            }
+            // Enemy vs Enemy / discipulo vs discipulo (push apart only)
+            else if ((i_enemy || i_ally) && (j_enemy || j_ally)) {
                 push(world, i, normal * (-overlap * 0.5f));
                 push(world, j, normal * ( overlap * 0.5f));
             }
@@ -238,7 +285,22 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
     if (is_boss) {
         SDL_Log("boss hit: dmg %.1f  hp %.0f -> %.0f/%.0f%s", damage, before, health.current,
                 health.max, (health.current >= before) ? "  [NO DAMAGE]" : "");
-        world.hitstop = 0.05f;   // impact freeze: boss hits need weight
+    }
+
+    // ---- Congelacion de impacto, escalada por el mordisco ----------------------------
+    // Antes solo la tenian los jefes, y un soldado reventado de un tiro no se distinguia
+    // de un roce. Se toma el MAXIMO, nunca la suma: un milagro de area que toca a ocho
+    // enemigos a la vez tiene que pesar como el peor golpe, no como ocho.
+    f32 dealt_now = before - health.current;
+    if (dealt_now > 0.0f) {
+        f32 bite = (health.max > 0.0f) ? dealt_now / health.max : 0.0f;
+        f32 stop = Config::Feel::HITSTOP_MIN + bite * Config::Feel::HITSTOP_PER_BITE;
+        if (is_boss)             stop = std::max(stop, Config::Feel::HITSTOP_BOSS);
+        if (target == world.player) stop = Config::Feel::HITSTOP_PLAYER;
+        world.hitstop = std::max(world.hitstop, std::min(stop, Config::Feel::HITSTOP_MAX));
+        // Sonda de tacto (comando `feel`): solo mide.
+        if (target == world.player) world.dmg_taken += dealt_now;
+        else                        world.dmg_dealt += dealt_now;
     }
     // Floating number over the target (a few frames of feedback; capped so a nuke cannot flood)
     Vec2 tpos = world.has(target, Component::Transform) ? world.transforms[target].position : Vec2{0, 0};
@@ -248,28 +310,48 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
     if (target == world.player) {
         health.iframes_timer = PLAYER_HIT_IFRAMES;
         spawn_particles(world, tpos, {230, 60, 50, 255}, 8, 80.0f, 0.4f);
+        spawn_fx(world, tpos, FxID::Impact, {255, 120, 100, 235}, 22.0f, 0.24f);
     } else {
         spawn_particles(world, tpos, {255, 150, 70, 255}, 4, 60.0f, 0.3f);
+        // El destello del golpe sale de la hoja propia; el tinte lo distingue del que
+        // recibe el jugador sin necesitar otra fila de dibujo.
+        spawn_fx(world, tpos, FxID::Impact, {255, 235, 195, 230}, 18.0f, 0.20f);
     }
 
     if (!health.is_alive()) {
-        if (target != world.player) spawn_particles(world, tpos, {255, 200, 120, 255}, 14, 90.0f, 0.5f);
         if (target != world.player) {
+            // El final se telegrafia: mas pavesas, un anillo que se abre y el cadaver
+            // saliendo despedido en la direccion del golpe. Antes desaparecia sin mas.
+            spawn_particles(world, tpos, {255, 200, 120, 255}, 18, 105.0f, 0.55f);
+            // Onda de la muerte: la hoja propia si esta cargada, y si no el icono del
+            // tileset de siempre. Un efecto nuevo no puede dejar al juego sin feedback.
+            if (spawn_fx(world, tpos, FxID::Ring, {255, 226, 180, 225}, 26.0f, 0.28f) == ENTITY_NONE)
+                spawn_vfx(world, tpos, TileSprite::Star, {255, 225, 170, 210}, 9.0f, 0.22f, 3.0f, 220.0f);
+
+            Vec2 away = {0, 0};
+            if (attacker != ENTITY_NONE && world.is_alive(attacker) &&
+                world.has(attacker, Component::Transform))
+                away = tpos - world.transforms[attacker].position;
+            if (away.length_sq() < 0.0001f) away = {0, -1};
+
             bool has_sheet = world.has(target, Component::Sprite) &&
                              world.sprites[target].texture_id != TEXTURE_NONE &&
                              world.has(target, Component::Animation);
             if (has_sheet) {
                 // Leave an inert corpse for the Death animation, then auto-destroy.
                 // Health stays at 0 so select_animation() picks AnimID::Death.
+                // El Movement se CONSERVA (velocidad a cero) para que el empujon del
+                // remate se vea: sin colisionador ya no estorba a nadie, y update_enemy_ai
+                // salta los cadaveres por vida, no por componente.
                 if (world.has(target, Component::Movement)) {
                     world.movements[target].velocity = {0, 0};
-                    world.movements[target].knockback = {0, 0};
-                    world.remove(target, Component::Movement);
+                    world.movements[target].knockback = away.normalized() * Config::Feel::DEATH_PUSH;
                 }
                 world.remove(target, Component::Collider);
                 world.remove(target, Component::Combat);
                 world.add(target, Component::Lifetime);
                 world.lifetimes[target].remaining = anim_duration(AnimID::Death);
+                world.lifetimes[target].total = anim_duration(AnimID::Death);
                 // Keep EnemyAI (name/boss flag) for on_enemy_killed; AI skips dead entities
             } else {
                 world.destroy(target);
@@ -284,6 +366,8 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
 
 void on_enemy_killed(ECSWorld& world, FaithSystem& faith, Entity enemy, CombatEvents& events) {
     events.enemy_kills++;
+    if (world.has(enemy, Component::EnemyAI) && world.enemy_ais[enemy].enemy_type < 32)
+        events.kill_mask |= (1u << world.enemy_ais[enemy].enemy_type);
     Vec2 pos = world.has(enemy, Component::Transform) ? world.transforms[enemy].position : Vec2{160, 90};
     bool boss = false;
     u32 type = 0;
@@ -328,7 +412,7 @@ Entity pick_target(const ECSWorld& world, Vec2 from, f32 max_range) {
     Entity best = ENTITY_NONE;
     f32 best_score = -1e9f;
     for (u32 e = 0; e < world.entity_count; e++) {
-        if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+        if (!world.is_alive(e) || !is_hostile(world, e) || !world.has(e, Component::Health)) continue;
         if (!world.healths[e].is_alive()) continue;
         f32 dist = world.transforms[e].position.distance_to(from);
         if (dist > max_range) continue;
@@ -417,6 +501,46 @@ void spawn_particles(ECSWorld& world, Vec2 position, Color color, int count, f32
         world.add(e, Component::Lifetime);
         world.lifetimes[e].remaining = life * randf_range(0.6f, 1.3f);
     }
+}
+
+// Celda de la hoja de efectos, en texeles. Ver tools/blender/mantle_sprites/vfx.py.
+static constexpr f32 FX_CELL   = 128.0f;
+static constexpr int FX_FRAMES = 8;
+
+Entity spawn_fx(ECSWorld& world, Vec2 position, FxID id, Color tint,
+                f32 size_units, f32 duration, i32 z_order) {
+    if (world.vfx_sheet == TEXTURE_NONE || id >= FxID::COUNT) return ENTITY_NONE;
+    Entity e = world.create();
+    if (e == ENTITY_NONE) return e;
+
+    world.add(e, Component::Transform);
+    world.transforms[e].position = position;
+    // La celda son 32 unidades de juego (128 texeles / ASSET_SCALE 4), NO las 16 del
+    // tileset: escalar contra 16 dejaba todos los efectos al doble de lo pedido.
+    f32 sc = size_units / (FX_CELL / static_cast<f32>(Config::ASSET_SCALE));
+    world.transforms[e].scale = {sc, sc};
+
+    world.add(e, Component::Sprite);
+    world.sprites[e].texture_id = world.vfx_sheet;
+    world.sprites[e].src_rect = {0.0f, static_cast<f32>(id) * FX_CELL, FX_CELL, FX_CELL};
+    world.sprites[e].tint = tint;
+    world.sprites[e].z_order = z_order;
+
+    world.add(e, Component::Animation);
+    auto& an = world.animations[e];
+    an.row = static_cast<u32>(id);
+    an.frame_count = FX_FRAMES;
+    an.frame_time = duration / static_cast<f32>(FX_FRAMES);
+    an.current_frame = 0;
+    an.timer = 0.0f;
+    an.looping = false;
+    an.playing = true;
+
+    world.add(e, Component::Lifetime);
+    world.lifetimes[e].remaining = duration;
+    world.lifetimes[e].total = duration;
+    world.lifetimes[e].fade = true;   // el ultimo tramo se apaga en vez de desaparecer
+    return e;
 }
 
 Entity spawn_vfx(ECSWorld& world, Vec2 position, TileSprite sprite, Color tint,

@@ -21,6 +21,17 @@ struct MetaUpgrade {
     const char* description;
     int cost;       // Offerings
     bool unlocked;
+    // Objeto que esta mejora mete en el sorteo de cartas (ItemDef::id), o NO_ITEM.
+    // El GDD prometia "desbloquear items/personajes" en el paso 7 del bucle y hasta ahora
+    // las 8 mejoras eran solo cifras: esto es lo que le da sentido a seguir ahorrando.
+    // Va el ULTIMO y con valor por defecto: las mejoras que no desbloquean nada compilan
+    // igual sin nombrarlo.
+    static constexpr u32 NO_ITEM = 0xFFFFFFFFu;
+    u32 unlocks_item = NO_ITEM;
+    // Skin del cayado que abre esta mejora (ver get_staff_skin), o NO_ITEM. Es lo que el
+    // usuario decidio que significaran los "personajes" del GDD: variantes cosmeticas, no
+    // un tercer profeta jugable.
+    u32 unlocks_skin = NO_ITEM;
 };
 
 struct ProgressionSystem {

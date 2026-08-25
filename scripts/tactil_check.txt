@@ -1,0 +1,156 @@
+# Verificacion Track 4: controles tactiles completos (GDD 4.2)
+# Uso:  MANTLE.exe --touch --script scripts/tactil_check.txt
+# --touch es OBLIGATORIO: enciende Input::touch_ui. Sin el, en escritorio no se dibuja
+# ni se atiende ningun control tactil (y esa es justamente la regresion a proteger).
+#
+# El raton NO genera eventos SDL_EVENT_FINGER_*, asi que los toques se sintetizan con
+# los comandos `touch x y [dedo]` / `drag x y [dedo]` / `untouch x y [dedo]`, en
+# coordenadas de juego (320x180).
+#
+# Botones:  DASH (303,123)  USAR (276,123)   milagros Q (303,155) E (276,155) F (249,155)
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+faith 100
+learn 0 0
+learn 2 1
+learn 9 2
+give 9
+wait 0.6
+
+# --- Joystick de movimiento: nace donde baja el dedo, en la mitad izquierda ---
+touch 60 130
+wait 0.1
+drag 92 108
+wait 0.4
+shot 90_joystick_mover
+wait 0.1
+untouch 92 108
+wait 0.4
+
+# --- Botones en pantalla (dash + consumible sobre las celdas de milagro) ---
+shot 91_botones_tactiles
+wait 0.1
+
+touch 303 123
+wait 0.15
+shot 92_dash_pulsado
+wait 0.1
+untouch 303 123
+wait 0.6
+
+# --- Consumible: el Agua del Jordan cura 30 HP ---
+touch 276 123
+wait 0.2
+untouch 276 123
+wait 0.5
+shot 93_consumible_usado
+wait 0.1
+
+# --- Tap corto sobre la celda Q: lanza el milagro ---
+touch 303 155
+wait 0.15
+untouch 303 155
+wait 0.7
+shot 94_milagro_lanzado
+wait 0.1
+
+# --- Hold sobre la celda E: abre su ficha y NO lo lanza ---
+touch 276 155
+wait 0.9
+shot 95_ficha_milagro
+wait 0.1
+untouch 276 155
+wait 0.5
+
+# --- Apuntado manual: hold + drag en la mitad derecha ---
+rstick 0
+wait 0.2
+touch 200 90
+wait 0.1
+drag 245 66
+wait 0.35
+shot 96_apuntado_manual
+wait 0.1
+untouch 245 66
+wait 0.4
+
+# --- Stick derecho (GDD 4.2 "opcional"): apunta DESDE EL PRIMER PIXEL ---
+# Con la opcion apagada hay que arrastrar TOUCH_DRAG_AIM (6 unidades) para que el
+# apuntado registre; con ella encendida el stick nace ya activo y se dibuja. Aqui se
+# arrastra UNA unidad, que esta por debajo de cualquier umbral. Lo que se lee NO son las
+# capturas sino el LOG: tiene que salir UNA sola linea
+#     Touch aim ON (right stick)
+# y ninguna "(drag threshold)". Comparar las dos capturas a ojo no vale: el mapa pone
+# altares dorados por ahi y su adorno se confunde con la mira (dos intentos perdidos).
+#
+# La secuencia buena del log, entera:
+#   rstick = 0  /  Touch aim ON (drag threshold)   <- hold+drag de 45 unidades: engancha
+#   rstick = 0  /  (ninguna linea)                 <- arrastre de 1 unidad: NO engancha
+#   rstick = 1  /  Touch aim ON (right stick)      <- el MISMO arrastre de 1 unidad si
+#   rstick = 0
+#
+# Ojo, y costo una pasada: el umbral NO es fijo, es TOUCH_DRAG_AIM entre la
+# SENSIBILIDAD, y la sensibilidad vive en el guardado y sobrevive entre sesiones. Con
+# sensibilidad 8 el umbral baja de 6 a 4,2 unidades y un arrastre de 5 lo cruzaba solo,
+# haciendo que las dos capturas salieran iguales.
+#
+# Ojo con DONDE se toca: la primera version de esta prueba caia sobre un altar del mapa
+# y el adorno del suelo se confundia con la mira. (232, 118) es suelo raso.
+# `rstick 0` explicito: la opcion vive en el guardado y sobrevive entre sesiones, asi que
+# sin esto el caso "sin stick" heredaba el ON de la vuelta anterior.
+rstick 0
+wait 0.2
+touch 232 118
+wait 0.1
+drag 233 118
+wait 0.3
+shot 98_sin_stick_dcho
+wait 0.1
+untouch 233 118
+wait 0.4
+
+rstick 1
+wait 0.2
+touch 232 118
+wait 0.1
+drag 233 118
+wait 0.3
+shot 99_con_stick_dcho
+wait 0.1
+untouch 233 118
+wait 0.4
+
+# El reparto de zona con los botones NO se ignora: un dedo que baja DENTRO de una celda
+# de milagro la pulsa y nunca se convierte en stick (los botones se comprueban antes y
+# hacen return). Se comprueba lanzando el milagro con el stick derecho encendido.
+touch 303 155
+wait 0.15
+untouch 303 155
+wait 0.7
+shot 9A_boton_gana_al_stick
+wait 0.1
+rstick 0
+wait 0.2
+
+# --- Swipe de dos dedos: pausa ---
+touch 120 90 0
+wait 0.15
+touch 175 90 1
+wait 0.15
+drag 175 145 1
+wait 0.5
+shot 97_pausa_por_gesto
+wait 0.1
+untouch 175 145 1
+wait 0.1
+untouch 120 90 0
+wait 0.3
+
+quit

@@ -4,6 +4,7 @@
 // MANTLE - Room System (GDD 3.1, 7.1)
 // =============================================================================
 
+#include "core/i18n.h"
 #include "core/types.h"
 #include "core/config.h"
 #include "game/enemies.h"
@@ -268,16 +269,16 @@ struct ChapterDef {
 
 inline ChapterDef get_chapter_def(int chapter) {
     switch (chapter) {
-        case 1:  return {"El Arroyo Querit",     "Cañón / Arroyo",      1, 3, 3, EnemyType::SoldadoDeAcab,   "Capitán de Acab",          BossPattern::CapitanDeAcab};
-        case 2:  return {"La Viuda de Sarepta",  "Aldea fenicia",       2, 3, 3, EnemyType::ProfetaDeBaal,   "Sacerdote de Baal",        BossPattern::SacerdoteBaal};
-        case 3:  return {"El Monte Carmelo",     "Montaña",             3, 4, 3, EnemyType::ProfetaDeBaal,   "Los 450 Profetas de Baal", BossPattern::ProfetasDeBaal};
-        case 4:  return {"La Cueva de Horeb",    "Desierto / Cueva",    4, 3, 3, EnemyType::LeonDelDesierto, "Tu Propia Desesperación",  BossPattern::Desesperacion};
-        case 5:  return {"El Llamado",           "Campos",              5, 4, 3, EnemyType::ArqueroReal,     "Acab y Jezabel",           BossPattern::AcabYJezabel};
-        case 6:  return {"Las Aguas de Jericó",  "Ciudad corrupta",     6, 3, 3, EnemyType::AguaCorrupta,    "Espíritu de Corrupción",   BossPattern::EspirituCorrupto};
-        case 7:  return {"El Aceite de la Viuda","Aldea pobre",         7, 3, 3, EnemyType::SoldadoSirio,    "El Acreedor",              BossPattern::Acreedor};
-        case 8:  return {"El Hijo Sunamita",     "Casa noble",          8, 3, 3, EnemyType::IdolatraDeRimon, "La Muerte",                BossPattern::LaMuerte};
-        case 9:  return {"Naamán el Sirio",      "Campamento / Jordán", 9, 4, 3, EnemyType::GeneralSirio,    "Guiezi el Codicioso",      BossPattern::Guiezi};
-        case 10: return {"El Ejército Celestial","Ciudad sitiada",     10, 4, 4, EnemyType::GeneralSirio,    "Ben-adad de Siria",        BossPattern::BenAdad};
+        case 1:  return {tr("El Arroyo Querit", "The Brook Cherith"),     tr("Cañón / Arroyo", "Canyon / Brook"),      1, 3, 3, EnemyType::SoldadoDeAcab,   tr("Capitán de Acab", "Ahab's Captain"),          BossPattern::CapitanDeAcab};
+        case 2:  return {tr("La Viuda de Sarepta", "The Widow of Zarephath"),  tr("Aldea fenicia", "Phoenician village"),       2, 3, 3, EnemyType::ProfetaDeBaal,   tr("Sacerdote de Baal", "Priest of Baal"),        BossPattern::SacerdoteBaal};
+        case 3:  return {tr("El Monte Carmelo", "Mount Carmel"),     tr("Montaña", "Mountain"),             3, 4, 3, EnemyType::ProfetaDeBaal,   tr("Los 450 Profetas de Baal", "The 450 Prophets of Baal"), BossPattern::ProfetasDeBaal};
+        case 4:  return {tr("La Cueva de Horeb", "The Cave of Horeb"),    tr("Desierto / Cueva", "Desert / Cave"),    4, 3, 3, EnemyType::LeonDelDesierto, tr("Tu Propia Desesperación", "Your Own Despair"),  BossPattern::Desesperacion};
+        case 5:  return {tr("El Llamado", "The Calling"),           tr("Campos", "Fields"),              5, 4, 3, EnemyType::ArqueroReal,     tr("Acab y Jezabel", "Ahab and Jezebel"),           BossPattern::AcabYJezabel};
+        case 6:  return {tr("Las Aguas de Jericó", "The Waters of Jericho"),  tr("Ciudad corrupta", "Corrupt city"),     6, 3, 3, EnemyType::AguaCorrupta,    tr("Espíritu de Corrupción", "Spirit of Corruption"),   BossPattern::EspirituCorrupto};
+        case 7:  return {tr("El Aceite de la Viuda", "The Widow's Oil"),tr("Aldea pobre", "Poor village"),         7, 3, 3, EnemyType::SoldadoSirio,    tr("El Acreedor", "The Creditor"),              BossPattern::Acreedor};
+        case 8:  return {tr("El Hijo Sunamita", "The Shunammite's Son"),     tr("Casa noble", "Noble house"),          8, 3, 3, EnemyType::IdolatraDeRimon, tr("La Muerte", "Death"),                BossPattern::LaMuerte};
+        case 9:  return {tr("Naamán el Sirio", "Naaman the Syrian"),      tr("Campamento / Jordán", "Camp / Jordan"), 9, 4, 3, EnemyType::GeneralSirio,    tr("Guiezi el Codicioso", "Gehazi the Covetous"),      BossPattern::Guiezi};
+        case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"),     10, 4, 4, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
         default: return {"???",                  "???",                  0, 3, 3, EnemyType::SoldadoDeAcab,  "???",                      BossPattern::CapitanDeAcab};
     }
 }

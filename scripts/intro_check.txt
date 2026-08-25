@@ -1,0 +1,66 @@
+# =============================================================================
+# Prologo cinematico "El Cielo Cerrado" (ui/cinematic.h)
+# =============================================================================
+# Con --script el prologo NO se lanza solo (los demas guiones esperan el menu al
+# arrancar), asi que hay que pedirlo con `intro`. `cine <n>` salta a una estampa
+# concreta y para el avance automatico, para poder fotografiarla.
+#
+#   MANTLE.exe --script scripts/intro_check.txt
+# =============================================================================
+
+say === PROLOGO: EL CIELO CERRADO ===
+wait 0.4
+shot cine_00_menu
+wait 0.1
+
+intro
+cine 0
+wait 2.2
+shot cine_1_tierra
+wait 0.1
+
+cine 1
+wait 2.2
+shot cine_2_acab
+wait 0.1
+
+cine 2
+wait 2.2
+shot cine_3_jezabel
+wait 0.1
+
+cine 3
+wait 2.2
+shot cine_4_caceria
+wait 0.1
+
+# La escena del monte: el haz de luz entra a los 2,8 s
+cine 4
+wait 4.6
+shot cine_5_galaad
+wait 0.1
+
+cine 5
+wait 2.2
+shot cine_6_trono
+wait 0.1
+
+cine 6
+wait 2.2
+shot cine_7_querit
+wait 0.1
+
+# El titulo entra a los 0,9 s y tarda 1,4 en revelarse
+cine 7
+wait 3.0
+shot cine_8_titulo
+wait 0.1
+
+# ESC salta el prologo entero y cae en el menu (ahora con la fila "Prólogo")
+press cancel
+wait 0.6
+shot cine_09_menu_tras_saltar
+wait 0.2
+
+say --- prologo verificado ---
+quit

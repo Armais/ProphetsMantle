@@ -227,6 +227,9 @@ u32 Renderer::load_texture(const char* path, bool smooth) {
         return TEXTURE_NONE;
     }
 
+    // Everything the player looks at is LINEAR: the art is smooth "3D figurine", not pixel art.
+    // smooth=false exists for ATLASES ONLY (the tileset), where CLAMP is texture-wide and abutting
+    // cells would bleed into each other under linear filtering. It is a sampling fix, not a style.
     SDL_SetTextureScaleMode(tex, smooth ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 
     TextureEntry entry;
@@ -271,7 +274,11 @@ void Renderer::end_frame() {
 
     // Draw the target scaled to the viewport (linear)
     SDL_RenderTexture(sdl, target, nullptr, &viewport);
+}
 
+// Separado de end_frame para que entre los dos quepa la pasada de superposicion en
+// vertical (begin_overlay/end_overlay), que dibuja en las bandas negras.
+void Renderer::present() {
     SDL_RenderPresent(sdl);
 }
 
@@ -340,9 +347,12 @@ void Renderer::draw_sorted(std::vector<DrawCmd>& cmds) {
 }
 
 bool Renderer::save_screenshot(const char* path, int scale) {
-    // Read back the render target (full pixel size, e.g. 1280x720); we rebind explicitly here.
+    // Normalmente se lee el objetivo interno (1280x720), que es lo que esperan todos los
+    // guiones. En VERTICAL se lee la VENTANA entera: si no, la captura se quedaria con el
+    // area de juego y sin las bandas negras, que es justamente donde estan los controles
+    // que se quieren comprobar. Hay que llamarla ANTES de present().
     SDL_Texture* prev = SDL_GetRenderTarget(sdl);
-    SDL_SetRenderTarget(sdl, target);
+    SDL_SetRenderTarget(sdl, is_portrait() ? nullptr : target);
     SDL_Surface* surf = SDL_RenderReadPixels(sdl, nullptr);
     SDL_SetRenderTarget(sdl, prev);
     if (!surf) {
@@ -351,6 +361,8 @@ bool Renderer::save_screenshot(const char* path, int scale) {
     }
     bool ok = false;
     if (scale > 1) {
+        // Debug zoom (scale > 1): NEAREST so a texel stays a square and can be inspected.
+        // The game itself is never drawn this way -- see load_texture.
         SDL_Surface* big = SDL_ScaleSurface(surf, surf->w * scale, surf->h * scale, SDL_SCALEMODE_NEAREST);
         if (big) {
             ok = IMG_SavePNG(big, path);
@@ -489,30 +501,68 @@ void Renderer::set_camera(Vec2 position) {
     };
 }
 
-void Renderer::shake_camera(f32 intensity, f32 duration) {
+void Renderer::shake_camera(f32 intensity, f32 duration, f32 frequency) {
+    // Lo que queda de la sacudida en curso, ya con su envolvente aplicada. Una sacudida
+    // pequena que llega detras de una grande NO la corta: gana la que se sienta mas.
+    f32 live = 0.0f;
+    if (shake_timer > 0.0f && shake_duration > 0.0f) {
+        f32 k = shake_timer / shake_duration;
+        live = shake_intensity * k * k;
+    }
+    if (intensity < live) return;
     shake_intensity = intensity;
-    shake_timer = duration;
+    shake_timer     = duration;
+    shake_duration  = duration;
+    shake_freq      = frequency;
+    shake_phase     = randf() * 6.2831853f;   // dos golpes seguidos no repiten el trazo
 }
 
 void Renderer::update_shake(f32 dt) {
-    if (shake_timer > 0.0f) {
-        shake_timer -= dt;
-        camera_shake = {
-            randf_range(-shake_intensity, shake_intensity),
-            randf_range(-shake_intensity, shake_intensity)
-        };
-        // Decay
-        shake_intensity *= 0.9f;
-    } else {
+    if (shake_timer <= 0.0f || shake_duration <= 0.0f) {
+        shake_timer = 0.0f;
         camera_shake = {0, 0};
+        return;
     }
+    shake_timer -= dt;
+    if (shake_timer <= 0.0f) { shake_timer = 0.0f; camera_shake = {0, 0}; return; }
+
+    shake_phase += shake_freq * dt;
+    // Envolvente cuadratica: la sacudida se APAGA en vez de cortarse de golpe (el
+    // decaimiento anterior era por frame, asi que a 30 fps duraba el doble).
+    f32 k   = shake_timer / shake_duration;
+    f32 mag = shake_intensity * k * k;
+    // Dos senos inconmensurables: un trazo continuo en vez del ruido blanco por frame,
+    // que a 320x180 se leia como parpadeo del bordillo, no como un golpe.
+    camera_shake = {
+        std::sin(shake_phase)               * mag,
+        std::sin(shake_phase * 1.37f + 1.1f) * mag
+    };
 }
 
 Vec2 Renderer::world_to_screen(Vec2 world_pos) const {
     return {
-        world_pos.x - camera_offset.x + camera_shake.x,
-        world_pos.y - camera_offset.y + camera_shake.y
+        world_pos.x - camera_offset.x + camera_shake.x + ui_offset.x,
+        world_pos.y - camera_offset.y + camera_shake.y + ui_offset.y
     };
+}
+
+void Renderer::begin_overlay() {
+    SDL_SetRenderTarget(sdl, nullptr);
+    f32 s = (viewport.w > 0.0f) ? viewport.w / static_cast<f32>(Config::GAME_WIDTH) : 1.0f;
+    SDL_SetRenderScale(sdl, s, s);
+    // El origen se lleva a la esquina del area de juego SUMANDOLO a las coordenadas y no
+    // con SDL_SetRenderViewport: en SDL3 el viewport y la escala interactuan de forma que
+    // es facil equivocarse, y esto es una suma.
+    ui_offset = {viewport.x / s, viewport.y / s};
+    overlay_active = true;
+    camera_offset = {0, 0};
+    camera_shake  = {0, 0};
+}
+
+void Renderer::end_overlay() {
+    overlay_active = false;
+    ui_offset = {0, 0};
+    SDL_SetRenderScale(sdl, 1.0f, 1.0f);
 }
 
 Vec2 Renderer::window_to_game(Vec2 window_pos) const {

@@ -1,0 +1,115 @@
+# Verificacion Track 9: cosmeticos (skins del cayado) y la puerta de contenido
+# Uso:  MANTLE.exe --script scripts/cosmetico_check.txt
+#
+# Las tres cosas que el GDD mete en la misma tabla y que NO son la misma:
+#   * Premium 4,99: NO necesita una linea de codigo. Es un precio en la ficha de la
+#     tienda. Se documenta y se cierra.
+#   * Cosmeticos: esto. Sin ninguna dependencia externa, comprados con OFRENDAS (la
+#     moneda que ya existe) y no con dinero. "NO pay-to-win" lo dice el propio GDD: una
+#     skin es un TINTE sobre el proyectil y el fogonazo, y no toca ni una cifra.
+#   * Free-to-Start (Acto I gratis / Acto II de pago): necesita entitlements y tienda.
+#     Aqui solo queda la PUERTA (`SaveData::entitlements`), que hoy se concede sola.
+#
+# Que hay que ver en el LOG:
+#   SAVEDUMP ... skins=0x1/0 derechos=0xFFFFFFFF   <- de partida: solo la skin 0
+#   SAVEDUMP ... skins=0xF/2 ...                   <- las cuatro, con la 2 equipada
+#
+# Gates:
+#   1. Comprar la mejora desbloquea la skin y el bit sobrevive a delete_save.
+#   2. La fila "Cayado" de Opciones NO aparece con una sola skin (una fila que solo
+#      ofrece lo que ya llevas no es una opcion) y SI aparece con varias.
+#   3. El disparo cambia de color en partida (capturas C2 y C3).
+
+wait 1.0
+defaults
+metareset
+wait 0.3
+savedump
+
+# --- Con una sola skin la fila no esta: Opciones tiene las de siempre ---
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.7
+shot C0_opciones_sin_cayado
+wait 0.1
+press cancel
+wait 0.6
+
+# --- Comprar las tres skins ---
+meta 12
+wait 0.2
+meta 13
+wait 0.2
+meta 14
+wait 0.3
+savedump
+
+# --- Ahora la fila SI esta, y cicla ---
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press confirm
+wait 0.7
+shot C1_opciones_con_cayado
+wait 0.1
+
+# --- Equipar la skin 2 (Luz del Jordan): bajar a la fila "Cayado" y ciclar ---
+# Filas en escritorio con las skins ya compradas: 0 Musica, 1 Efectos, 2 Auto-mira,
+# 3 Sensibilidad, 4 Vibracion, 5 Cayado, 6 Idioma, 7 Volver. (No hay "Stick dcho.":
+# esa fila solo existe en tactil.)
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press down
+wait 0.15
+press right
+wait 0.25
+press right
+wait 0.35
+shot C2_cayado_equipado
+wait 0.1
+press cancel
+wait 0.7
+savedump
+
+# --- Y que se vea en partida: el disparo sale del color de la skin ---
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+# La captura tiene que caer con el proyectil AUN EN PANTALLA: a 280 unidades/s y 120 de
+# alcance, dura menos de medio segundo. Un `hold attack 0.5` + captura llega tarde.
+press attack
+wait 0.08
+shot C3_disparo_con_skin
+wait 0.1
+press attack
+wait 0.08
+shot C4_disparo_con_skin_2
+wait 0.1
+
+quit

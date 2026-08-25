@@ -24,16 +24,43 @@ struct MenuSystem {
 
     // Continue / Settings state
     bool has_continue = false;
+    // Caducidad movil (GDD 4.4): a las 48 h la partida deja de poder continuarse y la fila
+    // "Continuar" pasa a ofrecer las ofrendas de la partida abandonada.
+    bool continue_expired     = false;
+    int  abandoned_offerings  = 0;
     int  offerings    = 0;   // Se muestra en el titulo (moneda de El Santuario)
     MenuScreen settings_origin = MenuScreen::Title;
-    f32 settings_music_vol = 0.8f;
-    f32 settings_sfx_vol   = 1.0f;
-    bool settings_auto_aim = false;   // Mirrors Input::auto_aim_enabled (on by default on mobile)
+    // Espejo de los ajustes (GDD 4.2). La fuente de la verdad es SaveData (v7); el menu
+    // escribe aqui y el Engine los reparte con apply_settings_from_save(). MenuSystem no
+    // conoce ni el guardado ni Input a proposito: solo pinta y navega.
+    f32  settings_music_vol   = 0.8f;
+    f32  settings_sfx_vol     = 1.0f;
+    int  settings_aim_mode    = 0;    // Config::AimMode: 0 OFF / 1 Asistido / 2 ON
+    int  settings_sensitivity = 5;    // 1..10
+    bool settings_rumble      = true;
+    bool settings_rstick      = false;   // segundo joystick virtual (solo tactil)
+    bool settings_show_rstick = false;   // esa fila solo se pinta en tactil
+
+    // Filas de Opciones. Van por ID y no por indice fijo porque la del stick derecho solo
+    // existe en tactil: sin la tabla, quitar una fila desplazaba el significado de todas
+    // las de abajo, tanto al pintar como al ajustar (Engine::update_settings).
+    enum SettingRow { ROW_MUSIC, ROW_SFX, ROW_AIM, ROW_SENS, ROW_RUMBLE,
+                      ROW_RSTICK, ROW_SKIN, ROW_LANG, ROW_BACK, ROW_COUNT };
+    int settings_rows[ROW_COUNT] = {};   // fila visible i -> SettingRow
+    int settings_row_at(int i) const {
+        return (i >= 0 && i < option_count) ? settings_rows[i] : ROW_BACK;
+    }
+    int  settings_language    = 0;    // Language: 0 ES / 1 EN
+    int  settings_skin        = 0;    // skin del cayado equipada (cosmetico)
+    u32  settings_skins_mask  = 1;    // bits de las skins desbloqueadas (la 0 siempre)
 
     // Run stats shown on Game Over / Victory
     int stats_chapter = 1;
     int stats_kills   = 0;
     f32 stats_time    = 0.0f;
+    // Linea extra de la pantalla de victoria: por que no se ha visto el epilogo.
+    // nullptr = se vio (o aun no aplica).
+    const char* victory_note = nullptr;
 
     void update(Input& input);
     void render(Renderer& renderer);

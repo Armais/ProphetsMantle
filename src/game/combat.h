@@ -36,15 +36,27 @@ struct CollisionResult {
 struct CombatEvents {
     int  player_hits   = 0;   // Times the player got hurt this frame
     int  enemy_hits    = 0;   // Player projectiles that connected
+    int  boss_hits     = 0;   // ...de los cuales, en un jefe (sacudida propia)
     int  enemy_kills   = 0;
     int  boss_kills    = 0;
     int  hearts_picked = 0;
     int  orbs_picked   = 0;
+    // QUE ha muerto este frame, como mascara de EnemyType (bit por tipo). El Engine le
+    // pone su sonido —un leon y una vasija de agua corrupta no pueden morir con el mismo
+    // golpe seco— y de ahi salen los logros por tipo. Es una MASCARA y no "el ultimo que
+    // cayo" porque en una barrida mueren varios a la vez: guardando solo el ultimo, matar
+    // un leon y un soldado en el mismo frame borraba el leon.
+    u32  kill_mask     = 0;
     void reset() { *this = CombatEvents{}; }
 };
 
 // Projectile visuals (cells of the shared tileset)
 enum class ProjectileKind : u8 { Fireball, Lightbolt, Arrow, Darkbolt };
+
+// Efectos de la hoja propia `assets/sprites/vfx.png` (8 fotogramas x 7 filas, celda de
+// 128 px = 32 unidades). El orden DEBE coincidir con `LAYOUT` en
+// tools/blender/mantle_sprites/vfx.py.
+enum class FxID : u8 { Impact, Explosion, Heal, Sparks, Smoke, Holy, Ring, COUNT };
 
 // =============================================================================
 // Combat functions
@@ -81,6 +93,16 @@ void spawn_particles(ECSWorld& world, Vec2 position, Color color, int count, f32
 Entity spawn_vfx(ECSWorld& world, Vec2 position, TileSprite sprite, Color tint,
                  f32 size_units, f32 life, f32 grow = 0.0f, f32 spin = 0.0f,
                  Vec2 velocity = {0, 0}, i32 z_order = 9);
+
+// Efecto ANIMADO de la hoja propia. Se diferencia de spawn_vfx en tres cosas:
+//   1. Tiene 8 fotogramas de verdad (AnimationComponent), no un icono que crece y se apaga.
+//   2. La celda mide 32 unidades, no las 16 del tileset: `size_units` escala contra 32.
+//   3. Sin la hoja cargada NO dibuja nada y devuelve ENTITY_NONE — quien quiera un
+//      respaldo que llame ademas a spawn_vfx.
+// `tint` multiplica: la hoja esta pintada casi en blanco a proposito para que el mismo
+// impacto valga naranja para Elias y azul para Eliseo.
+Entity spawn_fx(ECSWorld& world, Vec2 position, FxID id, Color tint,
+                f32 size_units, f32 duration = 0.35f, i32 z_order = 9);
 
 // Best enemy to shoot at from `from`, using the GDD auto-aim priority (4.3):
 // 1) a boss, 2) an enemy currently attacking, 3) the closest one, 4) the lowest HP

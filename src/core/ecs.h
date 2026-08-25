@@ -167,6 +167,14 @@ struct EnemyAIComponent {
     f32 buff_timer       = 0.0f;   // General Sirio: segundos que le queda el aura recibida
     f32 base_damage      = 0.0f;   // Valores previos al aura (0 = nunca buffeado)
     f32 base_speed       = 0.0f;
+
+    // Faccion. Un DISCIPULO (Ejercito Celestial, 2 Reyes 6:17) lleva este mismo
+    // componente —es un combatiente con IA como cualquier otro— pero con `ally` puesto.
+    // Todo lo que preguntaba "tiene EnemyAI?" para decir "es un enemigo" tiene que
+    // preguntar `is_hostile()`: contar la sala, el auto-apuntado, los milagros de area,
+    // el dano por contacto y las recompensas al morir.
+    bool ally            = false;
+    f32  life_left       = 0.0f;   // > 0: se desvanece al agotarse (invocacion temporal)
 };
 
 struct ProjectileComponent {
@@ -248,6 +256,8 @@ struct ECSWorld {
 
     // Shared tileset texture (pickups / projectiles use its small sprites)
     u32 tileset = TEXTURE_NONE;
+    // Hoja de efectos propia (assets/sprites/vfx.png). TEXTURE_NONE = spawn_fx no dibuja.
+    u32 vfx_sheet = TEXTURE_NONE;
     // Hojas por EnemyType, para que los jefes puedan invocar secuaces con su sprite
     // correcto sin conocer al Engine (lo rellena Engine::load_sprites).
     u32 enemy_textures[8] = {TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE,
@@ -261,7 +271,12 @@ struct ECSWorld {
     // Floating damage numbers (filled by apply_damage, drawn and aged by the Engine)
     struct DamagePopup { Vec2 pos; f32 amount; f32 life; bool boss; };
     std::vector<DamagePopup> popups;
-    f32 hitstop = 0.0f;       // > 0: freeze the simulation for a couple of frames (boss hits)
+    f32 hitstop = 0.0f;       // > 0: freeze the simulation for a couple of frames (impacto)
+
+    // Contadores de la sonda de tacto (comando `feel` del autoplay). Solo miden: nada de
+    // lo que hay aqui se lee desde el juego, y por eso no van al guardado.
+    f32 dmg_dealt = 0.0f;     // Dano que el jugador (o los suyos) han metido
+    f32 dmg_taken = 0.0f;     // Dano que ha comido el jugador
 
     // Global status effects
     f32 enemy_slow_timer = 0.0f;   // "Palabra de Sequia": enemies at half speed while > 0
@@ -287,5 +302,15 @@ struct ECSWorld {
     void collect_draws(std::vector<DrawCmd>& out, Renderer& renderer);
 
     // Helpers
-    int count_living_enemies() const;
+    int count_living_enemies() const;   // solo hostiles: un discipulo no sella la sala
 };
+
+// =============================================================================
+// Faccion (ver EnemyAIComponent::ally)
+// =============================================================================
+inline bool is_hostile(const ECSWorld& w, Entity e) {
+    return w.has(e, Component::EnemyAI) && !w.enemy_ais[e].ally;
+}
+inline bool is_ally(const ECSWorld& w, Entity e) {
+    return w.has(e, Component::EnemyAI) && w.enemy_ais[e].ally;
+}

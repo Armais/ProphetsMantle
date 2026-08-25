@@ -1,0 +1,111 @@
+# Verificacion Track 1: la Ascension completa (Manto de Elias + milagro heredado)
+# Uso:  MANTLE.exe --script scripts/ascension_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Que hay que ver en el log:
+#   LOADOUT antes    | Elias  | slots 2 [...]                 | recarga x1.00 | objetos: -
+#   LOADOUT despues  | Eliseo | slots 3 [Sanar Aguas / Ejercito Celestial / <milagro de Elias>]
+#                    | recarga x0.75 | objetos: El Manto de Elias
+#   LOADOUT recargado -> identico al anterior tras guardar y volver a cargar
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- Elias en el cap. 5: dos slots (Cuervos de Querit + Fuego del Cielo) ---
+chapter 5
+wait 3.0
+press confirm
+wait 2.5
+stats antes
+shot 60_elias_antes_ascension
+wait 0.1
+
+# --- La Ascension: el manto cae sobre Eliseo ---
+ascend
+wait 9.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+
+# Tres celdas de milagro (Q / E / F) y El Manto en la fila de objetos
+stats despues
+shot 61_eliseo_con_manto
+wait 0.1
+
+# --- El Manto en la pestana Objetos del Codice (ultima fila, dorado) ---
+press pause
+wait 0.6
+press down
+wait 0.3
+press confirm
+wait 0.8
+press right
+wait 0.3
+press right
+wait 0.3
+press right
+wait 0.4
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.1
+press down
+wait 0.3
+shot 62_codice_manto
+wait 0.1
+press cancel
+wait 0.6
+press cancel
+wait 0.8
+
+# --- Guardar y volver a cargar: el Manto y los slots tienen que sobrevivir ---
+press pause
+wait 0.6
+press down
+wait 0.2
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 1.5
+press down
+wait 0.3
+press confirm
+wait 3.0
+stats recargado
+shot 63_tras_cargar
+wait 0.1
+
+quit

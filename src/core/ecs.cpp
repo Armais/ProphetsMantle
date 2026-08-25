@@ -211,6 +211,11 @@ static void select_animation(ECSWorld& w, Entity e) {
         play_anim(anim, AnimID::Dash);
         return;
     }
+    // Un EFECTO (Lifetime y sin vida propia) manda su propia fila: nadie se la elige.
+    // Sin esto, al acabar su animacion `playing` se apaga, la comprobacion de abajo deja
+    // de cortar y el efecto salta a la fila de Idle en su ultimo fotograma. Los cadaveres
+    // NO entran aqui: tienen Health, y su rama de Death va antes.
+    if (w.has(e, Component::Lifetime) && !w.has(e, Component::Health)) return;
     if (!anim.looping && anim.playing) return;   // let Attack/Cast/Dash finish
 
     Direction facing = w.has(e, Component::Transform) ? w.transforms[e].facing : Direction::Down;
@@ -264,8 +269,12 @@ static void system_lifetime(ECSWorld& w, f32 dt) {
         }
 
         if (life.grow != 0.0f && w.has(id, Component::Transform)) {
-            w.transforms[e].scale.x += life.grow * dt;
-            w.transforms[e].scale.y += life.grow * dt;
+            // `grow` esta en unidades de ESCALA por segundo (0.25 abre un anillo, no 25).
+            // El suelo a 0 no es cosmetico: una escala negativa da la vuelta al sprite y
+            // lo hace crecer sin freno, y un VFX de 8 unidades acababa tapando la sala.
+            auto& sc = w.transforms[e].scale;
+            sc.x = std::max(0.0f, sc.x + life.grow * dt);
+            sc.y = std::max(0.0f, sc.y + life.grow * dt);
         }
         if (life.spin != 0.0f && w.has(id, Component::Transform))
             w.transforms[e].rotation += life.spin * dt;
@@ -374,6 +383,7 @@ int ECSWorld::count_living_enemies() const {
     for (u32 e = 0; e < entity_count; e++) {
         if (!masks[e].any()) continue;
         if (!has(static_cast<Entity>(e), Component::EnemyAI)) continue;
+        if (enemy_ais[e].ally) continue;   // los discipulos no cuentan: sellarian la sala
         if (has(static_cast<Entity>(e), Component::Health) && !healths[e].is_alive()) continue;
         n++;
     }
@@ -401,7 +411,14 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
         Color tint = s.tint;
         if (has(static_cast<Entity>(e), Component::Health)) {
             const auto& h = healths[e];
-            if (h.hit_flash > 0.0f) tint = {255, 90, 70, 255};
+            // Destello del impacto: entra casi blanco y vira a rojo al apagarse. Un rojo
+            // plano y largo se leia como "esta envenenado", no como "le acabo de dar".
+            if (h.hit_flash > 0.0f) {
+                f32 k = std::max(0.0f, std::min(1.0f, h.hit_flash / Config::Feel::HIT_FLASH_TIME));
+                tint = {255,
+                        static_cast<u8>(110.0f + 135.0f * k),
+                        static_cast<u8>( 80.0f + 155.0f * k), tint.a};
+            }
             // Aura del General Sirio: el aliado buffeado late en rojo para que se
             // entienda de un vistazo que hay que matar al General primero.
             else if (is_enemy && enemy_ais[e].buff_timer > 0.0f) {
@@ -412,6 +429,18 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
             if (is_player && h.iframes_timer > 0.0f && !movements[e].is_dashing) {
                 int phase = static_cast<int>(h.iframes_timer * 20.0f);
                 if (phase % 2 == 0) tint.a = 110;
+            }
+            // El dash es invulnerable: que se VEA. El parpadeo de i-frames se apaga
+            // durante el dash justo por esto, y hasta ahora no lo sustituia nada.
+            if (is_player && has(static_cast<Entity>(e), Component::Movement) && movements[e].is_dashing)
+                tint = {235, 245, 255, 235};
+            // Cadaver: se apaga en el ultimo tramo de su animacion de muerte en vez de
+            // esfumarse de golpe cuando expira el Lifetime.
+            if (is_enemy && !h.is_alive() && has(static_cast<Entity>(e), Component::Lifetime)) {
+                const auto& lf = lifetimes[e];
+                f32 fade_at = lf.total * Config::Feel::DEATH_FADE_FRAC;
+                if (lf.total > 0.0f && lf.remaining < fade_at)
+                    tint.a = static_cast<u8>(255.0f * std::max(0.0f, lf.remaining / fade_at));
             }
         }
 

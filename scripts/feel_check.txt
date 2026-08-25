@@ -1,0 +1,100 @@
+# Verificacion del track 1 (tacto). Fotografia los efectos que la pasada de game feel
+# anadio, uno por uno. Lo MEDIBLE va aparte, en scripts/feel_baseline.txt: este guion
+# solo demuestra que cada pieza se ve.
+#
+# Uso:  MANTLE.exe --script scripts/feel_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Las ventanas son cortas a proposito: el fogonazo dura 0.09 s y el destello del
+# impacto 0.075 s. Si se alarga el wait, la captura sale despues del efecto y parece
+# que no esta puesto.
+
+seed 20260825
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+
+# =========================================================================
+# 1. Fogonazo en la boca del cayado + retroceso del disparo
+# =========================================================================
+say ---- fogonazo del disparo ----
+hold attack 0.04
+shot 94_feel_fogonazo
+wait 0.4
+
+# =========================================================================
+# 2. Destello del impacto (entra blanco y vira a rojo) y hit-stop escalado.
+#    Cuatro soldados pegados: alguno esta encajando en cada captura.
+# =========================================================================
+say ---- impacto en enemigo ----
+killall
+wait 0.5
+spawn 0 4
+wait 0.5
+bot 1.1
+shot 95_feel_impacto_a
+wait 0.1
+bot 0.9
+shot 96_feel_impacto_b
+wait 0.1
+
+# =========================================================================
+# 3. Muerte del enemigo: pavesas, anillo y el cadaver saliendo despedido
+# =========================================================================
+say ---- muerte del enemigo ----
+bot 6
+wait 0.15
+shot 97_feel_muerte
+wait 0.1
+
+# =========================================================================
+# 4. Estela del dash (y su brillo de invulnerabilidad)
+# =========================================================================
+# Ojo: `press` SUELTA lo que se estuviera manteniendo, asi que en un guion el dash
+# siempre sale hacia ARRIBA (sin eje de movimiento, dash_dir = {0,-1}). Por eso el
+# profeta se coloca abajo del todo: dashando desde el centro se metia detras del HUD
+# y la captura salia sin personaje.
+say ---- estela del dash ----
+killall
+wait 0.5
+walk 160 150
+wait 2.5
+press dash
+wait 0.08
+shot 98_feel_dash
+wait 0.5
+
+# =========================================================================
+# 5. Sacudida grave: el estallido del brasero del Idolatra de Rimon
+# =========================================================================
+say ---- estallido del brasero ----
+spawn 6 2
+wait 0.6
+bot 8
+wait 0.2
+shot 99_feel_brasero
+wait 0.1
+
+# =========================================================================
+# 6. Coyote time: cruzar de sala con la tecla mantenida no encadena dos
+#    cambios. En el log tiene que salir UNA sola linea "Room transition".
+# =========================================================================
+say ---- coyote time: una sola transicion ----
+killall
+wait 0.6
+walk 160 20
+wait 3.0
+hold up 1.6
+shot 100_feel_sala_nueva
+wait 0.1
+
+stats fin_feel
+say ---- fin de la verificacion de tacto ----
+quit

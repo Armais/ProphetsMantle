@@ -1,0 +1,87 @@
+# Verificacion Track 3: el catalogo pasa de 16 a 22 objetos (roadmap Beta: "20+")
+# Uso:  MANTLE.exe --script scripts/items_check.txt
+#
+# Los seis nuevos, repartidos donde el pool estaba flojo (las ARMAS eran dos y los
+# CONSUMIBLES dos; la tercera RELIQUIA entra para que el slot unico del GDD 7.3 obligue
+# a elegir de verdad):
+#   16 Arco de Joas      Arma       rafaga de 3 saetas          2 Reyes 13:17
+#   17 Higos de Ezequias Consumible +15 HP MAXIMO               2 Reyes 20:7 (+20:6)
+#   18 Sal de Eliseo     Consumible +20 Fe                      2 Reyes 2:21
+#   19 Cinto de Cuero    Pasivo     -12% recarga de ataque      2 Reyes 1:8   (heredable)
+#   20 El Reloj de Acaz  RELIQUIA   perdona una muerte/capitulo 2 Reyes 20:11
+#   21 Panes de Cebada   Pasivo     +18 HP, +4 Fe               2 Reyes 4:43  (heredable)
+#
+# Que hay que ver en el LOG:
+#   STATS   hp / faith antes y despues de cada consumible
+#   LOADOUT la reliquia equipada y la lista de objetos
+#   "LA SOMBRA RETROCEDE" (banner) cuando el Reloj de Acaz perdona la muerte
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+
+# --- Arma nueva: la rafaga de 3 saetas ---
+god
+give 16
+wait 0.4
+spawn 0 4
+wait 0.5
+press weapon
+wait 0.6
+shot 70_arco_de_joas
+wait 0.1
+stats con_arco
+
+# --- Consumible 17: sube el MAXIMO de vida, no solo cura ---
+killall
+wait 0.5
+stats antes_higos
+give 17
+wait 0.3
+press use
+wait 0.5
+stats tras_higos
+
+# --- Consumible 18: el unico que devuelve FE ---
+faith 20
+wait 0.3
+stats antes_sal
+give 18
+wait 0.3
+press use
+wait 0.5
+stats tras_sal
+
+# --- Pasivos nuevos ---
+give 19
+wait 0.3
+give 21
+wait 0.3
+stats con_pasivos
+
+# --- Reliquia nueva: perdona UNA muerte por capitulo ---
+# `god` se apaga para poder morir de verdad; los soldados hacen el resto.
+give 20
+wait 0.3
+stats con_reloj
+# Hacen falta ~20 s de leones encima: el profeta lleva 123 de vida y los i-frames de 1 s
+# limitan el mordisco a unos 11 de dano por segundo.
+god
+faith 0
+spawn 3 4
+wait 5.0
+spawn 3 4
+wait 5.0
+spawn 3 4
+wait 5.0
+spawn 3 4
+wait 6.0
+shot 71_reloj_de_acaz
+wait 0.1
+stats tras_el_reloj
+
+quit

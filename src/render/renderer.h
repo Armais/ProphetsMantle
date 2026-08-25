@@ -146,11 +146,19 @@ struct Renderer {
     int window_h = Config::WINDOW_HEIGHT;
     SDL_FRect viewport = {};  // Where the game renders within the window (letterbox)
 
+    // Desplazamiento extra que se suma a TODO lo que se dibuja (world_to_screen). Vale
+    // cero salvo durante la pasada de superposicion en vertical, ver begin_overlay().
+    Vec2 ui_offset = {0, 0};
+    bool overlay_active = false;
+
     // Camera
     Vec2 camera_offset = {0, 0};
     Vec2 camera_shake  = {0, 0};
     f32  shake_intensity = 0.0f;
     f32  shake_timer     = 0.0f;
+    f32  shake_duration  = 0.0f;   // Para la envolvente: la sacudida se apaga, no se corta
+    f32  shake_freq      = 45.0f;  // rad/s (grave = estallido, agudo = golpe seco)
+    f32  shake_phase     = 0.0f;
 
     // Init / Shutdown
     bool init(SDL_Renderer* renderer, SDL_Texture* render_target);
@@ -189,7 +197,10 @@ struct Renderer {
 
     // Camera
     void set_camera(Vec2 position);
-    void shake_camera(f32 intensity, f32 duration);
+    // Una sacudida NO pisa a otra mas fuerte que siga viva: antes, el golpe siguiente
+    // mataba la sacudida del jefe recien muerto. Ver Config::Feel::Shake para las curvas.
+    void shake_camera(f32 intensity, f32 duration, f32 frequency = 45.0f);
+    void shake_camera(const Config::Feel::Shake& s) { shake_camera(s.mag, s.dur, s.freq); }
     void update_shake(f32 dt);
     Vec2 world_to_screen(Vec2 world_pos) const;
     Vec2 window_to_game(Vec2 window_pos) const;   // Mouse -> 320x180 game coordinates
@@ -199,4 +210,32 @@ struct Renderer {
 
 private:
     void calculate_viewport();
+public:
+    // --- Vertical (GDD 4.5: "vertical opcional", 1080x1920) --------------------
+    // El letterbox ya centra CUALQUIER proporcion de ventana, asi que en vertical el area
+    // de juego se ve entera sin tocar nada: lo que cambia es DONDE caben los controles.
+    // El area de juego sigue siendo 320x180 a proposito — recortar el mundo visible
+    // cambiaria el juego, no la presentacion.
+    bool is_portrait() const { return window_h > window_w; }
+
+    // Unidades de juego de banda negra que quedan por DEBAJO del area de juego. 0 en
+    // apaisado. Es lo que decide si los controles tactiles caben fuera del mundo.
+    f32 bottom_band_units() const {
+        if (viewport.w <= 0.0f) return 0.0f;
+        f32 s = viewport.w / static_cast<f32>(Config::GAME_WIDTH);
+        if (s <= 0.0f) return 0.0f;
+        return (static_cast<f32>(window_h) - viewport.y - viewport.h) / s;
+    }
+
+    // Pasada de superposicion: dibuja SOBRE la ventana entera en vez de dentro del
+    // objetivo de 320x180, para poder pintar en las bandas negras. Las coordenadas siguen
+    // siendo unidades de juego y el origen sigue siendo la esquina del area de juego, asi
+    // que un boton en y=190 cae 10 unidades por debajo del mundo — que es exactamente lo
+    // que devuelve `window_to_game` para un dedo apoyado ahi. Los dos lados usan el mismo
+    // sistema de coordenadas y por eso el hit-test no necesita saber nada de esto.
+    void present();          // SDL_RenderPresent; va DESPUES de la superposicion
+    void begin_overlay();
+    void end_overlay();
+    bool in_overlay() const { return overlay_active; }
+private:
 };

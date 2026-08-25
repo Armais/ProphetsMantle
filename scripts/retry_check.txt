@@ -1,0 +1,38 @@
+# Verificacion: el equipo del run sobrevive al reintento tras morir
+# Uso:  MANTLE.exe --script scripts/retry_check.txt
+# Se comprueba en el log: las lineas STATS antes/despues deben dar el mismo
+# numero de items y el mismo HP maximo (los bonus se reaplican).
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+
+# --- Equipo de prueba: 2 heredables (+3 dano, +10 HP) y un consumible ---
+give 10
+give 11
+give 9
+learn 2 0
+wait 0.5
+stats ANTES-DE-MORIR
+
+# --- Morir: 8 leones encima, sin god ---
+spawn 3 8
+wait 14.0
+stats EN-DERROTA
+shot
+wait 0.3
+
+# --- Reintentar (tecla R = accion Consumable) ---
+press use
+wait 4.0
+press confirm
+wait 2.0
+stats TRAS-REINTENTAR
+shot
+wait 0.3
+quit

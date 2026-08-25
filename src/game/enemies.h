@@ -4,6 +4,7 @@
 // MANTLE - Enemy Definitions & AI (GDD 7.2)
 // =============================================================================
 
+#include "core/i18n.h"
 #include "core/types.h"
 #include "core/ecs.h"
 
@@ -54,24 +55,48 @@ struct EnemyDef {
     const char* sprite_path;  // Sheet relative to assets/ (224x480, see render/sprites.h)
 };
 
+// Paleta del capitulo aplicada al ENEMIGO (no al terreno: de eso ya se ocupa
+// `get_biome_style`). Es un tinte multiplicativo suave, no una mano de pintura: los ocho
+// tipos siguen siendo reconocibles, pero un soldado sirio de la ciudad sitiada no se ve
+// igual que uno del campamento del Jordan.
+//
+// Se hace TINTANDO y no con hojas alternativas a proposito. Una paleta por capitulo son
+// ocho PNG mas de 896x1920 por variante, y una regla del proyecto es que `assets/` no
+// crece. Un tinte cuesta cero bytes y lo pisa igual el destello del golpe.
+inline Color get_enemy_chapter_tint(int chapter) {
+    switch (chapter) {
+        case 1:  return {255, 246, 233, 255};   // El Arroyo Querit: canon calido, casi neutro
+        case 2:  return {226, 202, 240, 255};   // Sarepta: la sombra morada de Baal
+        case 3:  return {206, 223, 246, 255};   // El Monte Carmelo: piedra fria de altura
+        case 4:  return {250, 226, 178, 255};   // Horeb: polvo de desierto
+        case 5:  return {226, 246, 209, 255};   // El Llamado: campos de labranza
+        case 6:  return {202, 240, 206, 255};   // Jerico: el verde enfermo del agua corrupta
+        case 7:  return {246, 216, 182, 255};   // La aldea pobre: barro y aceite
+        case 8:  return {202, 209, 246, 255};   // La casa noble: indigo frio
+        case 9:  return {246, 236, 202, 255};   // El campamento junto al Jordan: arena palida
+        case 10: return {206, 216, 230, 255};   // La ciudad sitiada: acero
+        default: return Color::white();
+    }
+}
+
 inline EnemyDef get_enemy_def(EnemyType type) {
     switch (type) {
         case EnemyType::SoldadoDeAcab:
-            return {"Soldado de Acab", 20, 8, 88, AIBehavior::MeleeDirect, 190, 16, {41, 128, 185, 255}, "sprites/soldado_acab.png"};
+            return {tr("Soldado de Acab", "Soldier of Ahab"), 20, 8, 88, AIBehavior::MeleeDirect, 190, 16, {41, 128, 185, 255}, "sprites/soldado_acab.png"};
         case EnemyType::ArqueroReal:
-            return {"Arquero Real", 15, 10, 66, AIBehavior::Ranged, 220, 70, {230, 126, 34, 255}, "sprites/arquero_real.png"};
+            return {tr("Arquero Real", "Royal Archer"), 15, 10, 66, AIBehavior::Ranged, 220, 70, {230, 126, 34, 255}, "sprites/arquero_real.png"};
         case EnemyType::ProfetaDeBaal:
-            return {"Profeta de Baal", 35, 12, 58, AIBehavior::Caster, 200, 90, {142, 68, 173, 255}, "sprites/profeta_baal.png"};
+            return {tr("Profeta de Baal", "Prophet of Baal"), 35, 12, 58, AIBehavior::Caster, 200, 90, {142, 68, 173, 255}, "sprites/profeta_baal.png"};
         case EnemyType::LeonDelDesierto:
-            return {"León del Desierto", 40, 18, 118, AIBehavior::FastLeaper, 200, 60, {241, 196, 15, 255}, "sprites/leon_desierto.png"};
+            return {tr("León del Desierto", "Desert Lion"), 40, 18, 118, AIBehavior::FastLeaper, 200, 60, {241, 196, 15, 255}, "sprites/leon_desierto.png"};
         case EnemyType::SoldadoSirio:
-            return {"Soldado Sirio", 25, 10, 78, AIBehavior::MeleeResistant, 190, 16, {22, 160, 133, 255}, "sprites/soldado_sirio.png"};
+            return {tr("Soldado Sirio", "Syrian Soldier"), 25, 10, 78, AIBehavior::MeleeResistant, 190, 16, {22, 160, 133, 255}, "sprites/soldado_sirio.png"};
         case EnemyType::GeneralSirio:
-            return {"General Sirio", 60, 18, 64, AIBehavior::BuffAllies, 220, 80, {192, 57, 43, 255}, "sprites/general_sirio.png"};
+            return {tr("General Sirio", "Syrian General"), 60, 18, 64, AIBehavior::BuffAllies, 220, 80, {192, 57, 43, 255}, "sprites/general_sirio.png"};
         case EnemyType::IdolatraDeRimon:
-            return {"Idólatra de Rimón", 20, 8, 96, AIBehavior::ExplodeOnDeath, 200, 12, {150, 90, 170, 255}, "sprites/idolatra_rimon.png"};
+            return {tr("Idólatra de Rimón", "Idolater of Rimmon"), 20, 8, 96, AIBehavior::ExplodeOnDeath, 200, 12, {150, 90, 170, 255}, "sprites/idolatra_rimon.png"};
         case EnemyType::AguaCorrupta:
-            return {"Agua Corrupta", 35, 10, 70, AIBehavior::SplitOnDeath, 190, 20, {44, 62, 80, 255}, "sprites/agua_corrupta.png"};
+            return {tr("Agua Corrupta", "Corrupt Water"), 35, 10, 70, AIBehavior::SplitOnDeath, 190, 20, {44, 62, 80, 255}, "sprites/agua_corrupta.png"};
         default:
             return {"???", 10, 5, 50, AIBehavior::MeleeDirect, 80, 16, {128, 128, 128, 255}, nullptr};
     }
@@ -93,6 +118,17 @@ Entity spawn_boss(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id
 // Enemy AI Update
 // =============================================================================
 void update_enemy_ai(ECSWorld& world, f32 dt);
+
+// -----------------------------------------------------------------------------
+// Discipulos (Ejercito Celestial, 2 Reyes 6:17)
+// -----------------------------------------------------------------------------
+// Un discipulo es un combatiente con `EnemyAIComponent::ally` puesto: misma maquinaria
+// de IA, movimiento y colision que un enemigo, otro bando. Persigue al hostil que
+// elegiria el auto-apuntado y, sin ninguno cerca, escolta al profeta. Golpea por
+// contacto (game/combat.cpp) y recibe golpes, asi que se puede perder.
+// `life_seconds` > 0 = invocacion temporal, se desvanece al agotarse.
+Entity spawn_disciple(ECSWorld& world, Vec2 position, u32 texture_id, f32 life_seconds,
+                      f32 hp = 30.0f, f32 damage = 10.0f);
 
 // =============================================================================
 // Muerte con conducta (Acto II)
