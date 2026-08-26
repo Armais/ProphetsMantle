@@ -1,142 +1,372 @@
-# Verificacion del track 1: el retrato en la caja de dialogo (game/events.h)
+# Verificacion del POZO de encuentros (GDD2.0 fase 2): los 35 relatos, en los dos idiomas.
 # Uso:  MANTLE.exe --script scripts/encuentros_check.txt
-# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
 #
-# Criterio: los diez encuentros se leen igual de bien y los diez llevan imagen. Siete son
-# RETRATOS de persona (caps 2, 5, 6, 7, 8, 9 y 10) y tres son VINETAS de la escena
-# (caps 1, 3 y 4), porque ahi el locutor es el sitio y no alguien con cara.
-# La rama sin imagen (`Portrait::NONE`) sigue viva en el codigo y tiene que verse
-# EXACTAMENTE como antes de que EventDef tuviera el campo `portrait`.
+# EL GATE NO SON LAS CAPTURAS, es el LOG, y son dos lineas:
 #
-# Cada capitulo se fotografia dos veces: (a) una linea del cuerpo, (b) la decision
-# con sus dos opciones y sus costes, que es la caja alta y el caso apretado.
+#   1. "TEXT TRUNCATED" -> CERO. `Renderer::wrap_text` recorta en silencio lo que no cabe, y
+#      ese es el unico fallo de texto que no se ve venir: la caja de dialogo con retrato
+#      pierde ~35 unidades de ancho y el ingles no siempre es mas corto. Antes habia que
+#      comparar setenta capturas a ojo; ahora el motor lo dice.
+#   2. "event C.I (id N de M) -> ..." -> tienen que salir los 35, con su locutor, su retrato
+#      y su PNJ. Si un capitulo dice "de 3" y el pozo tenia 4, `get_chapter_events` miente.
 #
-# `event <n>` abre el encuentro sin caminar hasta su sala: el generador la sortea, y
-# sin el comando verificar los diez dependia de la suerte del mapa.
+# Las capturas (una por encuentro, en el momento de la decision: cuerpo + dos opciones) son
+# para mirar la composicion, no para detectar el truncado.
+#
+# Ojo: en autoplay el dialogo AVANZA SOLO (`DialogueState::auto_timer`, ~0,8 s por linea), asi
+# que no se pulsa nada: se espera. event -> 0,9 s = primera linea; +1,9 s = la decision;
+# +2,2 s = resuelto y de vuelta al juego.
 
-seed 1234
+seed 4242
+defaults
 wait 1.0
 press confirm
-wait 3.5
+wait 3.2
 press confirm
-wait 2.0
+wait 3.2
+press confirm
+wait 1.4
+god
 
-# --- Cap 1: vineta (cuervos_querit: el cuervo con el pan en el pico) ---
-event 1
-wait 0.3
-shot 01_cap01_cuervos_linea
-wait 0.1
-wait 2.6
-shot 02_cap01_cuervos_opciones
-wait 0.1
-wait 3.0
+say ================ ESPANOL ================
+lang 0
 
-# --- Cap 2: con retrato (viuda_sarepta) ---
+# ---- Cap 1: Querit (3) ----
+chapter 1
+wait 1.0
+press confirm
+wait 1.2
+event 1 0
+wait 0.9
+shot es_c01_0
+wait 1.9
+shot es_c01_0_dec
+wait 2.4
+event 1 1
+wait 0.9
+shot es_c01_1
+wait 1.9
+shot es_c01_1_dec
+wait 2.4
+event 1 2
+wait 0.9
+shot es_c01_2
+wait 1.9
+shot es_c01_2_dec
+wait 2.4
+
+# ---- Cap 2: Sarepta (3) ----
 chapter 2
-wait 4.0
+wait 1.0
 press confirm
-wait 1.5
-event 2
-wait 0.3
-shot 03_cap02_viuda_linea
-wait 0.1
-wait 2.6
-shot 04_cap02_viuda_opciones
-wait 0.1
-wait 3.0
+wait 1.2
+event 2 0
+wait 2.8
+shot es_c02_0_dec
+wait 2.4
+event 2 1
+wait 2.8
+shot es_c02_1_dec
+wait 2.4
+event 2 2
+wait 2.8
+shot es_c02_2_dec
+wait 2.4
 
-# --- Cap 3: vineta (altar_carmelo: las doce piedras, la lena y la zanja con agua) ---
-event 3
-wait 0.3
-shot 05_cap03_altar_linea
-wait 0.1
-wait 2.6
-shot 06_cap03_altar_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 3: Carmelo (4) ----
+chapter 3
+wait 1.0
+press confirm
+wait 1.2
+event 3 0
+wait 2.8
+shot es_c03_0_dec
+wait 2.4
+event 3 1
+wait 2.8
+shot es_c03_1_dec
+wait 2.4
+event 3 2
+wait 2.8
+shot es_c03_2_dec
+wait 2.4
+event 3 3
+wait 2.8
+shot es_c03_3_dec
+wait 2.4
 
-# --- Cap 4: vineta (boca_cueva: el vano de Horeb) ---
-event 4
-wait 0.3
-shot 07_cap04_cueva_linea
-wait 0.1
-wait 2.6
-shot 08_cap04_cueva_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 4: Horeb (4) ----
+chapter 4
+wait 1.0
+press confirm
+wait 1.2
+event 4 0
+wait 2.8
+shot es_c04_0_dec
+wait 2.4
+event 4 1
+wait 2.8
+shot es_c04_1_dec
+wait 2.4
+event 4 2
+wait 2.8
+shot es_c04_2_dec
+wait 2.4
+event 4 3
+wait 2.8
+shot es_c04_3_dec
+wait 2.4
 
-# --- Cap 5: con retrato (eliseo_labrador: la misma cara que Eliseo, ropa de faena) ---
-# Con retrato la columna pierde ~35 unidades de ancho y `wrap_text` TRUNCA en silencio lo
-# que no le cabe, asi que aqui se fotografian las TRES lineas, no una: la comprobacion es
-# que ninguna acabe cortada. Por eso el cuerpo admite 4 lineas cuando hay retrato.
-event 5
-wait 0.3
-shot 09a_cap05_labrador_linea1
-wait 0.1
-wait 0.9
-shot 09b_cap05_labrador_linea2
-wait 0.1
-wait 0.8
-shot 09c_cap05_labrador_linea3
-wait 0.1
-wait 0.7
-shot 10_cap05_labrador_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 5: El Llamado (3) ----
+chapter 5
+wait 1.0
+press confirm
+wait 1.2
+event 5 0
+wait 2.8
+shot es_c05_0_dec
+wait 2.4
+event 5 1
+wait 2.8
+shot es_c05_1_dec
+wait 2.4
+event 5 2
+wait 2.8
+shot es_c05_2_dec
+wait 2.4
 
-# --- Cap 6 a 8: con retrato (hombre_jerico / mujer_profeta / sunamita) ---
-event 6
-wait 0.3
-shot 11_cap06_jerico_linea
-wait 0.1
-wait 2.6
-shot 12_cap06_jerico_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 6: Jerico (3) ----
+chapter 6
+wait 1.0
+press confirm
+wait 1.2
+event 6 0
+wait 2.8
+shot es_c06_0_dec
+wait 2.4
+event 6 1
+wait 2.8
+shot es_c06_1_dec
+wait 2.4
+event 6 2
+wait 2.8
+shot es_c06_2_dec
+wait 2.4
 
-event 7
-wait 0.3
-shot 13_cap07_mujer_linea
-wait 0.1
-wait 2.6
-shot 14_cap07_mujer_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 7: El Aceite (4) ----
+chapter 7
+wait 1.0
+press confirm
+wait 1.2
+event 7 0
+wait 2.8
+shot es_c07_0_dec
+wait 2.4
+event 7 1
+wait 2.8
+shot es_c07_1_dec
+wait 2.4
+event 7 2
+wait 2.8
+shot es_c07_2_dec
+wait 2.4
+event 7 3
+wait 2.8
+shot es_c07_3_dec
+wait 2.4
 
-event 8
-wait 0.3
-shot 15_cap08_sunamita_linea
-wait 0.1
-wait 2.6
-shot 16_cap08_sunamita_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 8: Sunamita (4) ----
+chapter 8
+wait 1.0
+press confirm
+wait 1.2
+event 8 0
+wait 2.8
+shot es_c08_0_dec
+wait 2.4
+event 8 1
+wait 2.8
+shot es_c08_1_dec
+wait 2.4
+event 8 2
+wait 2.8
+shot es_c08_2_dec
+wait 2.4
+event 8 3
+wait 2.8
+shot es_c08_3_dec
+wait 2.4
 
-# --- Cap 9: con retrato (naaman: noble sirio, sin casco, para no confundirlo con el General) ---
-# Su linea 2 es la mas larga de los diez encuentros: es EL caso de truncado.
-event 9
-wait 0.3
-shot 17a_cap09_naaman_linea1
-wait 0.1
-wait 0.9
-shot 17b_cap09_naaman_linea2
-wait 0.1
-wait 0.8
-shot 17c_cap09_naaman_linea3
-wait 0.1
-wait 0.7
-shot 18_cap09_naaman_opciones
-wait 0.1
-wait 3.0
+# ---- Cap 9: Naaman (3) ----
+chapter 9
+wait 1.0
+press confirm
+wait 1.2
+event 9 0
+wait 2.8
+shot es_c09_0_dec
+wait 2.4
+event 9 1
+wait 2.8
+shot es_c09_1_dec
+wait 2.4
+event 9 2
+wait 2.8
+shot es_c09_2_dec
+wait 2.4
 
-# --- Cap 10: con retrato (criado_eliseo: Guiezi joven y sin barba, antes de su castigo) ---
-event 10
-wait 0.3
-shot 19_cap10_criado_linea
-wait 0.1
-wait 2.6
-shot 20_cap10_criado_opciones
-wait 0.1
-wait 2.0
+# ---- Cap 10: El Ejercito Celestial (4) ----
+chapter 10
+wait 1.0
+press confirm
+wait 1.2
+event 10 0
+wait 2.8
+shot es_c10_0_dec
+wait 2.4
+event 10 1
+wait 2.8
+shot es_c10_1_dec
+wait 2.4
+event 10 2
+wait 2.8
+shot es_c10_2_dec
+wait 2.4
+event 10 3
+wait 2.8
+shot es_c10_3_dec
+wait 2.4
 
+say ================ INGLES ================
+# En ingles NO se fotografia: el gate es el log. Lo que se busca aqui es exactamente el
+# truncado, y el ingles es donde aparece (la traduccion no siempre es mas corta que el
+# original y la caja mide lo mismo).
+#
+# La espera son 5,2 s y no 3,6: el dialogo tarda ~4,2 s en cerrarse solo (1,0 de la primera
+# linea + 0,8 por cada una de las tres restantes) y el comando `event` se DESCARTA EN SILENCIO
+# si la escena no es Playing. Con 3,6 se perdia uno de cada tres encuentros sin decir nada.
+lang 1
+
+chapter 1
+wait 1.0
+press confirm
+wait 1.2
+event 1 0
+wait 5.2
+event 1 1
+wait 5.2
+event 1 2
+wait 5.2
+
+chapter 2
+wait 1.0
+press confirm
+wait 1.2
+event 2 0
+wait 5.2
+event 2 1
+wait 5.2
+event 2 2
+wait 5.2
+
+chapter 3
+wait 1.0
+press confirm
+wait 1.2
+event 3 0
+wait 5.2
+event 3 1
+wait 5.2
+event 3 2
+wait 5.2
+event 3 3
+wait 5.2
+
+chapter 4
+wait 1.0
+press confirm
+wait 1.2
+event 4 0
+wait 5.2
+event 4 1
+wait 5.2
+event 4 2
+wait 5.2
+event 4 3
+wait 5.2
+
+chapter 5
+wait 1.0
+press confirm
+wait 1.2
+event 5 0
+wait 5.2
+event 5 1
+wait 5.2
+event 5 2
+wait 5.2
+
+chapter 6
+wait 1.0
+press confirm
+wait 1.2
+event 6 0
+wait 5.2
+event 6 1
+wait 5.2
+event 6 2
+wait 5.2
+
+chapter 7
+wait 1.0
+press confirm
+wait 1.2
+event 7 0
+wait 5.2
+event 7 1
+wait 5.2
+event 7 2
+wait 5.2
+event 7 3
+wait 5.2
+
+chapter 8
+wait 1.0
+press confirm
+wait 1.2
+event 8 0
+wait 5.2
+event 8 1
+wait 5.2
+event 8 2
+wait 5.2
+event 8 3
+wait 5.2
+
+chapter 9
+wait 1.0
+press confirm
+wait 1.2
+event 9 0
+wait 5.2
+event 9 1
+wait 5.2
+event 9 2
+wait 5.2
+
+chapter 10
+wait 1.0
+press confirm
+wait 1.2
+event 10 0
+wait 5.2
+event 10 1
+wait 5.2
+event 10 2
+wait 5.2
+event 10 3
+wait 5.2
+
+lang 0
+say ---- fin: en el log no puede haber ni una linea de truncado, y si 70 aperturas ----
 quit

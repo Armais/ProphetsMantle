@@ -182,6 +182,94 @@ struct SaveDataV6 {
     int total_kills;
 };
 
+// v7 es la estructura actual SIN `codex_events` (el campo se anadio al final, que es lo
+// unico que permite que este lector sea una copia literal de la anterior).
+struct SaveDataV7 {
+    bool run_active;
+    int current_act;
+    int current_chapter;
+    int current_room;
+    f32 run_time;
+    int character_type;
+    f32 hp;
+    f32 faith;
+    u32 chapter_seed;
+    int item_count;
+    u32 item_ids[24];
+    u32 consumable_id;
+    u32 consumable_uses;
+    u32 miracle_ids[3];
+    int active_slots;
+    int total_runs;
+    int runs_completed;
+    int offerings;
+    u32 upgrades_bought;
+    u32 codex_enemies;
+    u32 codex_items;
+    u32 codex_miracles;
+    u32 codex_chapters;
+    u64 save_timestamp;
+    u32 unlocks;
+    u32 achievements;
+    u32 miracles_cast;
+    int total_kills;
+    f32 music_volume;
+    f32 sfx_volume;
+    int aim_assist;
+    int sensitivity;
+    int language;
+    u32 settings_flags;
+    u32 items_unlocked;
+    u32 skins_unlocked;
+    u32 skin_equipped;
+    u32 entitlements;
+};
+
+void migrate_v7(const SaveDataV7& old, SaveData& out) {
+    // `codex_events` se queda a cero a proposito: quien viene de v7 vio los diez encuentros
+    // que habia, pero el fichero no guarda CUALES, asi que inventarselo seria mentir en el
+    // contador. Se vuelven a descubrir jugando, que es lo que el contador mide.
+    out = SaveData{};
+    out.run_active      = old.run_active;
+    out.current_act     = old.current_act;
+    out.current_chapter = old.current_chapter;
+    out.current_room    = old.current_room;
+    out.run_time        = old.run_time;
+    out.character_type  = old.character_type;
+    out.hp              = old.hp;
+    out.faith           = old.faith;
+    out.chapter_seed    = old.chapter_seed;
+    out.item_count      = old.item_count;
+    for (int i = 0; i < 24; i++) out.item_ids[i] = old.item_ids[i];
+    out.consumable_id   = old.consumable_id;
+    out.consumable_uses = old.consumable_uses;
+    for (int i = 0; i < 3 && i < Config::MAX_MIRACLE_SLOTS; i++) out.miracle_ids[i] = old.miracle_ids[i];
+    out.active_slots    = old.active_slots;
+    out.total_runs      = old.total_runs;
+    out.runs_completed  = old.runs_completed;
+    out.offerings       = old.offerings;
+    out.upgrades_bought = old.upgrades_bought;
+    out.codex_enemies   = old.codex_enemies;
+    out.codex_items     = old.codex_items;
+    out.codex_miracles  = old.codex_miracles;
+    out.codex_chapters  = old.codex_chapters;
+    out.save_timestamp  = old.save_timestamp;
+    out.unlocks         = old.unlocks;
+    out.achievements    = old.achievements;
+    out.miracles_cast   = old.miracles_cast;
+    out.total_kills     = old.total_kills;
+    out.music_volume    = old.music_volume;
+    out.sfx_volume      = old.sfx_volume;
+    out.aim_assist      = old.aim_assist;
+    out.sensitivity     = old.sensitivity;
+    out.language        = old.language;
+    out.settings_flags  = old.settings_flags;
+    out.items_unlocked  = old.items_unlocked;
+    out.skins_unlocked  = old.skins_unlocked;
+    out.skin_equipped   = old.skin_equipped;
+    out.entitlements    = old.entitlements;
+}
+
 void migrate_v6(const SaveDataV6& old, SaveData& out) {
     // `out = SaveData{}` deja los campos de v7 en sus VALORES POR DEFECTO, que es
     // justo lo que se quiere: quien viene de v6 nunca eligio un idioma ni una
@@ -363,6 +451,15 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v6(old, data);
         SDL_Log("Save file v6 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        save();   // se reescribe ya en el formato nuevo
+        return true;
+    }
+    if (version == 7) {
+        SaveDataV7 old{};
+        SDL_ReadIO(file, &old, sizeof(old));
+        SDL_CloseIO(file);
+        migrate_v7(old, data);
+        SDL_Log("Save file v7 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
         save();   // se reescribe ya en el formato nuevo
         return true;
     }

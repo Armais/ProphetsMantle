@@ -201,7 +201,9 @@ struct ProjectileComponent {
 
 struct ItemComponent {
     enum class Type : u8 { Weapon, Passive, Relic, Consumable, Heredable, Pickup };
-    enum class Pickup : u8 { None, Heart, FaithOrb };
+    // `Offering` es la unica recogida que SOBREVIVE A LA PARTIDA: va derecha a la
+    // meta-progresion. Es lo que hace que explorar de mas pague aunque mueras.
+    enum class Pickup : u8 { None, Heart, FaithOrb, Offering };
     Type   type         = Type::Passive;
     Pickup pickup       = Pickup::None;
     u32    item_id      = 0;
@@ -250,6 +252,7 @@ struct ECSWorld {
 
     // Special entities (quick access)
     Entity player = ENTITY_NONE;
+    Entity gap_crosser = ENTITY_NONE;
 
     // Active room for tile collision
     Room* active_room = nullptr;
@@ -266,6 +269,14 @@ struct ECSWorld {
 
     // Event counters consumed by the Engine each frame
     u32 altars_smashed = 0;   // Baal altars destroyed by player projectiles
+    // Hallazgos pendientes de convertirse en recogida (GDD2.0 fase 4). Van por aqui y no
+    // soltando la pieza en el sitio para que haya UN SOLO lugar que decida que paga un
+    // secreto: el Engine. Lo llenan el tiro que rompe una tinaja y los milagros-llave.
+    std::vector<Vec2> loot_drops;
+    u32 offerings_found = 0;  // ofrendas recogidas este frame (van a la meta-progresion)
+    // Quien puede cruzar huecos ahora mismo. El Carro de Fuego (2 Reyes 2:11) es la llave de
+    // los precipicios, y es lo unico que convierte un hueco en una puerta cerrada en vez de
+    // en un muro. Es UNA entidad y no un componente porque dura dos segundos.
     f32 shake_request  = 0.0f;   // Sacudida pedida desde el mundo (estallido del brasero)
 
     // Floating damage numbers (filled by apply_damage, drawn and aged by the Engine)

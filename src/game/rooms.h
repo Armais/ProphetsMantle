@@ -36,6 +36,9 @@ enum class TileType : u8 {
     Exit,        // Walkable - chapter exit arch (appears when the boss falls)
     Torch,       // Decorative - walkable light source
     Event,       // Walkable - encuentro biblico: al pisarlo se abre el dialogo (game/events.h)
+    Jar,         // Solid - tinaja: se rompe de un tiro y a veces esconde algo
+    Crack,       // Solid - grieta en la roca: solo la abre el Fuego del Cielo
+    Doorway,     // Walkable - puerta: al pisarla se entra a un interior (o se sale de el)
     COUNT
 };
 
@@ -54,6 +57,9 @@ enum class TileSprite : u8 {
     GrassA, GrassB, GrassC, GrassD, StoneA, StoneB, StoneC, StoneD,            // row 5: floor families
     DetTuftA, DetTuftB, DetPebbles, DetFlowers, DetCrack, DetTwigs, DetBones, DetMoss,   // row 6: ground decals
     ShoreEdge, ShoreOut, ShoreIn,      // row 7: water banks, authored for N (rotated 90/180/270 when drawn)
+    CliffRock, CliffRockTall,          // rows 7-8: cara de ROCA (bordes Cliff/Natural); Cliff* sigue siendo silleria
+    Jar, Crack,                        // row 7: secretos de bioma (GDD2.0 fase 4)
+    Door,                              // rows 7-8: puerta a un interior (GDD2.0 fase 3)
     COUNT
 };
 
@@ -112,6 +118,11 @@ inline TileSpriteDef get_tile_sprite_def(TileSprite s) {
         case TileSprite::ShoreEdge: return {0, 7, 1, 1};
         case TileSprite::ShoreOut:  return {1, 7, 1, 1};
         case TileSprite::ShoreIn:   return {2, 7, 1, 1};
+        case TileSprite::CliffRock:     return {3, 7, 1, 1};
+        case TileSprite::CliffRockTall: return {4, 7, 1, 2};
+        case TileSprite::Jar:           return {5, 7, 1, 1};
+        case TileSprite::Crack:         return {6, 7, 1, 1};
+        case TileSprite::Door:          return {7, 7, 1, 2};
         default:                    return {0, 0, 1, 1};
     }
 }
@@ -135,12 +146,26 @@ enum class RoomType : u8 {
     Rest,        // Heal
     Event,       // Story/NPC event (widow, etc.)
     Start,
-    Exit
+    Exit,
+    Interior     // Dentro de un edificio: UNA pantalla, muros de verdad y camara clavada
 };
 
 inline bool is_combat_room(RoomType t) {
     return t == RoomType::Normal || t == RoomType::Elite || t == RoomType::Boss;
 }
+
+// =============================================================================
+// Como se cierra el borde de una sala (referencia ALTTP, ver CLAUDE.md)
+// =============================================================================
+// Hasta la pasada del mundo exterior TODAS las salas iban rodeadas de `TileType::Wall`,
+// tambien el arroyo, los campos y la ribera del Jordan: un acantilado alrededor de un
+// descampado. En un exterior el limite lo pone el terreno; la silleria vive dentro.
+enum class BorderStyle : u8 {
+    Cliff,     // canon, montana, cueva: pared de roca. Correcto en Querit, Carmelo y Horeb
+    Natural,   // desierto, campos, ribera: roca suelta y arboles secos, y el lado conectado
+               // se abre casi entero — un campo abierto no es un corral con puerta
+    Masonry    // ciudad, casa noble, campamento: silleria, vano estrecho y antorchas
+};
 
 // =============================================================================
 // Biome style per chapter: floor family + ground decals + tints over the shared tileset
@@ -163,6 +188,7 @@ struct BiomeStyle {
     TileSprite floor_base;    // First of the 4 floor variants: FloorA (sand), GrassA (meadow), StoneA (paved)
     TileSprite details[3];    // Decals scattered over plain floor tiles
     int  detail_pct;          // % of plain floor tiles that get a decal
+    BorderStyle border;       // Como se cierra el borde de la sala
 };
 
 inline BiomeStyle get_biome_style(int chapter) {
@@ -170,27 +196,69 @@ inline BiomeStyle get_biome_style(int chapter) {
     Color w = Color::white();
     switch (chapter) {
         case 1:  return {w, w, w, w, {60, 48, 36, 255}, TS::Tree, 6, 3, 4, 7, true, false, 0,                                                                       // Arroyo Querit: sandy canyon
-                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 32};
+                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 32, BorderStyle::Cliff};
         case 2:  return {{240, 228, 200, 255}, w, {225, 215, 170, 255}, {215, 205, 190, 255}, {58, 50, 40, 255}, TS::Palm, 3, 3, 3, 3, false, true, 2,              // Sarepta: village on sand
-                         TS::FloorA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftB}, 22};
+                         TS::FloorA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftB}, 22, BorderStyle::Natural};
         case 3:  return {{200, 200, 210, 255}, {210, 220, 235, 255}, {190, 200, 200, 255}, {180, 180, 190, 255}, {40, 40, 48, 255}, TS::TreeDead, 3, 8, 1, 2, false, false, 0, // Carmelo: rocky mountain
-                         TS::StoneA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftA}, 30};
+                         TS::StoneA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftA}, 30, BorderStyle::Cliff};
         case 4:  return {{150, 135, 140, 255}, {150, 150, 190, 255}, {140, 130, 140, 255}, {130, 120, 130, 255}, {24, 20, 26, 255}, TS::TreeDead, 2, 8, 0, 1, false, true, 1,  // Horeb: dark cave
-                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 30};
+                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 30, BorderStyle::Cliff};
         case 5:  return {{235, 245, 215, 255}, w, {215, 240, 190, 255}, {200, 210, 180, 255}, {40, 52, 34, 255}, TS::Tree, 7, 1, 5, 9, false, false, 0,             // El Llamado: meadows
-                         TS::GrassA, {TS::DetTuftA, TS::DetFlowers, TS::DetTuftB}, 45};
+                         TS::GrassA, {TS::DetTuftA, TS::DetFlowers, TS::DetTuftB}, 45, BorderStyle::Natural};
         case 6:  return {{180, 170, 180, 255}, {120, 150, 110, 255}, {170, 165, 170, 255}, {170, 165, 175, 255}, {36, 34, 40, 255}, TS::TreeDead, 2, 4, 2, 2, true, true, 2,  // Jerico: corrupt city
-                         TS::StoneA, {TS::DetCrack, TS::DetMoss, TS::DetBones}, 30};
+                         TS::StoneA, {TS::DetCrack, TS::DetMoss, TS::DetBones}, 30, BorderStyle::Masonry};
         case 7:  return {{220, 205, 180, 255}, w, {215, 205, 175, 255}, {205, 195, 180, 255}, {52, 46, 38, 255}, TS::Palm, 3, 3, 3, 4, false, true, 2,              // Aceite: poor village
-                         TS::FloorA, {TS::DetPebbles, TS::DetTwigs, TS::DetTuftB}, 24};
+                         TS::FloorA, {TS::DetPebbles, TS::DetTwigs, TS::DetTuftB}, 24, BorderStyle::Natural};
         case 8:  return {{232, 224, 214, 255}, w, {225, 215, 200, 255}, {225, 215, 205, 255}, {50, 44, 42, 255}, TS::Palm, 3, 2, 4, 3, false, true, 3,              // Sunamita: noble house (clean paving)
-                         TS::StoneA, {TS::DetMoss, TS::DetCrack, TS::DetFlowers}, 14};
+                         TS::StoneA, {TS::DetMoss, TS::DetCrack, TS::DetFlowers}, 14, BorderStyle::Masonry};
         case 9:  return {{225, 235, 215, 255}, {200, 220, 240, 255}, {205, 215, 195, 255}, {200, 200, 190, 255}, {44, 48, 40, 255}, TS::Tree, 4, 3, 3, 6, true, false, 0,  // Jordan: green banks
-                         TS::GrassA, {TS::DetTuftA, TS::DetPebbles, TS::DetFlowers}, 40};
+                         TS::GrassA, {TS::DetTuftA, TS::DetPebbles, TS::DetFlowers}, 40, BorderStyle::Natural};
         case 10: return {{175, 170, 175, 255}, w, {165, 160, 165, 255}, {160, 155, 165, 255}, {30, 28, 34, 255}, TS::TreeDead, 2, 4, 1, 1, false, true, 3,          // Ciudad sitiada
-                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 34};
+                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 34, BorderStyle::Masonry};
         default: return {w, w, w, w, {60, 48, 36, 255}, TS::Tree, 5, 3, 3, 5, true, false, 0,
-                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 30};
+                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 30, BorderStyle::Cliff};
+    }
+}
+
+// =============================================================================
+// Interiores (GDD2.0 fase 3)
+// =============================================================================
+// La otra mitad de la gramatica de A Link to the Past. El exterior ya no tiene muros; el muro
+// vuelve DONDE SIGNIFICA ALGO: dentro de un edificio. Un interior mide UNA pantalla, y con eso
+// la camara se queda clavada sola (`Camera` recorta contra `Room::world_w/h`) — o sea que el
+// "interior sala a sala" del GDD sale gratis, igual que salio en la arena del jefe.
+//
+// Uno por capitulo, colgado de una sala exterior por una PUERTA (`TileType::Doorway`). El nodo
+// del interior va DETRAS de la rejilla en `FloorMap::rooms`, asi que el guardado —que guarda un
+// INDICE de sala— no cambia de formato: esa era la condicion de abandono del track.
+// Dentro NO hay hierba. Con el suelo del bioma, un interior se lee como un patio: el mismo
+// arenal con flores y matas, solo que con muros alrededor. Se cambia la familia de suelo por
+// la de silleria y los decorados por grietas, cascotes y moho.
+inline void apply_interior_style(BiomeStyle& b) {
+    b.floor_base  = TileSprite::StoneA;
+    b.details[0]  = TileSprite::DetCrack;
+    b.details[1]  = TileSprite::DetPebbles;
+    b.details[2]  = TileSprite::DetMoss;
+    b.detail_pct  = 16;
+    b.floor_tint  = {208, 192, 168, 255};
+    b.wall_tint   = {200, 192, 182, 255};
+    b.prop_tint   = {214, 200, 182, 255};
+    b.background  = {22, 18, 16, 255};
+}
+
+inline const char* get_interior_name(int chapter) {
+    switch (chapter) {
+        case 1:  return tr("La cueva del arroyo", "The cave by the brook");
+        case 2:  return tr("La casa de la viuda", "The widow's house");
+        case 3:  return tr("El templo de Baal", "The temple of Baal");
+        case 4:  return tr("La cueva de Horeb", "The cave of Horeb");
+        case 5:  return tr("El palacio de Acab", "Ahab's palace");
+        case 6:  return tr("La escuela de profetas", "The school of the prophets");
+        case 7:  return tr("La casa del acreedor", "The creditor's house");
+        case 8:  return tr("El aposento sunamita", "The Shunammite's chamber");
+        case 9:  return tr("La tienda de Naaman", "Naaman's tent");
+        case 10: return tr("El granero de Samaria", "The granary of Samaria");
+        default: return tr("Un interior", "An interior");
     }
 }
 
@@ -200,11 +268,45 @@ inline BiomeStyle get_biome_style(int chapter) {
 struct Renderer;
 struct DrawCmd;
 
+// =============================================================================
+// Secretos de bioma (GDD2.0 fase 4)
+// =============================================================================
+// La tercera queja del usuario era que "no se motiva al jugador a investigar". La fase 1 dio
+// sitio que recorrer; esto da RAZONES para desviarse, y el mecanismo es el de A Link to the
+// Past: los milagros son las llaves, y lo que abren tiene que verse ANTES de poder abrirlo.
+// Si la grieta no se ve hasta que tienes el milagro, no hay motivo para volver — y volver es
+// todo el punto.
+//
+// Una celda de secreto ES su propio estado: la sala entera se cachea en
+// `FloorMap::room_cache`, asi que abrir un secreto persiste durante la partida SIN tocar el
+// formato del guardado. Esa es la razon de que esto no haya subido la version del fichero.
+enum SecretKind : u32 {
+    SECRET_BUSH  = 1u << 0,   // matorral que se corta (tiro, o el fuego)
+    SECRET_JAR   = 1u << 1,   // tinaja que se rompe (tiro)
+    SECRET_CRACK = 1u << 2,   // grieta que se abre (Fuego del Cielo)
+    SECRET_WATER = 1u << 3,   // charca que se seca (Sanar Aguas)
+};
+
 struct Room {
     RoomType type = RoomType::Normal;
     int chapter = 1;
+    // Que encuentro guarda esta sala (id de `namespace Ev`, game/events.h). -1 = ninguno.
+    // Lo reparte `FloorMap::generate` y viaja en el nodo, no en el capitulo: hay 2-3 salas
+    // Event por mapa y cada una cuenta una escena DISTINTA del pozo del capitulo.
+    int event_id = -1;
+    // Puerta a un interior (o de vuelta). `has_doorway` dice si esta sala tiene una y
+    // `door_tx/door_ty` donde. En un INTERIOR esta siempre en el centro del muro sur.
+    bool has_doorway = false;
+    int  door_tx = 0, door_ty = 0;
 
-    // Tile grid (20 x 11 tiles at 16px each = 320x176, close enough to 180)
+    // Tamano REAL de esta sala en tiles. La matriz se dimensiona al maximo (una sala
+    // exterior, 2x2 pantallas) y un espacio de una pantalla — la arena del jefe, y los
+    // interiores de la fase siguiente — usa solo su esquina. Todo bucle sobre el mapa va
+    // contra `tiles_w`/`tiles_h`, nunca contra las constantes.
+    int tiles_w = Config::ROOM_TILES_X;
+    int tiles_h = Config::ROOM_TILES_Y;
+    BorderStyle border = BorderStyle::Cliff;
+
     TileType tiles[Config::ROOM_TILES_Y][Config::ROOM_TILES_X] = {};
 
     // Enemy spawns
@@ -230,10 +332,12 @@ struct Room {
     bool event_used   = false;   // Encuentro de la sala Event ya resuelto
     int  exit_tx = 10, exit_ty = 2;   // Arch tile (valid when exit_open)
 
-    void generate(RoomType room_type, int chapter, int difficulty);
+    void generate(RoomType room_type, int chapter, int difficulty, int event = -1,
+                  bool with_doorway = false);
     bool is_tile_walkable(int tx, int ty) const;
     bool is_walkable_world(Vec2 p) const;          // world point (use the entity's FEET: pos + collider.offset)
     bool is_slow_world(Vec2 p) const;              // shallow water under the feet: movement is dragged
+    bool is_pit_world(Vec2 p) const;                // hueco: solo lo cruza el Carro de Fuego
     bool is_tile_solid_for_projectiles(int tx, int ty) const;
     Vec2 tile_to_world(int tx, int ty) const;
     bool find_free_tile_near(int tx, int ty, int& out_x, int& out_y) const;
@@ -241,16 +345,35 @@ struct Room {
     bool nearest_walkable_world(Vec2 feet, Vec2& out_feet) const;
     void place_exit();           // Boss defeated: open the arch at the top centre
 
+    // Abre en `radius` todo lo que `kinds` permita y apunta en `out_loot` DONDE ha aparecido
+    // un hallazgo. Devuelve cuantas celdas se han abierto (0 = la llave no valia aqui).
+    int open_secrets(Vec2 center, f32 radius, u32 kinds, std::vector<Vec2>& out_loot);
+    // Que celdas esconden algo: determinista por `tile_hash`, asi que la misma semilla da el
+    // mismo mapa de hallazgos y no hay nada que guardar.
+    bool tile_hides_loot(int tx, int ty) const;
+
     // Rendering: ground pass (floor, water, walls) then props into the y-sorted draw list
     void render_ground(Renderer& renderer, u32 tileset, f32 time) const;
-    void collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex = TEXTURE_NONE) const;
+    // `npc_tex` es assets/sprites/npcs.png: quien espera en la sala de encuentro. Sin ella
+    // (o si el locutor es una escena y no una persona) el sitio lo sigue marcando una hoguera.
+    void collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex = TEXTURE_NONE,
+                       u32 npc_tex = TEXTURE_NONE, f32 time = 0.0f) const;
     void render_exit_barriers(Renderer& renderer, f32 time) const;
 
-    // Border openings (gap tiles) per side — the "doors" of the open-air rooms
-    static bool is_gap_x(int tx) { return tx >= GAP_X0 && tx <= GAP_X1; }
-    static bool is_gap_y(int ty) { return ty >= GAP_Y0 && ty <= GAP_Y1; }
-    static constexpr int GAP_X0 = 7, GAP_X1 = 12;   // North/South openings (6 tiles wide)
-    static constexpr int GAP_Y0 = 3, GAP_Y1 = 7;    // East/West openings (5 tiles tall)
+    // Tamano de la sala en unidades de juego (lo que ve la camara y las transiciones)
+    f32 world_w() const { return static_cast<f32>(tiles_w * Config::TILE_SIZE); }
+    f32 world_h() const { return static_cast<f32>(tiles_h * Config::TILE_SIZE); }
+
+    // Aberturas del borde: las "puertas" de una sala al aire libre. En bioma `Natural` el
+    // lado conectado se abre CASI ENTERO (solo se cierran las esquinas): un vano de seis
+    // tiles en mitad de un campo lo convierte en un corral con puerta. En `Cliff` y
+    // `Masonry` el paso es estrecho, que es donde un vano significa algo.
+    int gap_x0() const { return border == BorderStyle::Natural ? 2 : tiles_w / 2 - 3; }
+    int gap_x1() const { return border == BorderStyle::Natural ? tiles_w - 3 : tiles_w / 2 + 2; }
+    int gap_y0() const { return border == BorderStyle::Natural ? 2 : tiles_h / 2 - 2; }
+    int gap_y1() const { return border == BorderStyle::Natural ? tiles_h - 3 : tiles_h / 2 + 2; }
+    bool is_gap_x(int tx) const { return tx >= gap_x0() && tx <= gap_x1(); }
+    bool is_gap_y(int ty) const { return ty >= gap_y0() && ty <= gap_y1(); }
 };
 
 // =============================================================================
@@ -269,16 +392,16 @@ struct ChapterDef {
 
 inline ChapterDef get_chapter_def(int chapter) {
     switch (chapter) {
-        case 1:  return {tr("El Arroyo Querit", "The Brook Cherith"),     tr("Cañón / Arroyo", "Canyon / Brook"),      1, 3, 3, EnemyType::SoldadoDeAcab,   tr("Capitán de Acab", "Ahab's Captain"),          BossPattern::CapitanDeAcab};
-        case 2:  return {tr("La Viuda de Sarepta", "The Widow of Zarephath"),  tr("Aldea fenicia", "Phoenician village"),       2, 3, 3, EnemyType::ProfetaDeBaal,   tr("Sacerdote de Baal", "Priest of Baal"),        BossPattern::SacerdoteBaal};
+        case 1:  return {tr("El Arroyo Querit", "The Brook Cherith"),     tr("Cañón / Arroyo", "Canyon / Brook"),      1, 4, 3, EnemyType::SoldadoDeAcab,   tr("Capitán de Acab", "Ahab's Captain"),          BossPattern::CapitanDeAcab};
+        case 2:  return {tr("La Viuda de Sarepta", "The Widow of Zarephath"),  tr("Aldea fenicia", "Phoenician village"),       2, 4, 3, EnemyType::ProfetaDeBaal,   tr("Sacerdote de Baal", "Priest of Baal"),        BossPattern::SacerdoteBaal};
         case 3:  return {tr("El Monte Carmelo", "Mount Carmel"),     tr("Montaña", "Mountain"),             3, 4, 3, EnemyType::ProfetaDeBaal,   tr("Los 450 Profetas de Baal", "The 450 Prophets of Baal"), BossPattern::ProfetasDeBaal};
-        case 4:  return {tr("La Cueva de Horeb", "The Cave of Horeb"),    tr("Desierto / Cueva", "Desert / Cave"),    4, 3, 3, EnemyType::LeonDelDesierto, tr("Tu Propia Desesperación", "Your Own Despair"),  BossPattern::Desesperacion};
-        case 5:  return {tr("El Llamado", "The Calling"),           tr("Campos", "Fields"),              5, 4, 3, EnemyType::ArqueroReal,     tr("Acab y Jezabel", "Ahab and Jezebel"),           BossPattern::AcabYJezabel};
-        case 6:  return {tr("Las Aguas de Jericó", "The Waters of Jericho"),  tr("Ciudad corrupta", "Corrupt city"),     6, 3, 3, EnemyType::AguaCorrupta,    tr("Espíritu de Corrupción", "Spirit of Corruption"),   BossPattern::EspirituCorrupto};
-        case 7:  return {tr("El Aceite de la Viuda", "The Widow's Oil"),tr("Aldea pobre", "Poor village"),         7, 3, 3, EnemyType::SoldadoSirio,    tr("El Acreedor", "The Creditor"),              BossPattern::Acreedor};
-        case 8:  return {tr("El Hijo Sunamita", "The Shunammite's Son"),     tr("Casa noble", "Noble house"),          8, 3, 3, EnemyType::IdolatraDeRimon, tr("La Muerte", "Death"),                BossPattern::LaMuerte};
+        case 4:  return {tr("La Cueva de Horeb", "The Cave of Horeb"),    tr("Desierto / Cueva", "Desert / Cave"),    4, 4, 3, EnemyType::LeonDelDesierto, tr("Tu Propia Desesperación", "Your Own Despair"),  BossPattern::Desesperacion};
+        case 5:  return {tr("El Llamado", "The Calling"),           tr("Campos", "Fields"),              5, 4, 4, EnemyType::ArqueroReal,     tr("Acab y Jezabel", "Ahab and Jezebel"),           BossPattern::AcabYJezabel};
+        case 6:  return {tr("Las Aguas de Jericó", "The Waters of Jericho"),  tr("Ciudad corrupta", "Corrupt city"), 6, 4, 3, EnemyType::AguaCorrupta,    tr("Espíritu de Corrupción", "Spirit of Corruption"),   BossPattern::EspirituCorrupto};
+        case 7:  return {tr("El Aceite de la Viuda", "The Widow's Oil"),tr("Aldea pobre", "Poor village"), 7, 4, 3, EnemyType::SoldadoSirio,    tr("El Acreedor", "The Creditor"),              BossPattern::Acreedor};
+        case 8:  return {tr("El Hijo Sunamita", "The Shunammite's Son"),     tr("Casa noble", "Noble house"), 8, 4, 3, EnemyType::IdolatraDeRimon, tr("La Muerte", "Death"),                BossPattern::LaMuerte};
         case 9:  return {tr("Naamán el Sirio", "Naaman the Syrian"),      tr("Campamento / Jordán", "Camp / Jordan"), 9, 4, 3, EnemyType::GeneralSirio,    tr("Guiezi el Codicioso", "Gehazi the Covetous"),      BossPattern::Guiezi};
-        case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"),     10, 4, 4, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
+        case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"), 10, 4, 4, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
         default: return {"???",                  "???",                  0, 3, 3, EnemyType::SoldadoDeAcab,  "???",                      BossPattern::CapitanDeAcab};
     }
 }
@@ -287,13 +410,18 @@ inline ChapterDef get_chapter_def(int chapter) {
 // Room Map (floor layout - which rooms connect to which)
 // =============================================================================
 struct FloorMap {
-    static constexpr int MAX_ROOMS = 16;  // Enough for 4x4 grid
+    static constexpr int MAX_ROOMS = 25;  // hasta 5x5; hoy el techo real es 4x4
 
     struct RoomNode {
         RoomType type = RoomType::Normal;
         int grid_x = 0;
         int grid_y = 0;
         int connections[4] = {-1, -1, -1, -1};  // N, S, E, W -> room index
+        int event_id = -1;   // solo en RoomType::Event: que escena del pozo cuenta esta sala
+        // Enlace exterior <-> interior. En la sala de FUERA, `interior_room` es el indice de
+        // su interior; en el INTERIOR, `interior_of` es el de su sala de fuera.
+        int interior_room = -1;
+        int interior_of   = -1;
     };
 
     RoomNode rooms[MAX_ROOMS];

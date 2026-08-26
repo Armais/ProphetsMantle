@@ -7,6 +7,7 @@
 #   LOADOUT despues  | Eliseo | slots 3 [Sanar Aguas / Ejercito Celestial / <milagro de Elias>]
 #                    | recarga x0.75 | objetos: El Manto de Elias
 #   LOADOUT recargado -> identico al anterior tras guardar y volver a cargar
+#   "Ascension: le seguiste 3 de 3 veces, doble porcion=si"  <- el camino completo
 
 wait 1.0
 press confirm
@@ -26,9 +27,24 @@ stats antes
 shot 60_elias_antes_ascension
 wait 0.1
 
-# --- La Ascension: el manto cae sobre Eliseo ---
+# --- La Ascension: CUATRO PARADAS con decision, y luego el carro de fuego ---
+# En autoplay el dialogo avanza y decide SOLO (siempre la primera opcion), asi que el bot
+# recorre el camino entero como Eliseo en el pasaje: le sigue las tres veces y pide la doble
+# porcion. El log tiene que decir "le seguiste 3 de 3 veces, doble porcion=si" — y con eso la
+# herencia queda EXACTAMENTE como estaba antes de que el Ascenso fuera jugable, que es la
+# condicion que este guion vigila.
 ascend
-wait 9.0
+wait 1.0
+shot 60a_ascenso_gilgal
+wait 4.4
+shot 60b_ascenso_betel
+wait 4.4
+shot 60c_ascenso_jerico
+wait 4.4
+shot 60d_ascenso_jordan
+wait 5.0
+press confirm
+wait 3.0
 press confirm
 wait 3.0
 press confirm

@@ -48,6 +48,7 @@ La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compil
 | 8 estampas del prólogo (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
 | 22 retratos y viñetas | `assets/sprites/portraits.png` | `tools/blender/mantle_sprites/portraits.py` |
 | Hoja de efectos | `assets/sprites/vfx.png` | `tools/blender/mantle_sprites/vfx.py` |
+| Logo, marca e icono | `assets/branding/` | `tools/blender/mantle_sprites/logo.py` + `tools/branding/make_icon.py` |
 
 Modelado y animación procedurales en Python sobre Blender; no se importa ningún modelo,
 textura ni HDRI de terceros. Los `.blend` fuente viven en `tools/blender/blend/` y no son

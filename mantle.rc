@@ -1,0 +1,6 @@
+// Icono del ejecutable en Windows (el que ensena el explorador y la barra de tareas).
+// Se compila con el .exe via CMakeLists.txt (solo bajo WIN32); el .ico lo genera
+// tools/branding/make_icon.py a partir de los renders de Blender.
+// El PRIMER icono por orden alfabetico de id es el que Windows usa como icono del fichero,
+// asi que este va con el id 1 y no hay ningun otro.
+1 ICON "assets/branding/mantle.ico"

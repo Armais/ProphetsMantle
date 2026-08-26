@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <set>
 
 bool Renderer::init(SDL_Renderer* renderer, SDL_Texture* render_target) {
     sdl = renderer;
@@ -477,10 +478,24 @@ int Renderer::wrap_text(const char* text, f32 max_w, f32 scale, std::string* out
                 cur = candidate;
             }
         }
-        if (!space) break;
+        if (!space) { p += word.size(); break; }   // p al final: no queda nada por colocar
         p = space + 1;
     }
-    if (!cur.empty() && lines < max_lines) out[lines++] = cur;
+    bool dropped = false;
+    if (!cur.empty()) {
+        if (lines < max_lines) out[lines++] = cur;
+        else                   dropped = true;
+    }
+    // El truncado era SILENCIOSO, y es el unico fallo de texto que no se ve venir: el ingles
+    // no siempre es mas corto y la caja de dialogo con retrato pierde ~35 unidades de ancho.
+    // Con esta linea un guion de regresion puede exigir CERO "TEXT TRUNCATED" en el log, en
+    // vez de comparar setenta capturas a ojo. Una vez por texto (y con techo), o en una caja
+    // que se redibuja cada frame saldrian sesenta lineas por segundo.
+    if (dropped || *p) {
+        static std::set<const void*> reported;
+        if (reported.size() < 96 && reported.insert(static_cast<const void*>(text)).second)
+            SDL_Log("TEXT TRUNCATED (%d lineas de %.0f u): \"%s\"", max_lines, max_w, text);
+    }
     return lines;
 }
 

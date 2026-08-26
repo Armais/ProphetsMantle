@@ -14,7 +14,8 @@ Cell layout (mirrored by TileSprite in src/game/rooms.h — keep in sync):
     row 5: grass_a..d (meadow floor)  stone_a..d (paved floor)
     row 6: detail decals: tuft_a tuft_b pebbles flowers crack twigs bones moss
     row 7: shore autotiling pieces (edge / outer corner / inner corner), authored for
-           N = +Y; the other 9 orientations are the same cells rotated 90/180/270 in C++
+           N = +Y; the other 9 orientations are the same cells rotated 90/180/270 in C++,
+           y despues cliff_rock / cliff_rock_tall (la cara de roca, que ocupa hasta la row 8)
 """
 import math
 import os
@@ -29,7 +30,7 @@ from .parts import get_mat, hexc, box, sphere, tube, plane_quad
 
 CELL = 64            # px per cell = 16 game units x ASSET_SCALE 4 (rooms.h TILESET_CELL)
 TILE_COLS = 8
-TILE_ROWS = 8
+TILE_ROWS = 9
 SS = 2
 U = render.ORTHO_SCALE / render.FRAME * CELL     # world units per cell (1.275)
 OUTLINE = render.OUTLINE
@@ -54,6 +55,13 @@ LAYOUT = {
     'det_crack': (4, 6, 1, 1), 'det_twigs': (5, 6, 1, 1), 'det_bones': (6, 6, 1, 1), 'det_moss': (7, 6, 1, 1),
     # row 7: shore pieces drawn over water tiles (rotated in C++ for the other sides)
     'shore_edge': (0, 7, 1, 1), 'shore_out': (1, 7, 1, 1), 'shore_in': (2, 7, 1, 1),
+    # rows 7-8: cara de ROCA para los bordes naturales/canon. `cliff` y `cliff_tall` son
+    # silleria y ahi se quedan: en ciudad y palacio el ladrillo es lo correcto.
+    'cliff_rock': (3, 7, 1, 1), 'cliff_rock_tall': (4, 7, 1, 2),
+    # Secretos de bioma (GDD2.0 fase 4): lo que se rompe y lo que se abre.
+    'jar': (5, 7, 1, 1), 'crack': (6, 7, 1, 1),
+    # rows 7-8: puerta a un interior (GDD2.0 fase 3)
+    'door': (7, 7, 1, 2),
 }
 
 
@@ -78,6 +86,10 @@ def mats():
         'purple': M('purple', '#5b2c6f'), 'purple_dk': M('purple_dk', '#31183d'), 'ruby': M('ruby', '#c0392b'),
         'black': M('black', '#15100c'), 'white': M('white', '#f1ecdc'), 'dead': M('dead', '#8a7660'),
         'sky': M('sky', '#f5e6b3'),
+        # Barro cocido de la tinaja: naranja quemado, para que no se confunda con la madera
+        # del cofre ni con la tierra del suelo (los tres son pardos).
+        'clay': M('clay', '#b5673c'), 'clay_dk': M('clay_dk', '#87462a'),
+        'clay_lt': M('clay_lt', '#d18a5e'),
         # meadow / paving / decals
         'meadow': M('meadow', '#6fae4e'), 'meadow_dk': M('meadow_dk', '#558f3c'), 'meadow_lt': M('meadow_lt', '#8fc765'),
         'slab': M('slab', '#9a9283'), 'slab_lt': M('slab_lt', '#b2aa9a'), 'slab_dk': M('slab_dk', '#7d7567'),
@@ -408,6 +420,75 @@ def build_cliff_tall(m):
     _stone_wall(m, 2.1, 6, 9)
 
 
+def _rock_wall(m, h, cols, seed):
+    """Escarpa de ROCA: masas desiguales con las juntas VERTICALES y la coronacion mordida.
+
+    Lo que hacia que el canon del Querit se leyera como una tapia no era el color, era la
+    GEOMETRIA de `_stone_wall`: hiladas horizontales, todas del mismo alto, alineadas. Una
+    escarpa dice lo contrario — bloques de tamanos distintos, cantos girados y grietas que
+    corren de arriba abajo.
+
+    Se hace con cajas y no con esferas a proposito (misma leccion que la pared de la cueva
+    en portraits.py): una corona de esferas iguales con cavity sale "collar de perlas", y
+    unas masas angulosas se leen como piedra a la primera. Dos cosas que costaron una
+    pasada: las columnas tienen que SOLAPAR (si solo se tocan, entre ellas se ve el cuerpo
+    oscuro y parece un agujero), y el cuerpo va en `rock`, no en `rock_dk` — lo que asome
+    tiene que leerse como sombra de la roca y no como un hueco negro.
+    """
+    rng = random.Random(seed)
+    W = U + 0.04
+    # El cuerpo oscuro asoma por las juntas y ES la grieta, igual que el mortero de la
+    # silleria. Sin junta no hay bloques: sale una pared lisa con manchas.
+    box('body', (0, 0, h * 0.5), (W, W, h), m['rock_dk'])
+    face_y = -U * 0.5
+    shades = [m['rock'], m['rock_lt'], m['stone'], m['rock'], m['rock_lt']]
+    # Cortes repartidos con temblor, NO al azar puro: dos cortes aleatorios caian juntos y
+    # dejaban una columna del 80% del ancho, o sea una losa de lado a lado.
+    cuts = [(c + 1) / float(cols) + rng.uniform(-0.09, 0.09) for c in range(cols - 1)]
+    xs = [0.0] + cuts + [1.0]
+    for c in range(cols):
+        x0, x1 = xs[c], xs[c + 1]
+        cw = (x1 - x0) * W
+        cx = -W * 0.5 + (x0 + x1) * 0.5 * W
+        # Cada columna corta por su cuenta: las juntas NO se alinean en hilada, y eso es
+        # todo lo que separa una escarpa de un muro de sillares.
+        z, k = 0.0, 0
+        while z < h - 0.01:
+            step = min(h - z, rng.uniform(0.23, 0.42))
+            if h - (z + step) < 0.10:
+                step = h - z
+            box('m%d_%d' % (c, k), (cx + rng.uniform(-0.02, 0.02), face_y, z + step * 0.5),
+                (cw - 0.05, 0.09, step - 0.035), rng.choice(shades),
+                rot=Matrix.Rotation(math.radians(rng.uniform(-11.0, 11.0)), 4, 'Y'),
+                round=0.15, taper=(rng.uniform(0.76, 1.08), 1.0))
+            z += step
+            k += 1
+    # Lascas: cantos sueltos, en la MISMA familia de color. En gris claro (`stone`) se
+    # leian como escombro pegado con cola, no como parte de la roca.
+    for k in range(1 if h < 1.0 else 3):
+        box('ch%d' % k, (rng.uniform(-0.38, 0.38) * W, face_y - 0.045, rng.uniform(0.15, 0.88) * h),
+            (rng.uniform(0.16, 0.30), 0.04, rng.uniform(0.06, 0.11)),
+            rng.choice([m['rock_lt'], m['rock']]),
+            rot=Matrix.Rotation(math.radians(rng.uniform(-28.0, 28.0)), 4, 'Y'), round=0.3)
+    # Coronacion mordida, no losa recta
+    box('top', (0, 0, h + 0.02), (W, W, 0.05), m['rock'])
+    for k in range(3):
+        x = -W * 0.5 + W * (k + 0.5) / 3.0
+        sphere('cap%d' % k, (x + rng.uniform(-0.10, 0.10), rng.uniform(-0.34, 0.08) * U,
+                             h + 0.03),
+               rng.uniform(0.09, 0.17), rng.choice([m['rock_lt'], m['rock']]),
+               scale=(1.4, 1.0, 0.45), segs=8, rings=5)
+    box('shadow', (0, -U * 0.5 - 0.06, 0.02), (W, 0.06, 0.04), m['black'])
+
+
+def build_cliff_rock(m):
+    _rock_wall(m, 0.62, 3, 21)
+
+
+def build_cliff_rock_tall(m):
+    _rock_wall(m, 2.1, 3, 23)
+
+
 def build_rock(m):
     sphere('r0', (-0.08, 0.02, 0.22), 0.36, m['stone'], scale=(1.15, 0.9, 0.7), segs=10, rings=6)
     sphere('r1', (0.22, -0.1, 0.16), 0.22, m['stone_lt'], scale=(1.0, 0.9, 0.75), segs=8, rings=5)
@@ -431,6 +512,77 @@ def build_grass(m):
         lean = rng.uniform(-0.18, 0.18)
         tube(f'g{i}', (x, y, 0.0), (x + lean, y + rng.uniform(-0.05, 0.05), h), 0.045, 0.006,
              m['grass'] if i % 2 else m['grass_dk'], segs=5)
+
+
+def build_jar(m):
+    """Tinaja de barro: se rompe de un tiro y a veces esconde algo.
+
+    Perfil de PANZA — dos troncos de cono opuestos —, no un cilindro: un cilindro con asas es
+    un cubo de fregar. El cuello estrecho y el borde volteado son lo que la leen como vasija
+    a 16 unidades, mucho antes que las asas.
+    """
+    tube('body_lo', (0, 0, 0.02), (0, 0, 0.34), 0.22, 0.36, m['clay'], segs=20, rim_round=0.03)
+    tube('body_hi', (0, 0, 0.34), (0, 0, 0.60), 0.36, 0.20, m['clay'], segs=20)
+    tube('neck', (0, 0, 0.60), (0, 0, 0.72), 0.16, 0.15, m['clay_dk'], segs=16)
+    tube('rim', (0, 0, 0.70), (0, 0, 0.76), 0.21, 0.20, m['clay_lt'], segs=16, rim_round=0.02)
+    for i, sx in ((0, 1.0), (1, -1.0)):
+        tube('handle%d' % i, (sx * 0.33, 0, 0.34), (sx * 0.40, 0, 0.54), 0.05, 0.05,
+             m['clay_dk'], segs=8)
+    # Franja clara a media panza: sin ella el barro sale como una mancha lisa
+    tube('band', (0, 0, 0.40), (0, 0, 0.46), 0.345, 0.335, m['clay_lt'], segs=20)
+
+
+def build_crack(m):
+    """Grieta en la roca: SOLO la abre el Fuego del Cielo, y tiene que verse mucho antes de
+    que el jugador tenga el milagro — ese es el gate de diseno de la fase 4.
+
+    Se monta sobre la silueta de `build_rock` (un canto rodado partido en DOS), y no con
+    cajas: con cajas salen dos maletas grises, probado. Lo que dice "esto se abre" es que la
+    silueta este PARTIDA y que entre las dos mitades haya una hendidura que se ensancha hacia
+    arriba. Y la hendidura tiene que ser geometria HUNDIDA: con luz de estudio, Workbench
+    aclara cualquier plano oscuro hasta gris medio, asi que pintarla no vale (misma leccion
+    que el vano de la cueva en portraits.py).
+    """
+    # Las dos mitades: mismo canto rodado de `build_rock`, separado y girado hacia fuera.
+    sphere('half_l', (-0.25, 0.02, 0.21), 0.34, m['rock'], scale=(0.85, 0.95, 0.74), segs=10, rings=6)
+    sphere('half_r', (0.26, -0.02, 0.19), 0.31, m['rock_lt'], scale=(0.82, 0.92, 0.72), segs=10, rings=6)
+    # Cuna oscura entre las dos, mas ancha ARRIBA: eso es lo que se lee como grieta y no
+    # como junta. Va hundida en Y para que no sea una raya pegada al frente.
+    # DELANTE (y negativa), no detras: puesta atras la tapaban las dos mitades y la grieta se
+    # quedaba en una muesca en el borde de arriba. Y llega hasta el suelo, o el canto se lee
+    # partido solo por la coronilla.
+    box('gap', (0.0, -0.07, 0.19), (0.11, 0.48, 0.42), m['black'],
+        taper=(1.9, 1.0), round=0.08)
+    box('gap_deep', (0.0, 0.10, 0.15), (0.06, 0.26, 0.32), m['black'], round=0.08)
+    # Un canto encima de cada mitad rompe la simetria de las dos medias esferas
+    sphere('top_l', (-0.30, -0.12, 0.34), 0.13, m['stone'], scale=(1.0, 0.9, 0.7), segs=8, rings=5)
+    sphere('top_r', (0.30, -0.10, 0.30), 0.11, m['rock_dk'], scale=(1.0, 0.9, 0.7), segs=8, rings=5)
+    # Lascas al pie: dicen "esto se ha movido alguna vez"
+    for i, (x, y, sz) in enumerate(((-0.40, -0.26, 0.11), (0.38, -0.30, 0.09), (0.04, -0.38, 0.07))):
+        sphere('chip%d' % i, (x, y, sz * 0.5), sz, m['stone'], scale=(1.2, 1.0, 0.6), segs=6, rings=4)
+
+
+def build_door(m):
+    """Puerta a un interior: dos jambas, dintel y el vano HUNDIDO.
+
+    El vano NO se hace poniendo un plano oscuro: con luz de estudio, Workbench aclara
+    cualquier plano oscuro hasta gris medio (misma leccion que la boca de la cueva en
+    portraits.py). Se hace con GEOMETRIA — el fondo va metido hacia dentro y las jambas y el
+    dintel le echan su propia sombra.
+
+    Y tiene que caber en UNA celda de ancho: los props altos se rendizan en dos celdas y se
+    recorta la columna central, asi que lo que se salga de +-U/2 desaparece.
+    """
+    h = 2.05
+    box('back', (0, 0.40, h * 0.46), (U * 0.64, 0.12, h * 0.86), m['black'])
+    for i, sx in ((0, -1.0), (1, 1.0)):
+        box('jamb%d' % i, (sx * U * 0.36, 0.0, h * 0.5), (0.30, 0.52, h), m['stone'], round=0.14)
+    box('lintel', (0, 0.0, h - 0.15), (U * 0.96, 0.56, 0.32), m['stone_lt'], round=0.12)
+    box('sill', (0, -0.22, 0.06), (U * 0.86, 0.34, 0.12), m['rock_lt'], round=0.22)
+    # Dos sillares sueltos en las jambas: sin ellos las dos piezas salen lisas y la puerta
+    # parece un marco de foto.
+    for i, (sx, z) in enumerate(((-1.0, 0.62), (1.0, 1.24), (-1.0, 1.50))):
+        box('quoin%d' % i, (sx * U * 0.36, -0.02, z), (0.33, 0.50, 0.26), m['rock'], round=0.12)
 
 
 def build_chest(m):
@@ -662,8 +814,10 @@ SHORES = {'shore_edge': build_shore_edge, 'shore_out': build_shore_out, 'shore_i
 
 PROPS_TALL = {'tree': build_tree, 'altar_god': build_altar_god, 'altar_baal': build_altar_baal,
               'torch': build_torch, 'exit': build_exit, 'tree_dead': build_tree_dead, 'palm': build_palm,
-              'cliff_tall': build_cliff_tall}
-PROPS = {'cliff': build_cliff, 'rock': build_rock, 'bush': build_bush, 'grass': build_grass, 'chest': build_chest}
+              'cliff_tall': build_cliff_tall, 'cliff_rock_tall': build_cliff_rock_tall,
+              'door': build_door}
+PROPS = {'cliff': build_cliff, 'cliff_rock': build_cliff_rock,
+         'jar': build_jar, 'crack': build_crack, 'rock': build_rock, 'bush': build_bush, 'grass': build_grass, 'chest': build_chest}
 GROUND = {'floor_a': lambda m: build_floor(m, 0), 'floor_b': lambda m: build_floor(m, 1),
           'floor_c': lambda m: build_floor(m, 2), 'floor_d': lambda m: build_floor(m, 3),
           'path_a': lambda m: build_path(m, 0), 'path_b': lambda m: build_path(m, 1),

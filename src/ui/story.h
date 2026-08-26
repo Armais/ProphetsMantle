@@ -75,4 +75,7 @@ void story_prologue(StorySystem& s);
 void story_chapter_card(StorySystem& s, int chapter);
 void story_chapter_outro(StorySystem& s, int chapter);
 void story_ascension(StorySystem& s);
-void story_epilogue(StorySystem& s);
+// `joash_full` = el rey golpeo la tierra hasta que le mandaron parar (2 Reyes 13:19).
+// Es lo unico que cambia las ultimas palabras del juego, y en ese pasaje es
+// exactamente lo que estaba en juego.
+void story_epilogue(StorySystem& s, bool joash_full = true);

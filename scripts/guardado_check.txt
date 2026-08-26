@@ -1,18 +1,22 @@
-# Verificacion Track 0: SaveData v7 (ajustes + desbloqueos) y la migracion desde v6
-# Uso:  MANTLE.exe --script scripts/guardado_v7_check.txt
+# Verificacion del GUARDADO: que subir de version no pierde nada.
+# Uso:  MANTLE.exe --script scripts/guardado_check.txt
+#
+# El fichero va por la v8 (`codex_events`, la mascara de relatos del pozo de encuentros).
+# Cada version anade su lector de compatibilidad, asi que aqui se comprueba la ULTIMA
+# migracion que haya y que la meta llega entera al otro lado.
 #
 # Que hay que ver en el LOG (el comando `savedump` es lo unico que ensena la meta entera;
 # no hay ninguna pantalla del juego que la muestre):
 #
-#   Save file v6 migrated to v7 (...)   <- SOLO si habia un fichero v6 en el disco.
-#                                          Para forzarlo: copiar un save.dat v6 a
+#   Save file vN migrated to v8 (...)   <- SOLO si habia un fichero v6 en el disco.
+#                                          Para forzarlo: copiar un save.dat viejo a
 #                                          %APPDATA%\MantleGame\MANTLE\ antes de correrlo.
-#   SAVEDUMP v7 ...                     <- las tres lineas, tres veces (antes/durante/tras borrar)
+#   SAVEDUMP v8 ...                     <- las tres lineas, tres veces (antes/durante/tras borrar)
 #
 # Gates:
 #   1. Migrar NO pierde nada: ofrendas, mejoras, codice, unlocks, logros y bajas del
-#      SAVEDUMP inicial son los mismos que tenia el v6.
-#   2. Los campos de v7 llegan con sus valores de FABRICA (musica 0.80, efectos 1.00,
+#      SAVEDUMP inicial son los mismos que tenia el fichero viejo.
+#   2. Los campos nuevos llegan con sus valores de FABRICA (musica 0.80, efectos 1.00,
 #      sens 5, idioma 0, banderas 0x1 = vibracion ON), no con basura.
 #   3. delete_save conserva TODA la meta y solo apaga la partida (run=0).
 
@@ -25,7 +29,7 @@ unlocks 3
 wait 0.3
 savedump
 
-# --- Nueva partida: el fichero se reescribe en v7 en cada sala limpiada ---
+# --- Nueva partida: el fichero se reescribe en la version actual en cada sala limpiada ---
 press confirm
 wait 3.0
 press confirm

@@ -92,6 +92,12 @@ static void pickup(ECSWorld& world, FaithSystem& faith, Entity item, CombatEvent
             events.orbs_picked++;
             spawn_particles(world, ipos, {250, 235, 170, 255}, 8, 50.0f, 0.4f);
             break;
+        case ItemComponent::Pickup::Offering:
+            // No toca ni vida ni fe: la ofrenda es META. El Engine la vuelca en
+            // `progression.offerings` y la guarda, asi que sobrevive a morirse.
+            world.offerings_found += static_cast<u32>(it.value);
+            spawn_particles(world, ipos, {255, 214, 110, 255}, 10, 55.0f, 0.5f);
+            break;
         default: break;
     }
     world.destroy(item);
@@ -590,11 +596,19 @@ Entity spawn_pickup(ECSWorld& world, Vec2 position, ItemComponent::Pickup kind, 
     world.add(e, Component::Sprite);
     if (world.tileset != TEXTURE_NONE) {
         world.sprites[e].texture_id = world.tileset;
-        world.sprites[e].src_rect = get_tile_src(kind == ItemComponent::Pickup::Heart ? TileSprite::Heart : TileSprite::Orb);
+        world.sprites[e].src_rect = get_tile_src(
+            kind == ItemComponent::Pickup::Heart    ? TileSprite::Heart :
+            kind == ItemComponent::Pickup::Offering ? TileSprite::Star  : TileSprite::Orb);
+        // La ofrenda se tine de oro para que no se confunda con un orbe de fe: es lo unico
+        // del suelo que te llevas puesto cuando la partida acaba.
+        if (kind == ItemComponent::Pickup::Offering)
+            world.sprites[e].tint = {255, 206, 90, 255};
     } else {
         world.sprites[e].texture_id = TEXTURE_NONE;
         world.sprites[e].src_rect = {0, 0, 8, 8};
-        world.sprites[e].tint = kind == ItemComponent::Pickup::Heart ? Color{220, 50, 50, 255} : Color{240, 230, 160, 255};
+        world.sprites[e].tint = kind == ItemComponent::Pickup::Heart    ? Color{220, 50, 50, 255}
+                              : kind == ItemComponent::Pickup::Offering ? Color{255, 206, 90, 255}
+                                                                        : Color{240, 230, 160, 255};
     }
     world.sprites[e].z_order = 4;
 

@@ -248,6 +248,16 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
             spawn_vfx(world, transform.position + Vec2{0, 4.0f}, TileSprite::Fireball,
                       {255, 165, 70, 235}, 15.0f, 0.4f, -0.7f, 200.0f, {0, -12.0f}, 7);
         }
+        // Prueba viva de que el hueco se CRUZA. Sin esta linea un guion solo puede fotografiar
+        // al profeta a un lado o al otro, y no sabe si paso por encima o lo rodeo.
+        if (!crossed_gap && world.active_room &&
+            world.active_room->is_pit_world(transform.position + Vec2{0, 6})) {
+            crossed_gap = true;
+            SDL_Log("Chariot: crossing a pit");
+        }
+        // El permiso de cruzar huecos se apaga con la embestida y no antes: si se quedara
+        // puesto, el profeta andaria sobre los precipicios el resto del capitulo.
+        if (chariot_timer <= 0.0f && world.gap_crosser == entity) world.gap_crosser = ENTITY_NONE;
     }
     if (damage_buff_timer > 0.0f)    damage_buff_timer -= dt;
 
@@ -565,6 +575,11 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
                         world.movements[e].knockback = (ep - pos).normalized() * 200.0f;
                 }
             }
+            // ...y es la LLAVE del bioma: quema el matorral y abre las grietas de la roca
+            // (GDD2.0 fase 4). El radio es el mismo que el del dano, para que lo que arde sea
+            // exactamente lo que se ve arder.
+            if (world.active_room)
+                world.active_room->open_secrets(pos, 80.0f, SECRET_BUSH | SECRET_CRACK, world.loot_drops);
             // El fuego CAE: una columna sobre el profeta antes de que se abra el circulo
             spawn_fx(world, pos, FxID::Holy, {255, 196, 110, 245}, 78.0f, 0.55f, 11);
             spawn_fx(world, pos, FxID::Explosion, {255, 170, 80, 240}, 62.0f, 0.45f);
@@ -577,7 +592,11 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
         case MiracleID::CarroDeFuego: {
             // Devastating dash: long i-frame dash that leaves fire behind
             auto& m = world.movements[entity];
-            Vec2 dir = m.velocity.length_sq() > 1.0f ? m.velocity.normalized() : Vec2{0, -1};
+            // Parado embiste hacia DONDE MIRAS, no hacia arriba. Con el {0,-1} de antes, un
+            // Carro de Fuego lanzado sin moverse salia siempre al norte, mirases donde
+            // mirases — y es la unica llave que cruza un hueco, asi que el hueco que tenias
+            // delante se quedaba sin cruzar.
+            Vec2 dir = m.velocity.length_sq() > 1.0f ? m.velocity.normalized() : last_move_dir;
             m.is_dashing = true;
             m.dash_dir = dir;
             m.dash_timer = Config::DASH_DURATION * 2.5f;
@@ -596,6 +615,10 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             chariot_timer = Config::DASH_DURATION * 2.5f;
             trail_timer = 0.0f;
             shake_request = 3.0f;
+            // Y CRUZA los huecos mientras dura (2 Reyes 2:11). Se apaga solo en
+            // Player::update cuando `chariot_timer` llega a cero.
+            world.gap_crosser = entity;
+            crossed_gap = false;
             break;
         }
 
@@ -620,6 +643,10 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             heal_zone_pos = pos;
             heal_zone_timer = get_miracle_def(id).duration;
             aura_timer = 0.0f;
+            // "Yo sane estas aguas" (2 Reyes 2:21): tambien SECA la charca, que es la otra
+            // mitad de lo que el pasaje dice. Lo que queda debajo es el hallazgo.
+            if (world.active_room)
+                world.active_room->open_secrets(pos, 56.0f, SECRET_WATER, world.loot_drops);
             // El agua sanada se abre en el suelo: corona azul lenta y ancha. Con celdas de
             // terreno (WaterA) salian cuadrados opacos: los VFX solo usan iconos sueltos.
             vfx_ring(world, pos, TileSprite::Orb, {110, 205, 245, 245}, 14, 13.0f, 105.0f, 0.85f);

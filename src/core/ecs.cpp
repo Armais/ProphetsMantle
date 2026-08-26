@@ -17,8 +17,11 @@ void ECSWorld::clear() {
     entity_count = 0;
     free_list.clear();
     player = ENTITY_NONE;
+    gap_crosser = ENTITY_NONE;
     active_room = nullptr;
     popups.clear();
+    loot_drops.clear();
+    offerings_found = 0;
     hitstop = 0.0f;
     for (u32 i = 0; i < MAX_ENTITIES; i++) {
         masks[i].reset();
@@ -88,9 +91,13 @@ void ECSWorld::remove(Entity e, Component c) {
 // System: Movement
 // =============================================================================
 // Walkability test at an entity's ground point (transform + collider offset = feet)
-static bool walkable_at(const ECSWorld& w, Vec2 p) {
+static bool walkable_at(const ECSWorld& w, Vec2 p, u32 e) {
     if (!w.active_room) return true;
-    return w.active_room->is_walkable_world(p);
+    if (w.active_room->is_walkable_world(p)) return true;
+    // El Carro de Fuego cruza el hueco, y SOLO para quien lo lanzo. Sin esto un precipicio es
+    // un muro; con esto es una puerta que se abre con la llave correcta, que es de lo que va
+    // la fase 4 entera.
+    return (e == w.gap_crosser) && w.active_room->is_pit_world(p);
 }
 
 // Safety net: a body whose feet are already inside a solid tile (teleport, bad spawn, any
@@ -104,8 +111,8 @@ static void unstick(ECSWorld& w, u32 e, Vec2 foot) {
     if (w.active_room->is_walkable_world(feet)) return;
     // Only in-room feet: the player legitimately steps off-grid when crossing an opening
     if (feet.x < 0.0f || feet.y < 0.0f ||
-        feet.x >= Config::ROOM_TILES_X * Config::TILE_SIZE ||
-        feet.y >= Config::ROOM_TILES_Y * Config::TILE_SIZE) return;
+        feet.x >= w.active_room->world_w() ||
+        feet.y >= w.active_room->world_h()) return;
     Vec2 free_feet;
     if (w.active_room->nearest_walkable_world(feet, free_feet)) {
         SDL_Log("unstick: entity %u feet (%.0f,%.0f) inside solid tile -> (%.0f,%.0f)",
@@ -136,11 +143,11 @@ static void system_movement(ECSWorld& w, f32 dt) {
                 t.position += m.dash_dir * Config::DASH_SPEED * dt;
 
                 // Tile collision during dash (slide like normal movement)
-                if (!walkable_at(w, t.position + foot)) {
+                if (!walkable_at(w, t.position + foot, e)) {
                     Vec2 try_x = {t.position.x, old_pos.y};
                     Vec2 try_y = {old_pos.x, t.position.y};
-                    if (walkable_at(w, try_x + foot))      t.position = try_x;
-                    else if (walkable_at(w, try_y + foot)) t.position = try_y;
+                    if (walkable_at(w, try_x + foot, e))      t.position = try_x;
+                    else if (walkable_at(w, try_y + foot, e)) t.position = try_y;
                     else                                   t.position = old_pos;
                 }
                 continue;  // Skip normal movement during dash
@@ -166,18 +173,20 @@ static void system_movement(ECSWorld& w, f32 dt) {
         t.position += (m.velocity * drag + m.knockback) * dt;
 
         // Tile collision check (feet point); slide along the free axis
-        if (!walkable_at(w, t.position + foot)) {
+        if (!walkable_at(w, t.position + foot, e)) {
             Vec2 try_x = {t.position.x, old_pos.y};
             Vec2 try_y = {old_pos.x, t.position.y};
-            if (walkable_at(w, try_x + foot))      t.position = try_x;  // Slide along X
-            else if (walkable_at(w, try_y + foot)) t.position = try_y;  // Slide along Y
+            if (walkable_at(w, try_x + foot, e))      t.position = try_x;  // Slide along X
+            else if (walkable_at(w, try_y + foot, e)) t.position = try_y;  // Slide along Y
             else                                   t.position = old_pos; // Fully blocked
         }
 
-        // Non-player entities never leave the room (enemies must stay killable)
-        if (static_cast<Entity>(e) != w.player) {
-            t.position.x = std::max(12.0f, std::min(t.position.x, static_cast<f32>(Config::GAME_WIDTH) - 12.0f));
-            t.position.y = std::max(12.0f, std::min(t.position.y, static_cast<f32>(Config::ROOM_TILES_Y * Config::TILE_SIZE) - 12.0f));
+        // Non-player entities never leave the room (enemies must stay killable). Contra el
+        // tamano de la SALA: con el de la pantalla, en una sala exterior de 2x2 los enemigos
+        // se quedaban apretados en el cuadrante de arriba a la izquierda.
+        if (static_cast<Entity>(e) != w.player && w.active_room) {
+            t.position.x = std::max(12.0f, std::min(t.position.x, w.active_room->world_w() - 12.0f));
+            t.position.y = std::max(12.0f, std::min(t.position.y, w.active_room->world_h() - 12.0f));
         }
 
         // Friction
@@ -312,12 +321,28 @@ static void system_projectiles(ECSWorld& w, f32 dt) {
         if (w.active_room) {
             int tx = static_cast<int>(t.position.x) / Config::TILE_SIZE;
             int ty = static_cast<int>(t.position.y) / Config::TILE_SIZE;
-            if (tx >= 0 && tx < Config::ROOM_TILES_X && ty >= 0 && ty < Config::ROOM_TILES_Y) {
+            if (tx >= 0 && tx < w.active_room->tiles_w && ty >= 0 && ty < w.active_room->tiles_h) {
                 if (proj.friendly && w.active_room->tiles[ty][tx] == TileType::AltarBaal) {
                     w.active_room->tiles[ty][tx] = TileType::Path;
                     w.altars_smashed++;
                     w.destroy(static_cast<Entity>(e));
                     continue;
+                }
+                // Un tiro del profeta rompe la tinaja y siega el matorral: es la llave mas
+                // barata del juego y la que ensena, en la primera sala, que aqui las cosas
+                // se abren. La tinaja PARA el tiro (es un cacharro, no hierba); el matorral
+                // no, o disparar a un campo seria disparar a una pared.
+                if (proj.friendly) {
+                    const TileType tt = w.active_room->tiles[ty][tx];
+                    if (tt == TileType::Jar || tt == TileType::Bush || tt == TileType::TallGrass) {
+                        w.active_room->open_secrets(t.position, 6.0f,
+                                                    tt == TileType::Jar ? SECRET_JAR : SECRET_BUSH,
+                                                    w.loot_drops);
+                        if (tt == TileType::Jar) {
+                            w.destroy(static_cast<Entity>(e));
+                            continue;
+                        }
+                    }
                 }
             }
             if (w.active_room->is_tile_solid_for_projectiles(tx, ty)) {

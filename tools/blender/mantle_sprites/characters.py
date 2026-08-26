@@ -597,6 +597,64 @@ SPECS = {
         tunic='#1f7a68', tunic_len='long', robe='#155a4d', sleeves='#2a9c85',
         armor='#d4a537', belt='#d4a537', cape='#0f4f45', bracer='#d4a537', shoes='#2a2a2a',
         weapon=None, attack='raise')),
+    # Cap 3. Mayordomo del palacio de Acab (1 Reyes 18:3): hombre de corte, no de tropa.
+    # Lo que lo separa de los otros locutores a 24 unidades es el PELO Y LA BARBA CANOSOS —
+    # es el unico cano del juego — mas el pano blanco con cordon de oro y el indigo de casa
+    # real. Nada de casco ni penacho: no es un soldado, es el que lleva la casa.
+    'abdias': ('humanoid', dict(
+        skin='#d9a066', hair='#8d8377', beard='#8d8377',
+        eyes='#3a3a34', brow='sad', mouth_color='#7a4438',
+        headcloth='#efe9d8', headcloth_cord='#c9a24a',
+        tunic='#3a4270', tunic_len='long', robe='#2b3055', sleeves='#454e80',
+        belt='#c9a24a', sash='#c9a24a', shoes='#3a3028',
+        weapon=None, attack='raise')),
+    # Caps 7 y 8. Uno de los hijos de los profetas (la olla, el hacha prestada). Es el UNICO
+    # locutor con la cabeza descubierta y el pelo largo suelto: viven en comunidad, pobres, y
+    # el pasaje del hacha deja claro que ni un hierro es suyo. Lana cruda sin tenir.
+    'hijo_profetas': ('humanoid', dict(
+        skin='#c98c5a', hair='#3f2c1c', hair_long=True, beard='#3f2c1c',
+        eyes='#2a1e14', brow='calm', mouth_color='#7a4438',
+        tunic='#9d9382', tunic_len='long', robe='#83795f', sleeves='#9d9382',
+        belt='#5f4a2e', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 7. El de Baal-salisa trae las primicias (2 Reyes 4:42): labrador, no profeta.
+    # Va en la gama de la MIES — pano y tunica de paja y mostaza — que no la usa nadie mas.
+    'hombre_baalsalisa': ('humanoid', dict(
+        skin='#c07f47', hair='#6b4a26', beard='#6b4a26',
+        eyes='#2a1e14', brow='calm', mouth_color='#7a4438',
+        headcloth='#d9b45e', headcloth_cord='#8a6a30',
+        tunic='#b58a3c', tunic_len='short', sleeves='#9c742f',
+        belt='#6b5230', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 9. La muchacha israelita cautiva (2 Reyes 5:2): toda la historia arranca en ella.
+    # Es la UNICA mujer del juego con la cabeza DESCUBIERTA, y es lo que dice lo que es: una
+    # esclava no lleva velo de casada. Sin oro, sin cinta, lana pobre.
+    'muchacha_cautiva': ('humanoid', dict(
+        skin='#e0b080', hair='#2a1a12', hair_long=True, beard=None, slim=True,
+        eyes='#3a2a1e', brow='sad', mouth_color='#8a4a44',
+        tunic='#8f9a86', tunic_len='long', robe='#77826f', sleeves='#8f9a86',
+        belt='#5a5248', shoes='#4a3018',
+        weapon=None, attack='raise')),
+    # Cap 10. Uno de los cuatro leprosos a la puerta de Samaria (2 Reyes 7:3). Son los HEROES
+    # del pasaje, nunca enemigos (regla del proyecto, ver el caso del "Leproso Enloquecido").
+    # Capucha echada y ABIERTA — calada taparia la cara entera — piel apagada y ceniza en todo.
+    'leproso_samaria': ('humanoid', dict(
+        skin='#c3a487', hair='#5a5248', beard='#7d766a', slim=True,
+        eyes='#4a4238', brow='sad', mouth_color='#6f4038',
+        hood='#8a8276', hood_open=True,
+        tunic='#6e6a62', tunic_len='long', robe='#585449', sleeves='#6e6a62',
+        belt='#4a443a', shoes='#3a3630',
+        weapon=None, attack='raise')),
+    # Cap 10. El principe sobre cuyo brazo se apoya el rey (2 Reyes 7:2). Corte de Samaria:
+    # peto y capa AZUL con plata, sin nada en la cabeza mas que un aro liso. Asi no se
+    # confunde ni con Naaman (teal y oro) ni con el General Sirio (casco con penacho).
+    'principe_samaria': ('humanoid', dict(
+        skin='#d9a066', hair='#1a1410', beard='#1a1410',
+        eyes='#242a34', brow='noble', mouth_color='#7a3a34',
+        band='#c8ccd4',
+        tunic='#2f4a86', tunic_len='long', robe='#233a६6', sleeves='#3a5a9e',
+        armor='#c8ccd4', belt='#c8ccd4', cape='#1d2f5e', bracer='#c8ccd4', shoes='#2a2a2a',
+        weapon=None, attack='raise')),
 }
 
 # Los que ANDAN por el mundo y por tanto tienen hoja de 896x1920 en assets/sprites/.

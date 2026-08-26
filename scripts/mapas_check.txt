@@ -1,0 +1,99 @@
+# Verificacion del mundo exterior (GDD2.0 fase 1): salas de 2x2 pantallas con camara,
+# bordes por bioma y PNJ de pie en la sala de encuentro.
+# Uso:  MANTLE.exe --script scripts/mapas_check.txt
+# Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
+#
+# Lo que hay que MIRAR en cada captura, que es lo que este guion no puede afirmar solo:
+#  - 01/02: el profeta se mueve por la sala y el mundo se desplaza con el; el HUD NO.
+#  - 03 (cap 2, Natural) y 05 (cap 5, Natural): el borde son rocas y arboles, NO silleria
+#    ni acantilado, y la franja es irregular (no una fila recta).
+#  - 04 (cap 1, Cliff) y 06 (cap 10, Masonry): ahi el muro SI, que es donde significa algo.
+#  - 07: la senda serpentea. Si sale una recta perfecta de lado a lado, la regresion volvio.
+#  - 08: el PNJ de la viuda esta DE PIE en la sala, con su marca flotante — no una antorcha.
+#  - 09: la arena del jefe mide una pantalla y la camara no se mueve.
+#
+# El volcado ASCII de cada sala va al log en cada `goto`: 40 columnas x 22 filas en exterior,
+# 20 x 11 en la sala de jefe.
+
+seed 4242
+defaults
+wait 1.0
+press confirm
+wait 3.2
+press confirm
+wait 3.2
+press confirm
+wait 1.4
+god
+
+# --- Cap 1: borde de acantilado (canon del Querit) ---
+wait 0.4
+shot 01_cap1_entrada
+wait 0.1
+walk 560 300
+wait 0.4
+shot 02_cap1_camara_sigue
+wait 0.1
+
+# --- Cap 2: borde NATURAL (aldea sobre arena) ---
+chapter 2
+wait 1.0
+press confirm
+wait 1.2
+walk 320 330
+wait 0.6
+shot 03_cap2_borde_natural
+wait 0.1
+
+# --- Cap 1 de nuevo, esquina: acantilado ---
+chapter 1
+wait 1.0
+press confirm
+wait 1.2
+walk 320 330
+wait 0.6
+shot 04_cap1_borde_acantilado
+wait 0.1
+
+# --- Cap 5: campos abiertos, borde natural ---
+chapter 5
+wait 1.0
+press confirm
+wait 1.2
+walk 600 320
+wait 0.6
+shot 05_cap5_borde_natural
+wait 0.1
+
+# --- Cap 10: ciudad sitiada, borde de silleria ---
+chapter 10
+wait 1.0
+press confirm
+wait 1.2
+walk 320 330
+wait 0.6
+shot 06_cap10_borde_silleria
+wait 0.1
+
+# --- Sendas: se miran en el volcado ASCII del log, no en la captura ---
+chapter 2
+wait 1.0
+press confirm
+wait 1.2
+goto altar
+wait 0.6
+shot 07_cap2_sendas
+wait 0.1
+
+# --- PNJ del encuentro: la viuda de Sarepta, de pie y con su marca ---
+goto event
+wait 0.7
+shot 08_cap2_pnj_viuda
+wait 0.1
+
+# --- Arena del jefe: UNA pantalla, camara clavada ---
+goto boss
+wait 0.9
+shot 09_cap2_arena_jefe
+wait 0.2
+quit

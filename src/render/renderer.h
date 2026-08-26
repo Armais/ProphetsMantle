@@ -197,6 +197,14 @@ struct Renderer {
 
     // Camera
     void set_camera(Vec2 position);
+    // Pasada de MUNDO: entre estas dos, todo lo que se dibuje se desplaza con la camara.
+    // Hace falta acotarla porque `world_to_screen` la aplica a TODO — `draw_rect`,
+    // `draw_text` y por tanto el HUD entero —, asi que sin cerrarla el HUD se iria con el
+    // profeta. Mismo patron que begin_overlay/end_overlay. La SACUDIDA se deja fuera a
+    // proposito: sigue moviendo tambien el HUD, como hasta ahora, y el tacto ya medido no
+    // se toca.
+    void begin_world(Vec2 camera_center) { set_camera(camera_center); }
+    void end_world() { camera_offset = {0, 0}; }
     // Una sacudida NO pisa a otra mas fuerte que siga viva: antes, el golpe siguiente
     // mataba la sacudida del jefe recien muerto. Ver Config::Feel::Shake para las curvas.
     void shake_camera(f32 intensity, f32 duration, f32 frequency = 45.0f);

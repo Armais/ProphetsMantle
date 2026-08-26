@@ -23,7 +23,9 @@
 //     habrian sido cinco roturas de formato y cinco migraciones que mantener.
 // Las partidas v3, v4, v5 y v6 SI se cargan (SaveSystem::load las migra campo a campo):
 // nadie pierde su partida por esto. v1 y v2 se rechazan.
-constexpr u32 SAVE_VERSION = 7;
+// v8: `codex_events`, la mascara de relatos vistos. Es un u64 y no un u32 porque el pozo
+//     ya son 35 encuentros y el epilogo anadira mas; con 32 bits habria que renumerar.
+constexpr u32 SAVE_VERSION = 8;
 
 // Bits de SaveData::unlocks (contenido que se gana y NO se pierde al morir)
 constexpr u32 UNLOCK_EPILOGUE      = 1u << 0;   // "El Legado": ganar con la fe en Profeta Ungido
@@ -105,6 +107,11 @@ struct SaveData {
     u32 skins_unlocked   = 0;      // variantes cosmeticas del cayado
     u32 skin_equipped    = 0;      // 0 = la de siempre
     u32 entitlements     = 0;      // puerta de contenido; hoy se concede sola (no hay tienda)
+
+    // --- v8: relatos vistos (game/events.h) -------------------------------------
+    // Bit por id de `namespace Ev`. Es meta y sobrevive a delete_save: el Codice cuenta
+    // lo que el PROFETA ha visto en todas sus partidas, no en la ultima.
+    u64 codex_events     = 0;
 };
 
 struct SaveSystem {

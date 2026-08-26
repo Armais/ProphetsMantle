@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 #ifdef MANTLE_PLATFORM_WEB
 #include <emscripten.h>
@@ -100,6 +101,20 @@ bool Engine::init(const char* title) {
     if (!window) {
         SDL_Log("Failed to create window: %s", SDL_GetError());
         return false;
+    }
+
+    // Icono de la ventana (barra de tareas y alt-tab). El icono del FICHERO .exe no sale de
+    // aqui sino de mantle.rc, que solo existe en Windows; esto es lo que cubre Linux y Mac,
+    // y ademas es lo que se ve mientras el juego corre. Si falta el PNG no pasa nada: se
+    // sigue arrancando con el icono por defecto.
+    {
+        std::string icon_path = std::string(get_asset_path()) + "branding/mark_256.png";
+        if (SDL_Surface* icon = IMG_Load(icon_path.c_str())) {
+            SDL_SetWindowIcon(window, icon);
+            SDL_DestroySurface(icon);
+        } else {
+            SDL_Log("Window icon not loaded ('%s'): %s", icon_path.c_str(), SDL_GetError());
+        }
     }
 
     // Create SDL renderer with VSync
@@ -217,6 +232,12 @@ void Engine::load_sprites() {
     portrait_texture = renderer.load_texture("sprites/portraits.png", /*smooth=*/true);
     if (portrait_texture == TEXTURE_NONE)
         SDL_Log("Retratos ausentes (assets/sprites/portraits.png) - el Bestiario ira sin ellos");
+
+    // PNJ de los encuentros. Su ausencia tampoco es un fallo: la sala marca el sitio con
+    // una hoguera, que es lo que hacia antes de que existiera la hoja.
+    npc_texture = renderer.load_texture("sprites/npcs.png", /*smooth=*/true);
+    if (npc_texture == TEXTURE_NONE)
+        SDL_Log("PNJ ausentes (assets/sprites/npcs.png) - los encuentros iran con hoguera");
 }
 
 // =============================================================================
@@ -563,6 +584,50 @@ void Engine::update(f32 dt) {
                 audio.play_sfx(SfxID::FaithGain);
                 award(AchievementID::PrimerAltar);
             }
+            // Hallazgos: lo que habia debajo de un matorral, dentro de una tinaja, detras de
+            // una grieta o bajo una charca. Aqui, y solo aqui, se decide QUE paga un secreto
+            // — por eso los sitios que abren cosas apuntan la posicion en `loot_drops` en vez
+            // de soltar la pieza ellos mismos.
+            if (!world.loot_drops.empty()) {
+                int paid[3] = {0, 0, 0};   // ofrendas / fe / vida, para que el log diga QUE pago
+                for (Vec2 at : world.loot_drops) {
+                    // QUE paga el hallazgo se saca de SU POSICION, no de `randi_range`: asi la
+                    // misma semilla reparte siempre lo mismo (igual que `tile_hides_loot`) y
+                    // un guion de regresion puede exigir una ofrenda concreta. Sortearlo aqui
+                    // ademas moveria el generador de mapas, que es el mismo `rand()`.
+                    u32 h = static_cast<u32>(at.x) * 73856093u ^ static_cast<u32>(at.y) * 19349663u;
+                    h = (h ^ (h >> 13)) * 1274126177u;
+                    int roll = static_cast<int>((h ^ (h >> 16)) % 10);
+                    // La OFRENDA es lo mas probable, y a proposito: vida y fe ya las suelta
+                    // cualquier enemigo, asi que si un secreto pagara sobre todo en eso no
+                    // habria motivo para desviarse. Lo que hace que explorar de mas signifique
+                    // algo es que pague en meta-progresion, o sea entre partidas.
+                    if (roll < 6)      { spawn_pickup(world, at, ItemComponent::Pickup::Offering, 3.0f); paid[0]++; }
+                    else if (roll < 8) { spawn_pickup(world, at, ItemComponent::Pickup::FaithOrb, 6.0f); paid[1]++; }
+                    else               { spawn_pickup(world, at, ItemComponent::Pickup::Heart, 10.0f);   paid[2]++; }
+                    spawn_fx(world, at, FxID::Holy, {255, 226, 150, 220}, 22.0f, 0.35f, 5);
+                }
+                // Se loguea la CAIDA y no solo la recogida: entre las dos hay que caminar
+                // hasta la pieza, y un guion que solo mirara la recogida no sabria distinguir
+                // "el secreto no pago nada" de "el bot no paso por encima".
+                SDL_Log("Secret loot: %d hallazgo(s) en el suelo (%d ofrenda, %d fe, %d vida)",
+                        static_cast<int>(world.loot_drops.size()), paid[0], paid[1], paid[2]);
+                world.loot_drops.clear();
+                audio.play_sfx(SfxID::Notification, 0.55f);
+            }
+            // La ofrenda es lo unico del suelo que SOBREVIVE a la partida: va derecha a la
+            // meta-progresion y se guarda en el acto, para que morirse no se la lleve.
+            if (world.offerings_found > 0) {
+                progression.add_offerings(static_cast<int>(world.offerings_found));
+                char buf[48];
+                snprintf(buf, sizeof(buf), tr("+%u ofrendas", "+%u offerings"), world.offerings_found);
+                show_message(buf, 1.4f);
+                SDL_Log("Secret offerings: +%u (total %d)", world.offerings_found, progression.offerings);
+                world.offerings_found = 0;
+                save.data.offerings = progression.offerings;
+                save.save(false);
+                audio.play_sfx(SfxID::FaithGain, 0.7f);
+            }
             // El buzon se vacia AQUI, justo despues de vaciarlo de verdad, y no antes de
             // llenarlo. La diferencia importa: lo que escribe fuera de esta ventana —el
             // `killall` del autoplay, que corre antes en el mismo frame— sobrevive hasta
@@ -617,6 +682,14 @@ void Engine::update(f32 dt) {
             update_room_state();
             check_achievements();
             renderer.update_shake(dt);
+
+            // La camara sigue al profeta. Va DESPUES de update_room_state para que la sala
+            // (y por tanto sus limites) sea ya la definitiva este frame. `Camera::update`
+            // recorta contra ellos, asi que en una sala de una pantalla no se mueve nada.
+            if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+                camera.set_target(world.transforms[player.entity].position);
+                camera.update(dt);
+            }
 
             // Check player death
             if (player.entity != ENTITY_NONE &&
@@ -746,21 +819,21 @@ void Engine::render() {
     auto render_world = [this]() {
         const BiomeStyle biome = get_biome_style(state.current_chapter);
         renderer.clear(biome.background);
+
+        // Pasada de MUNDO: de aqui a `end_world`, todo se desplaza con la camara. Fuera se
+        // quedan la vinieta, el fogonazo, el fundido de sala y el HUD, que son de PANTALLA
+        // — sin ese corte se irian con el profeta, porque `world_to_screen` se aplica a todo
+        // lo que dibuja el Renderer, `draw_text` incluido.
+        renderer.begin_world(camera.position);
         current_room_data.render_ground(renderer, tileset_texture, world.time);
 
         draw_list.clear();
-        current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex);
+        current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
+                                        npc_texture, world.time);
         world.collect_draws(draw_list, renderer);
         renderer.draw_sorted(draw_list);
 
         current_room_data.render_exit_barriers(renderer, world.time);
-
-        // Soft vignette over the world (under the HUD); margin covers camera shake
-        if (renderer.vignette_tex != TEXTURE_NONE) {
-            renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90},
-                                      {-8, -8, static_cast<f32>(Config::GAME_WIDTH) + 16, static_cast<f32>(Config::GAME_HEIGHT) + 16},
-                                      {0, 0, 0, 120});
-        }
 
         // Floating damage numbers: rise and fade over the enemy that was hit
         for (const auto& p : world.popups) {
@@ -772,6 +845,14 @@ void Engine::render() {
             u8 a = static_cast<u8>(255.0f * (k > 0.6f ? 1.0f : k / 0.6f));
             Color c = p.boss ? Color{255, 220, 120, a} : Color{250, 240, 220, a};
             renderer.draw_text(buf, p.pos.x - w * 0.5f, p.pos.y - 10.0f - 14.0f * p.life, c, scale);
+        }
+        renderer.end_world();
+
+        // Soft vignette over the world (under the HUD); margin covers camera shake
+        if (renderer.vignette_tex != TEXTURE_NONE) {
+            renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90},
+                                      {-8, -8, static_cast<f32>(Config::GAME_WIDTH) + 16, static_cast<f32>(Config::GAME_HEIGHT) + 16},
+                                      {0, 0, 0, 120});
         }
 
         // Fogonazo blanco de milagro (Altar Consumido): sobre el mundo, bajo el HUD
@@ -861,8 +942,10 @@ void Engine::render() {
             break;
 
         case GameScene::Dialogue: {
-            render_world();
-            EventDef def = get_event_def(dialogue.chapter);
+            if (dialogue.dark) renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH),
+                                                   static_cast<f32>(Config::GAME_HEIGHT)}, {8, 6, 12, 255});
+            else               render_world();
+            EventDef def = get_event_def(dialogue.event_id);
             DialogueView v;
             v.speaker  = def.speaker;
             v.portrait = def.portrait;
@@ -1055,9 +1138,14 @@ void Engine::advance_chapter() {
             SDL_Log("Victory: epilogue unlocked (faith %.0f)", faith.current);
             save.save();
             menus.victory_note = nullptr;
-            story.begin();
-            story_epilogue(story);
-            play_story(StoryThen::VictoryMenu);
+            // El epilogo tambien se RECORRE: tres escenas con decision antes de la pagina de
+            // cierre, igual que el Ascenso. Cierran los dos arcos — la palabra de Elias sobre
+            // la vina de Nabot y el ultimo milagro de Eliseo, que ocurre ya muerto.
+            epilogue_step = 0;
+            joash_full = true;
+            audio.play_music(MusicID::Victory);
+            open_dialogue(Ev::EPI_JEHU);
+            dialogue.dark = true;
         } else {
             SDL_Log("Victory without the epilogue (faith %.0f < 75)", faith.current);
             save.save();
@@ -1114,8 +1202,45 @@ void Engine::retry_chapter() {
 }
 
 void Engine::trigger_ascension() {
-    SDL_Log("THE ASCENSION - Elias rises, the mantle falls to Eliseo");
+    SDL_Log("THE ASCENSION - Gilgal, Betel, Jerico, Jordan");
     state.current_act = Act::Act_II;
+    // Ya no son cinco lineas de texto: son las CUATRO PARADAS del pasaje, con decision en
+    // cada una. Tres veces le dice que se quede y tres veces hay que negarse — eso es lo que
+    // 2 Reyes 2 repite, asi que es lo que el jugador repite.
+    ascent_step = 0;
+    ascent_follows = 0;
+    ascent_double = true;
+    audio.play_music(MusicID::Ascension);
+    open_dialogue(Ev::ASC_GILGAL);
+    dialogue.dark = true;
+}
+
+// Siguiente escena del epilogo, o la pagina de cierre si ya no quedan.
+void Engine::epilogue_next() {
+    epilogue_step++;
+    if (epilogue_step < Ev::EPILOGUE_STOPS) {
+        open_dialogue(Ev::EPI_JEHU + epilogue_step);
+        dialogue.dark = true;
+        return;
+    }
+    epilogue_step = -1;
+    SDL_Log("Epilogo: el arco de Joas %s", joash_full ? "hasta el final" : "solo tres veces");
+    story.begin();
+    story_epilogue(story, joash_full);
+    play_story(StoryThen::VictoryMenu);
+}
+
+// Siguiente parada del Ascenso, o el carro de fuego si ya no quedan.
+void Engine::ascent_next() {
+    ascent_step++;
+    if (ascent_step < Ev::ASCENT_STOPS) {
+        open_dialogue(Ev::ASC_GILGAL + ascent_step);
+        dialogue.dark = true;
+        return;
+    }
+    ascent_step = -1;
+    SDL_Log("Ascension: le seguiste %d de 3 veces, doble porcion=%s",
+            ascent_follows, ascent_double ? "si" : "no");
     story.begin();
     story_ascension(story);
     play_story(StoryThen::FinishAscension);
@@ -1126,6 +1251,10 @@ void Engine::finish_ascension() {
     // Inheritance: half the faith (floored so Eliseo starts usable), miracles, mantle.
     // "Herencia Ampliada" (El Santuario) sube la porción heredada al 60%.
     f32 ratio = progression.is_unlocked(4) ? 0.60f : Config::INHERITANCE_FAITH_RATIO;
+    // Cada vez que te quedaste atras en el camino, un 10% menos. Seguirle las TRES veces —que
+    // es lo que hace Eliseo en el pasaje— deja la herencia EXACTAMENTE como estaba antes de
+    // que el Ascenso fuera jugable: eso era la condicion del track.
+    ratio = std::max(0.20f, ratio - 0.10f * static_cast<f32>(3 - ascent_follows));
     faith.current = std::max(faith.current * ratio, 40.0f);
     faith.modify(0.0f);
 
@@ -1179,6 +1308,13 @@ void Engine::finish_ascension() {
                 player.active_slot_count, player.miracle_haste);
     }
     // El milagro heredado entra en el primer slot libre, que con el Manto siempre existe.
+    // Solo si pediste la DOBLE PORCION: «si me vieres cuando fuere quitado de ti, te sera
+    // hecho asi; y si no, no» (2 Reyes 2:10). El Manto cae igual — se le cayo a el, no te lo
+    // dio —, pero el espiritu doblado se pidio o no se pidio.
+    if (!ascent_double) {
+        legacy = MiracleID::COUNT;
+        SDL_Log("Ascension: sin milagro heredado (no se pidio la doble porcion)");
+    }
     if (legacy != MiracleID::COUNT) {
         for (int s = 0; s < player.active_slot_count && s < Config::MAX_MIRACLE_SLOTS; s++) {
             if (!player.miracle_slots[s].is_empty()) continue;
@@ -1783,7 +1919,8 @@ void Engine::load_room(int room_index) {
         current_room_data.door_west  = (node.connections[3] >= 0);
 
         int difficulty = (state.current_chapter - 1) % Config::CHAPTERS_ACT_I + 1;   // 1..5 per act
-        current_room_data.generate(node.type, state.current_chapter, difficulty);
+        current_room_data.generate(node.type, state.current_chapter, difficulty, node.event_id,
+                                   node.interior_room >= 0);
 
         floor_map.room_cache[room_index] = current_room_data;
         floor_map.room_generated[room_index] = true;
@@ -1795,20 +1932,35 @@ void Engine::load_room(int room_index) {
     // Link room to ECS for tile collision
     world.active_room = &current_room_data;
 
+    // Camara: limites de ESTA sala. En una de una pantalla el recorte la deja clavada en el
+    // centro, que es el comportamiento de siempre.
+    camera.set_room({0, 0, current_room_data.world_w(), current_room_data.world_h()});
+
     // Position player based on entry direction (inside the opening, just past the border)
     if (player.entity != ENTITY_NONE &&
         world.has(player.entity, Component::Transform)) {
 
-        f32 cx = static_cast<f32>(Config::GAME_WIDTH) * 0.5f;
-        f32 cy = static_cast<f32>(Config::ROOM_TILES_Y * Config::TILE_SIZE) * 0.5f;
+        // Contra el tamano de ESTA sala, no contra la pantalla: la arena del jefe mide una
+        // pantalla y una sala exterior cuatro, y con las constantes el profeta aparecia
+        // fuera del mapa al entrar en la grande por el lado equivocado.
+        const f32 rw = current_room_data.world_w();
+        const f32 rh = current_room_data.world_h();
+        f32 cx = rw * 0.5f;
+        f32 cy = rh * 0.5f;
 
         Vec2 spawn_pos;
+        if (spawn_tx >= 0 && spawn_ty >= 0) {
+            // Llegado POR UNA PUERTA: se aparece justo delante de ella, no en un borde.
+            spawn_pos = current_room_data.tile_to_world(spawn_tx, spawn_ty);
+            spawn_tx = spawn_ty = -1;
+        } else
         switch (entry_direction) {
-            case Direction::Up:    spawn_pos = {cx, 26.0f}; break;                                     // came from the room above
-            case Direction::Down:  spawn_pos = {cx, Config::ROOM_TILES_Y * Config::TILE_SIZE - 26.0f}; break;
+            case Direction::Up:    spawn_pos = {cx, 26.0f}; break;   // came from the room above
+            case Direction::Down:  spawn_pos = {cx, rh - 26.0f}; break;
             case Direction::Left:  spawn_pos = {26.0f, cy}; break;
-            case Direction::Right: spawn_pos = {static_cast<f32>(Config::GAME_WIDTH) - 26.0f, cy}; break;
-            default:               spawn_pos = current_room_data.tile_to_world(Config::ROOM_TILES_X / 2, Config::ROOM_TILES_Y / 2); break;
+            case Direction::Right: spawn_pos = {rw - 26.0f, cy}; break;
+            default:               spawn_pos = current_room_data.tile_to_world(current_room_data.tiles_w / 2,
+                                                                               current_room_data.tiles_h / 2); break;
         }
         // Never spawn with the FEET inside a solid tile (same reference point as movement)
         Vec2 foot = world.has(player.entity, Component::Collider) ? world.colliders[player.entity].offset : Vec2{0, 0};
@@ -1820,6 +1972,11 @@ void Engine::load_room(int room_index) {
         world.transforms[player.entity].position = spawn_pos;
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
+        // La camara SALTA a su sitio al entrar; sin esto haria un barrido desde donde estaba
+        // en la sala anterior, justo por encima del fundido de entrada.
+        camera.set_target(spawn_pos);
+        camera.position = spawn_pos;
+        camera.update(0.0f);
 
         // "La Escuela de Profetas" (mejora meta 7): Eliseo entra acompanado. El discipulo
         // NO viaja entre salas —al cambiar de sala el mundo se vacia—: se vuelve a
@@ -1835,7 +1992,7 @@ void Engine::load_room(int room_index) {
     if (!current_room_data.cleared) {
         if (node.type == RoomType::Boss) {
             auto def = get_chapter_def(state.current_chapter);
-            Vec2 pos = current_room_data.tile_to_world(Config::ROOM_TILES_X / 2, 3);
+            Vec2 pos = current_room_data.tile_to_world(current_room_data.tiles_w / 2, 3);
             codex_see_enemy(save.data, def.boss_type);
             boss_entity = spawn_boss(world, def.boss_type, pos,
                                      enemy_textures[static_cast<u32>(def.boss_type)],
@@ -1867,23 +2024,29 @@ void Engine::load_room(int room_index) {
 
     // ASCII dump of the layout (debug aid for autoplay sessions)
     if (autoplay.active) {
-        static const char glyph[] = ".#OW^v><BGCTbRg~PFXEt";   // indexed by TileType
-        for (int y = 0; y < Config::ROOM_TILES_Y; y++) {
+        static const char glyph[] = ".#OW^v><BGCTbRg~PFXEtNjcD";  // indexed by TileType (j tinaja, c grieta, D puerta)
+        static_assert(sizeof(glyph) - 1 == static_cast<int>(TileType::COUNT),
+                      "un TileType nuevo necesita su glifo en el volcado ASCII");
+        for (int y = 0; y < current_room_data.tiles_h; y++) {
             char line[Config::ROOM_TILES_X + 1];
-            for (int x = 0; x < Config::ROOM_TILES_X; x++) {
+            for (int x = 0; x < current_room_data.tiles_w; x++) {
                 u8 t = static_cast<u8>(current_room_data.tiles[y][x]);
                 line[x] = t < sizeof(glyph) - 1 ? glyph[t] : '?';
             }
-            line[Config::ROOM_TILES_X] = 0;
+            line[current_room_data.tiles_w] = 0;
             SDL_Log("  %s", line);
         }
     }
+
+    if (node.type == RoomType::Interior) show_message(get_interior_name(state.current_chapter), 2.2f);
 
     auto def = get_chapter_def(state.current_chapter);
     SDL_Log("Loaded room %d [%d,%d] (%s) - %s [%d enemies]%s",
             room_index, node.grid_x, node.grid_y, def.name,
             node.type == RoomType::Start ? "Start" :
             node.type == RoomType::Boss  ? "Boss" :
+            node.type == RoomType::Interior ? "Interior" :
+            node.type == RoomType::Event ? "Event" :
             node.type == RoomType::Normal ? "Normal" :
             node.type == RoomType::Elite ? "Elite" :
             node.type == RoomType::Treasure ? "Treasure" :
@@ -1901,7 +2064,8 @@ void Engine::try_room_transition() {
 
     auto& pos = world.transforms[player.entity].position;
     auto& node = floor_map.rooms[floor_map.current_room];
-    const f32 room_h = static_cast<f32>(Config::ROOM_TILES_Y * Config::TILE_SIZE);
+    const f32 room_w = current_room_data.world_w();
+    const f32 room_h = current_room_data.world_h();
 
     Direction move_dir = Direction::None;
     int next_room = -1;
@@ -1909,7 +2073,7 @@ void Engine::try_room_transition() {
     if (pos.x < 0.0f) {
         move_dir = Direction::Left;
         next_room = node.connections[3];  // West
-    } else if (pos.x >= static_cast<f32>(Config::GAME_WIDTH)) {
+    } else if (pos.x >= room_w) {
         move_dir = Direction::Right;
         next_room = node.connections[2];  // East
     } else if (pos.y < 0.0f) {
@@ -1926,7 +2090,7 @@ void Engine::try_room_transition() {
     // El profeta aparece pegado al borde contrario, y con la tecla mantenida un roce en
     // diagonal podia cruzar dos salas en dos frames. Se le sigue frenando en el borde.
     if (room_change_grace > 0.0f) {
-        pos.x = std::max(1.0f, std::min(pos.x, static_cast<f32>(Config::GAME_WIDTH) - 1.0f));
+        pos.x = std::max(1.0f, std::min(pos.x, room_w - 1.0f));
         pos.y = std::max(1.0f, std::min(pos.y, room_h - 1.0f));
         return;
     }
@@ -1954,7 +2118,7 @@ void Engine::try_room_transition() {
     } else {
         // No connection or sealed — clamp inside (if this lands the feet on a solid border
         // tile, system_movement's unstick() snaps to the nearest walkable tile next frame)
-        pos.x = std::max(1.0f, std::min(pos.x, static_cast<f32>(Config::GAME_WIDTH) - 1.0f));
+        pos.x = std::max(1.0f, std::min(pos.x, room_w - 1.0f));
         pos.y = std::max(1.0f, std::min(pos.y, room_h - 1.0f));
     }
 }
@@ -1990,7 +2154,7 @@ void Engine::update_room_state() {
             if (node.type != RoomType::Boss) audio.play_sfx(SfxID::DoorOpen, 0.8f);
             if (node.type == RoomType::Elite) {
                 // Elite reward: a small offering pile at the centre
-                Vec2 c = room.tile_to_world(Config::ROOM_TILES_X / 2, Config::ROOM_TILES_Y / 2);
+                Vec2 c = room.tile_to_world(room.tiles_w / 2, room.tiles_h / 2);
                 spawn_pickup(world, c + Vec2{-12, 0}, ItemComponent::Pickup::Heart, 15.0f);
                 spawn_pickup(world, c + Vec2{12, 0}, ItemComponent::Pickup::FaithOrb, 8.0f);
                 spawn_pickup(world, c + Vec2{0, 12}, ItemComponent::Pickup::Heart, 15.0f);
@@ -2017,7 +2181,7 @@ void Engine::update_room_state() {
     Vec2 feet = world.transforms[player.entity].position + Vec2{0, 6};
     int tx = static_cast<int>(feet.x) / Config::TILE_SIZE;
     int ty = static_cast<int>(feet.y) / Config::TILE_SIZE;
-    if (tx < 0 || tx >= Config::ROOM_TILES_X || ty < 0 || ty >= Config::ROOM_TILES_Y) return;
+    if (tx < 0 || tx >= room.tiles_w || ty < 0 || ty >= room.tiles_h) return;
 
     // Chapter exit: stepping anywhere on the arch patch (3x3 around the Exit tile)
     if (room.exit_open) {
@@ -2056,7 +2220,12 @@ void Engine::update_room_state() {
             }
             break;
         case TileType::Event:
-            if (!room.event_used) open_dialogue(state.current_chapter);
+            if (!room.event_used) open_dialogue(room.event_id);
+            break;
+        case TileType::Doorway:
+            // Coyote time: al salir de un interior se aparece SOBRE la puerta de fuera, asi
+            // que sin la gracia se volveria a entrar en el acto y en bucle.
+            if (room_change_grace <= 0.0f) use_doorway();
             break;
         default:
             break;
@@ -2064,20 +2233,53 @@ void Engine::update_room_state() {
 }
 
 // =============================================================================
+// Puertas: entrar a un interior y volver de el (GDD2.0 fase 3)
+// =============================================================================
+// El estado de la sala de fuera NO se pierde, y eso es todo el gate del track: la sala se
+// guarda en `room_cache` antes de irse, igual que en una transicion normal, asi que los
+// enemigos muertos siguen muertos y el cofre abierto sigue abierto al volver.
+void Engine::use_doorway() {
+    auto& node = floor_map.rooms[floor_map.current_room];
+    floor_map.room_cache[floor_map.current_room] = current_room_data;
+
+    int target = (node.type == RoomType::Interior) ? node.interior_of : node.interior_room;
+    if (target < 0 || target >= floor_map.room_count) return;
+
+    if (node.type == RoomType::Interior) {
+        // Volver: se sale a la puerta de la sala de fuera y un tile MAS ABAJO, para no caer
+        // encima del propio umbral.
+        const Room& out = floor_map.room_cache[target];
+        spawn_tx = out.has_doorway ? out.door_tx : out.tiles_w / 2;
+        spawn_ty = out.has_doorway ? std::min(out.tiles_h - 2, out.door_ty + 1) : out.tiles_h / 2;
+    } else {
+        // Entrar: delante de la puerta del interior, que esta siempre en el muro sur.
+        spawn_tx = Config::SCREEN_TILES_X / 2;
+        spawn_ty = Config::SCREEN_TILES_Y - 2;
+    }
+    audio.play_sfx(SfxID::DoorOpen, 0.9f);
+    entry_direction = Direction::None;
+    load_room(target);
+}
+
+// =============================================================================
 // Encuentros biblicos (game/events.h): sala Event, dialogo y decision
 // =============================================================================
-void Engine::open_dialogue(int chapter) {
-    EventDef def = get_event_def(chapter);
+void Engine::open_dialogue(int event_id) {
+    EventDef def = get_event_def(event_id);
     if (!def.speaker || !def.speaker[0]) return;
     dialogue = DialogueState{};
-    dialogue.chapter = chapter;
+    dialogue.event_id = event_id;
+    dialogue.chapter = event_chapter(event_id);
+    // Se marca al ABRIRLO, no al resolverlo: el relato ya lo has leido, y quien cierre el
+    // juego a mitad de la caja no deberia perderlo del Codice.
+    codex_see_event(save.data, event_id);
     dialogue.auto_timer = autoplay.active ? 1.0f : 0.0f;
     audio.play_sfx(SfxID::Notification, 0.7f);
     change_scene(GameScene::Dialogue);
 }
 
 void Engine::update_dialogue(f32 dt) {
-    EventDef def = get_event_def(dialogue.chapter);
+    EventDef def = get_event_def(dialogue.event_id);
     int opt_count = def.options[1].label ? 2 : 1;
 
     bool confirm = input.is_action_just_pressed(Action::Confirm) ||
@@ -2105,18 +2307,23 @@ void Engine::update_dialogue(f32 dt) {
         return;
     }
     if (!dialogue.resolved) {
-        apply_event_choice(dialogue.chapter, dialogue.selected);
+        apply_event_choice(dialogue.event_id, dialogue.selected);
         dialogue.result = def.options[dialogue.selected].result;
         dialogue.resolved = true;
         return;
     }
+    // El Ascenso encadena: al cerrar una parada se abre la siguiente. No toca la sala
+    // porque no esta pasando en ninguna.
+    if (ascent_step >= 0) { ascent_next(); return; }
+    if (epilogue_step >= 0) { epilogue_next(); return; }
+
     // El encuentro no se repite: la hoguera se apaga y la sala queda marcada
     current_room_data.event_used = true;
     Vec2 feet = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
                 ? world.transforms[player.entity].position + Vec2{0, 6} : Vec2{0, 0};
     int tx = static_cast<int>(feet.x) / Config::TILE_SIZE;
     int ty = static_cast<int>(feet.y) / Config::TILE_SIZE;
-    if (tx >= 0 && tx < Config::ROOM_TILES_X && ty >= 0 && ty < Config::ROOM_TILES_Y &&
+    if (tx >= 0 && tx < current_room_data.tiles_w && ty >= 0 && ty < current_room_data.tiles_h &&
         current_room_data.tiles[ty][tx] == TileType::Event)
         current_room_data.tiles[ty][tx] = TileType::Path;
     floor_map.room_cache[floor_map.current_room] = current_room_data;
@@ -2124,7 +2331,7 @@ void Engine::update_dialogue(f32 dt) {
 }
 
 // El texto vive en events.h; la mecanica vive aqui, con los sistemas que ya existen.
-void Engine::apply_event_choice(int chapter, int option) {
+void Engine::apply_event_choice(int event_id, int option) {
     auto heal_full = [&]() {
         if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
             world.healths[player.entity].current = world.healths[player.entity].max;
@@ -2144,8 +2351,12 @@ void Engine::apply_event_choice(int chapter, int option) {
         }
     };
     auto add_damage = [&](f32 amount) {
-        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat))
-            world.combats[player.entity].damage += amount;
+        // Con suelo: hay un encuentro (los sirios de Dotan) cuyo coste es RESTAR danio, y un
+        // cayado que no hace nada convertiria la eleccion piadosa en una partida rota.
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat)) {
+            auto& c = world.combats[player.entity];
+            c.damage = std::max(4.0f, c.damage + amount);
+        }
     };
     auto grant = [&](u32 item_id) {
         const ItemDef* d = item_registry.get(item_id);
@@ -2155,45 +2366,159 @@ void Engine::apply_event_choice(int chapter, int option) {
         show_message(d->name, 2.5f);
     };
 
-    switch (chapter) {
-        case 1:  // Los cuervos de Querit
+    // Un encuentro por `case`, en el orden del pozo (game/events.h). Los que son MILAGRO
+    // dan efecto de partida; los que son decision MORAL mueven la fe. Ninguno es solo texto,
+    // y ninguna de las dos opciones es gratis: eso es lo que hace que elegir importe.
+    switch (event_id) {
+        // --- Cap. 1: El Arroyo Querit ---------------------------------------
+        case Ev::CUERVOS_QUERIT:
             if (option == 0) { heal_full(); faith.modify(5.0f); }
             else             { faith.modify(12.0f); }
             break;
-        case 2:  // La viuda de Sarepta — 1 Reyes 17:14
+        case Ev::NI_ROCIO_NI_LLUVIA:
+            if (option == 0) { add_max_hp(-10.0f); faith.modify(20.0f); }
+            else             { faith.modify(-8.0f); add_damage(4.0f); }
+            break;
+        case Ev::ARROYO_SECO:
+            if (option == 0) { hurt(12.0f); faith.modify(18.0f); }
+            else             { faith.modify(-6.0f); heal_full(); }
+            break;
+
+        // --- Cap. 2: La Viuda de Sarepta ------------------------------------
+        case Ev::VIUDA_SAREPTA:
             if (option == 0) { hurt(15.0f); faith.on_help_widow(); grant(13); }
             else             { faith.modify(Config::FAITH_FLEE); }
             break;
-        case 3:  // El agua sobre el altar del Carmelo — 1 Reyes 18:33
+        case Ev::TINAJA_HARINA:
+            if (option == 0) { faith.modify(25.0f); add_max_hp(10.0f); }
+            else             { faith.modify(-15.0f); heal_full(); add_damage(3.0f); }
+            break;
+        case Ev::HIJO_DE_LA_VIUDA:
+            if (option == 0) { hurt(25.0f); faith.modify(25.0f); add_max_hp(15.0f); }
+            else             { faith.modify(-10.0f); heal_full(); }
+            break;
+
+        // --- Cap. 3: El Monte Carmelo ---------------------------------------
+        case Ev::ALTAR_CARMELO:
             if (option == 0) { faith.modify(-20.0f); boss_hp_scale = 0.5f; }
             else             { add_damage(8.0f); }
             break;
-        case 4:  // El silbo apacible — 1 Reyes 19:12
+        case Ev::ABDIAS:
+            if (option == 0) { hurt(12.0f); faith.modify(18.0f); boss_hp_scale = 0.75f; }
+            else             { faith.modify(-6.0f); add_max_hp(10.0f); }
+            break;
+        case Ev::DOS_PENSAMIENTOS:
+            if (option == 0) { hurt(10.0f); faith.modify(20.0f); }
+            else             { faith.modify(-8.0f); add_damage(5.0f); }
+            break;
+        case Ev::NUBECILLA:
+            if (option == 0) { hurt(20.0f); add_damage(6.0f); faith.modify(10.0f); }
+            else             { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
+            break;
+
+        // --- Cap. 4: La Cueva de Horeb --------------------------------------
+        case Ev::BOCA_CUEVA:
             if (option == 0) { faith.modify(30.0f); player.active_slot_count = std::max(player.active_slot_count, 2); }
             else             { heal_full(); }
             break;
-        case 5:  // El llamado de Eliseo — 1 Reyes 19:20
+        case Ev::ENEBRO_ANGEL:
+            if (option == 0) { heal_full(); add_max_hp(10.0f); faith.modify(5.0f); }
+            else             { hurt(15.0f); faith.modify(18.0f); }
+            break;
+        case Ev::TRES_UNCIONES:
+            // Ungir a los tres ABRE el segundo slot: la agenda de Horeb es literalmente el
+            // reparto de lo que viene despues, y una parte de eso es el sucesor.
+            if (option == 0) { faith.modify(-20.0f); add_damage(4.0f);
+                               player.active_slot_count = std::max(player.active_slot_count, 2); }
+            else             { faith.modify(10.0f); }
+            break;
+        case Ev::SIETE_MIL:
+            if (option == 0) { hurt(10.0f); faith.modify(22.0f); }
+            else             { faith.modify(-10.0f); heal_full(); }
+            break;
+
+        // --- Cap. 5: El Llamado ---------------------------------------------
+        case Ev::LLAMADO_ELISEO:
             if (option == 0) { player.consumable_slot = UINT32_MAX; player.consumable_charges = 0;
                                add_damage(2.0f); faith.modify(10.0f); }
             else             { faith.modify(20.0f); }
             break;
-        case 6:  // La sal en la fuente de Jerico — 2 Reyes 2:21
+        case Ev::VINA_NABOT:
+            if (option == 0) { hurt(15.0f); faith.modify(20.0f); }
+            else             { faith.modify(-12.0f); add_damage(5.0f); }
+            break;
+        case Ev::TERCER_CAPITAN:
+            if (option == 0) { faith.modify(18.0f); add_max_hp(12.0f); }
+            else             { faith.modify(-25.0f); add_damage(8.0f); }
+            break;
+
+        // --- Cap. 6: Las Aguas de Jerico ------------------------------------
+        case Ev::AGUAS_JERICO:
             if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
             else             { hurt(10.0f); faith.modify(15.0f); }
             break;
-        case 7:  // Las vasijas de la viuda — 2 Reyes 4:6
+        case Ev::MANTO_JORDAN:
+            if (option == 0) { faith.modify(-15.0f); add_damage(7.0f); heal_full(); }
+            else             { hurt(12.0f); faith.modify(5.0f); }
+            break;
+        case Ev::MUCHACHOS_BETEL:
+            if (option == 0) { faith.modify(15.0f); }
+            else             { faith.modify(-20.0f); add_damage(8.0f); }
+            break;
+
+        // --- Cap. 7: El Aceite de la Viuda ----------------------------------
+        case Ev::ACEITE_VIUDA:
             if (option == 0) { hurt(20.0f); faith.on_help_widow(); grant(14); }
             else             { faith.modify(10.0f); }
             break;
-        case 8:  // El aposento sunamita — 2 Reyes 4:35
+        case Ev::ZANJAS_MOAB:
+            if (option == 0) { hurt(15.0f); faith.modify(20.0f); add_max_hp(10.0f); }
+            else             { faith.modify(-10.0f); add_damage(4.0f); }
+            break;
+        case Ev::MUERTE_EN_LA_OLLA:
+            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(12.0f); }
+            else             { hurt(8.0f); faith.modify(6.0f); }
+            break;
+        case Ev::PANES_CEBADA:
+            // El objeto 21 ES este pasaje (2 Reyes 4:43). Repartir los panes te los da.
+            if (option == 0) { faith.modify(-12.0f); grant(21); }
+            else             { faith.modify(-8.0f); add_max_hp(10.0f); }
+            break;
+
+        // --- Cap. 8: El Hijo Sunamita ---------------------------------------
+        case Ev::APOSENTO_SUNAMITA:
             if (option == 0) { add_max_hp(-15.0f); has_revive = true; }
             else             { faith.modify(12.0f); }
             break;
-        case 9:  // Naaman en el Jordan — 2 Reyes 5:14
+        case Ev::NINO_SUNAMITA:
+            if (option == 0) { hurt(25.0f); faith.modify(25.0f); add_max_hp(20.0f); }
+            else             { faith.modify(-15.0f); add_damage(5.0f); }
+            break;
+        case Ev::HACHA_QUE_FLOTA:
+            if (option == 0) { faith.modify(-8.0f); add_damage(6.0f); }
+            else             { add_max_hp(-15.0f); faith.modify(18.0f); }
+            break;
+        case Ev::TIERRAS_SUNAMITA:
+            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
+            else             { faith.modify(8.0f); add_damage(3.0f); }
+            break;
+
+        // --- Cap. 9: Naaman el Sirio ----------------------------------------
+        case Ev::NAAMAN_PUERTA:
             if (option == 0) { faith.modify(-25.0f); heal_full(); add_max_hp(20.0f); }
             else             { add_damage(4.0f); faith.modify(Config::FAITH_FLEE); }
             break;
-        case 10: // Ojos abiertos — 2 Reyes 6:17
+        case Ev::MUCHACHA_CAUTIVA:
+            if (option == 0) { add_max_hp(-15.0f); faith.modify(22.0f); }
+            else             { faith.modify(-15.0f); boss_hp_scale = 0.7f; }
+            break;
+        case Ev::HAZAEL_BENADAD:
+            if (option == 0) { hurt(18.0f); faith.modify(20.0f); }
+            else             { faith.modify(-10.0f); add_damage(6.0f); }
+            break;
+
+        // --- Cap. 10: El Ejercito Celestial ---------------------------------
+        case Ev::CRIADO_ELISEO:
             if (option == 0) {
                 faith.modify(-20.0f);
                 boss_hp_scale = 0.6f;
@@ -2202,6 +2527,37 @@ void Engine::apply_event_choice(int chapter, int option) {
                 add_damage(6.0f);
             }
             break;
+        case Ev::SIRIOS_DOTAN:
+            // El acto mas contraintuitivo del profeta, y por eso el coste es el ARMA y no la
+            // fe: dejas ir a un ejercito que tenias contado.
+            if (option == 0) { add_damage(-4.0f); faith.modify(25.0f); }
+            else             { faith.modify(-25.0f); add_damage(10.0f); }
+            break;
+        case Ev::CUATRO_LEPROSOS:
+            if (option == 0) { add_max_hp(-15.0f); faith.modify(25.0f); }
+            else             { faith.modify(-20.0f); add_damage(8.0f); heal_full(); }
+            break;
+        case Ev::PRINCIPE_SAMARIA:
+            if (option == 0) { hurt(10.0f); faith.modify(18.0f); }
+            else             { faith.modify(-8.0f); add_damage(4.0f); }
+            break;
+
+        // --- El Ascenso: las decisiones no se aplican aqui, se APUNTAN ------
+        // Lo que cambian es la HERENCIA, y esa se reparte al final del viaje en
+        // `finish_ascension`. Aplicar aqui la fe que se pierde por quedarse seria repartirla
+        // dos veces, porque la fe heredada se calcula sobre la que tengas al llegar.
+        case Ev::ASC_GILGAL:
+        case Ev::ASC_BETEL:
+        case Ev::ASC_JERICO:
+            if (option == 0) ascent_follows++;
+            break;
+        case Ev::ASC_JORDAN:
+            ascent_double = (option == 0);
+            break;
+        case Ev::EPI_ARCO_JOAS:
+            joash_full = (option == 0);
+            break;
+
         default: break;
     }
     audio.play_sfx(option == 0 ? SfxID::FaithGain : SfxID::MenuConfirm, 0.9f);
@@ -2500,12 +2856,12 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "press") { ss >> c.arg; }
         else if (c.op == "aim")   { ss >> c.num >> c.num2; }
         else if (c.op == "shot")  { ss >> c.arg; }
-        else if (c.op == "goto")  { ss >> c.num; }
+        else if (c.op == "goto")  { ss >> c.arg; }   // indice, o el TIPO de sala ("event", "boss"...)
         else if (c.op == "bot")   { ss >> c.num; }
         else if (c.op == "walk")  { ss >> c.num >> c.num2; }
         else if (c.op == "seed")  { ss >> c.num; }
         else if (c.op == "chapter") { ss >> c.num; }
-        else if (c.op == "event")   { ss >> c.num; }             // abrir el encuentro de un capitulo
+        else if (c.op == "event")   { ss >> c.num >> c.num2; }   // capitulo + indice en su pozo
         else if (c.op == "cine")  { ss >> c.num; }              // estampa del prologo (0..7)
         else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
         else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
@@ -2521,6 +2877,9 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "rstick")  { ss >> c.num; }           // 0/1: segundo joystick tactil
         else if (c.op == "meta")    { ss >> c.num; }            // desbloquear una mejora de El Santuario
         else if (c.op == "metareset") { }                      // volver a bloquear TODA la meta
+        else if (c.op == "pit")     { }                        // colocarse al borde de un hueco
+        else if (c.op == "door")    { }                        // plantarse sobre la puerta de la sala
+        else if (c.op == "collect") { }                        // atraer las recogidas de la sala
         // Toque sintetico: el raton NO genera eventos SDL_EVENT_FINGER_*, asi que sin
         // esto los controles tactiles solo se podian probar en un telefono.
         else if (c.op == "touch")   { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
@@ -2600,7 +2959,29 @@ void Engine::update_autoplay(f32 dt) {
                                    input.actions[was_action] = true; }
                 break;
             }
-            if (c.op == "goto") { load_room(static_cast<int>(c.num)); continue; }
+            if (c.op == "goto") {
+                // Por INDICE o por TIPO. El tipo es lo que hace que un guion sobreviva a un
+                // cambio del generador: el reparto de salas se mueve en cuanto cambia una
+                // linea de FloorMap::generate, y un `goto 11` clavado deja de apuntar a la
+                // sala que el guion queria comprobar sin decir ni pio.
+                int target = -1;
+                if (!c.arg.empty() && (isdigit(static_cast<unsigned char>(c.arg[0])) || c.arg[0] == '-')) {
+                    target = std::atoi(c.arg.c_str());
+                } else {
+                    RoomType want = RoomType::Normal;
+                    if      (c.arg == "event")    want = RoomType::Event;
+                    else if (c.arg == "treasure") want = RoomType::Treasure;
+                    else if (c.arg == "altar")    want = RoomType::Altar;
+                    else if (c.arg == "elite")    want = RoomType::Elite;
+                    else if (c.arg == "boss")     want = RoomType::Boss;
+                    else if (c.arg == "start")    want = RoomType::Start;
+                    for (int i = 0; i < floor_map.room_count; i++)
+                        if (floor_map.rooms[i].type == want) { target = i; break; }
+                    if (target < 0) SDL_Log("Autoplay: goto %s -> no hay ninguna en este mapa", c.arg.c_str());
+                }
+                if (target >= 0) load_room(target);
+                continue;
+            }
             if (c.op == "bot")  { ap.bot_timer = c.num; ap.timer = c.num; break; }
             if (c.op == "seed") { srand(static_cast<unsigned>(c.num)); continue; }
             if (c.op == "chapter") {   // jump to a chapter (debug: biome / boss checks)
@@ -2613,14 +2994,18 @@ void Engine::update_autoplay(f32 dt) {
             // Depuracion: abrir el encuentro de un capitulo sin caminar hasta su sala. La
             // sala Event la sortea el generador, asi que sin esto verificar los diez
             // encuentros depende de que el mapa los ponga a mano.
-            //   event <capitulo>
+            //   event <capitulo> [indice en el pozo, 0 por defecto]
             if (c.op == "event") {
                 if (state.scene == GameScene::Playing) {
                     int ch = std::max(1, std::min(static_cast<int>(c.num),
                                                   Config::CHAPTERS_ACT_I + Config::CHAPTERS_ACT_II));
-                    open_dialogue(ch);
-                    SDL_Log("event %d -> \"%s\" (retrato %d)", ch, get_event_def(ch).speaker,
-                            get_event_def(ch).portrait);
+                    EventPool pool = get_chapter_events(ch);
+                    int idx = std::max(0, std::min(static_cast<int>(c.num2), pool.count - 1));
+                    int id = pool.first + idx;
+                    open_dialogue(id);
+                    SDL_Log("event %d.%d (id %d de %d) -> \"%s\" (retrato %d, pnj %d)",
+                            ch, idx, id, pool.count, get_event_def(id).speaker,
+                            get_event_def(id).portrait, get_event_def(id).npc);
                 }
                 continue;
             }
@@ -2730,9 +3115,11 @@ void Engine::update_autoplay(f32 dt) {
                         SAVE_VERSION, d.run_active ? 1 : 0, d.current_act, d.current_chapter,
                         d.current_room, d.hp, d.faith, d.item_count);
                 SDL_Log("SAVEDUMP meta ofrendas=%d mejoras=0x%X partidas=%d ganadas=%d "
-                        "codice=%X/%X/%X/%X unlocks=0x%X logros=0x%X milagros=0x%X bajas=%d",
+                        "codice=%X/%X/%X/%X relatos=0x%llX unlocks=0x%X logros=0x%X "
+                        "milagros=0x%X bajas=%d",
                         d.offerings, d.upgrades_bought, d.total_runs, d.runs_completed,
                         d.codex_enemies, d.codex_items, d.codex_miracles, d.codex_chapters,
+                        static_cast<unsigned long long>(d.codex_events),
                         d.unlocks, d.achievements, d.miracles_cast, d.total_kills);
                 SDL_Log("SAVEDUMP ajustes musica=%.2f efectos=%.2f mira=%d sens=%d idioma=%d "
                         "banderas=0x%X items_desbloq=0x%X skins=0x%X/%u derechos=0x%X",
@@ -2764,6 +3151,79 @@ void Engine::update_autoplay(f32 dt) {
             }
             if (c.op == "ascend") {
                 if (state.current_act == Act::Act_I && player.entity != ENTITY_NONE) trigger_ascension();
+                continue;
+            }
+            // Depuracion: colocarse al borde de un HUECO y mirando hacia el. El Carro de
+            // Fuego es lo unico que los cruza, y las coordenadas de un hueco cambian con la
+            // semilla y con cualquier linea de `decorate`: sin esto, comprobar el cruce
+            // dependia de que el mapa pusiera uno donde el guion lo esperaba.
+            if (c.op == "pit") {
+                if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    const Room& rm = current_room_data;
+                    bool found = false;
+                    for (int y = 1; y < rm.tiles_h - 1 && !found; y++) {
+                        for (int x = 2; x < rm.tiles_w - 1 && !found; x++) {
+                            if (rm.tiles[y][x] != TileType::Pit) continue;
+                            if (!rm.is_tile_walkable(x - 1, y)) continue;
+                            Vec2 at = rm.tile_to_world(x - 1, y);
+                            world.transforms[player.entity].position = at - Vec2{0, 6};
+                            player.last_move_dir = {1, 0};
+                            camera.position = at;
+                            SDL_Log("pit -> profeta en (%.0f,%.0f), hueco en tile (%d,%d)",
+                                    at.x, at.y, x, y);
+                            found = true;
+                        }
+                    }
+                    if (!found) SDL_Log("pit -> esta sala no tiene ningun hueco");
+                }
+                continue;
+            }
+            // Depuracion: plantarse SOBRE la puerta de la sala. La puerta se coloca al azar
+            // sobre la senda, asi que sin esto entrar y salir de un interior desde un guion
+            // dependeria de acertar sus coordenadas.
+            if (c.op == "door") {
+                if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    const Room& rm = current_room_data;
+                    if (!rm.has_doorway) {
+                        SDL_Log("door -> esta sala no tiene puerta");
+                    } else {
+                        // AL LADO, no encima: pisarla la dispara, y asi no se puede
+                        // fotografiar la puerta antes de cruzarla. Se prefiere el tile de
+                        // ABAJO (en un interior la puerta esta en el muro sur y abajo no hay
+                        // nada, asi que ahi cae el de arriba).
+                        // Y DENTRO de la sala: `is_tile_walkable` deja pasar fuera de la
+                        // rejilla (lo necesita `try_room_transition`), asi que sin el limite
+                        // la puerta del muro sur de un interior dejaba al profeta en el
+                        // exterior de la sala, donde no hay nada que pisar.
+                        bool below = (rm.door_ty + 1 < rm.tiles_h - 1) &&
+                                     rm.is_tile_walkable(rm.door_tx, rm.door_ty + 1);
+                        int ay = below ? rm.door_ty + 1 : rm.door_ty - 1;
+                        Vec2 at = rm.tile_to_world(rm.door_tx, ay);
+                        world.transforms[player.entity].position = at - Vec2{0, 6};
+                        camera.position = at;
+                        camera.set_target(at);
+                        SDL_Log("door -> puerta en tile (%d,%d); profeta %s de ella (entrar: %s)",
+                                rm.door_tx, rm.door_ty, below ? "debajo" : "encima",
+                                below ? "hold up" : "hold down");
+                    }
+                }
+                continue;
+            }
+            // Depuracion: atraer al profeta TODAS las recogidas de la sala. Un hallazgo cae
+            // donde estaba el secreto, y un guion no sabe donde fue: sin esto, comprobar que
+            // la ofrenda llega a la meta-progresion dependia de que el bot pasara por encima.
+            if (c.op == "collect") {
+                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+                    Vec2 at = world.transforms[player.entity].position;
+                    int n = 0;
+                    for (u32 e = 0; e < world.entity_count; e++) {
+                        if (!world.is_alive(e) || !world.has(e, Component::Item)) continue;
+                        if (world.items[e].pickup == ItemComponent::Pickup::None) continue;
+                        world.transforms[e].position = at;
+                        n++;
+                    }
+                    SDL_Log("collect -> %d recogidas atraidas", n);
+                }
                 continue;
             }
             if (c.op == "killall") {

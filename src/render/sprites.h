@@ -148,10 +148,14 @@ struct SpriteSheet {
 namespace Portrait {
     constexpr int CELL = 96;    // texeles por retrato
     constexpr int COLS = 6;
-    constexpr int COUNT = 22;
+    constexpr int COUNT = 35;
     constexpr int NONE = -1;    // "este locutor no tiene cara"
     // Retratos nombrados, para quien los pide fuera del Bestiario
     constexpr int GENERAL_SIRIO = 5;
+    // El oficial real: la MISMA celda que el Soldado de Acab del Bestiario. Un capitan de
+    // cincuenta lleva el uniforme de la casa del rey, asi que reusarla no es una licencia —
+    // y `assets/` no crece por un locutor que ya esta dibujado.
+    constexpr int OFICIAL_REAL = 0;
     constexpr int ELIAS = 8, ELISEO = 9, ACAB = 10, JEZABEL = 11;
     // Locutores de los encuentros (game/events.h), en orden de capitulo. Existen SOLO como
     // retrato: no andan por el mundo y no tienen hoja de animacion.
@@ -167,10 +171,75 @@ namespace Portrait {
     constexpr int CUERVOS_QUERIT  = 19;   // cap 1
     constexpr int ALTAR_CARMELO   = 20;   // cap 3
     constexpr int BOCA_CUEVA      = 21;   // cap 4
+    // Locutores del POZO de encuentros (GDD2.0 fase 2). Van AL FINAL: los ocho primeros
+    // siguen siendo EnemyType y reordenar la lista rompe el Bestiario en silencio.
+    // Los nueve encuentros que son ESCENA y no persona no tienen celda: llevan NONE, que es
+    // un estado soportado (la caja se dibuja igual) y no un hueco por rellenar.
+    constexpr int ABDIAS            = 22;   // cap 3
+    constexpr int HIJO_PROFETAS     = 23;   // caps 7 y 8 (la olla, el hacha)
+    constexpr int HOMBRE_BAALSALISA = 24;   // cap 7
+    constexpr int MUCHACHA_CAUTIVA  = 25;   // cap 9
+    constexpr int LEPROSO_SAMARIA   = 26;   // cap 10
+    constexpr int PRINCIPE_SAMARIA  = 27;   // cap 10
+    // Vinetas del pozo: los encuentros que son ESCENA y no persona. Ponerles cara seria
+    // mentir sobre lo que el jugador esta mirando.
+    // OJO, y vale para cualquier vineta futura: la camara de vineta va casi de FRENTE (13
+    // grados de picado), asi que un HUNDIDO del terreno no se ve — lo tapa lo que tenga
+    // delante. Las que funcionan tienen por sujeto un OBJETO, no un relieve. Por eso el
+    // arroyo seco acabo siendo un monton de cantos y no un cauce, y por eso las zanjas de
+    // Moab se quedaron sin vineta.
+    constexpr int ARROYO_SECO       = 28;   // cap 1
+    constexpr int DOS_PENSAMIENTOS  = 29;   // cap 3
+    constexpr int NUBECILLA         = 30;   // cap 3
+    constexpr int ENEBRO_ANGEL      = 31;   // cap 4
+    constexpr int TRES_UNCIONES     = 32;   // cap 4
+    constexpr int SIETE_MIL         = 33;   // cap 4
+    constexpr int MANTO_JORDAN      = 34;   // cap 6
 
     inline Rect src(int index) {
         return {static_cast<f32>((index % COLS) * CELL),
                 static_cast<f32>((index / COLS) * CELL),
+                static_cast<f32>(CELL), static_cast<f32>(CELL)};
+    }
+}
+
+// =============================================================================
+// PNJ de los encuentros (assets/sprites/npcs.png, tools/blender/mantle_sprites/npcs.py)
+// =============================================================================
+// Una sola fila de celdas de 128 px, solo `Idle`: los locutores no pelean, no andan y no
+// mueren, asi que una hoja de 15 filas serian catorce que nadie carga. Hasta esta pasada el
+// PNJ del encuentro se dibujaba con la celda de ANTORCHA del tileset — literalmente, una
+// hoguera con nombre.
+//
+// El orden es el de CAPITULO y tiene que coincidir con `LAYOUT` en npcs.py.
+namespace Npc {
+    constexpr int CELL = 128;   // texeles = 32 unidades de juego a ASSET_SCALE 4
+    constexpr int COUNT = 16;
+    constexpr int NONE = -1;    // este encuentro NO es una persona, sino la escena
+
+    constexpr int VIUDA_SAREPTA   = 0;   // cap 2
+    constexpr int ELISEO_LABRADOR = 1;   // cap 5
+    constexpr int HOMBRE_JERICO   = 2;   // cap 6
+    constexpr int MUJER_PROFETA   = 3;   // cap 7
+    constexpr int SUNAMITA        = 4;   // cap 8
+    constexpr int NAAMAN          = 5;   // cap 9
+    constexpr int CRIADO_ELISEO   = 6;   // cap 10
+    // Pozo de encuentros: los seis locutores nuevos que esperan de pie en su sala...
+    constexpr int ABDIAS            = 7;    // cap 3
+    constexpr int HIJO_PROFETAS     = 8;    // caps 7 y 8
+    constexpr int HOMBRE_BAALSALISA = 9;    // cap 7
+    constexpr int MUCHACHA_CAUTIVA  = 10;   // cap 9
+    constexpr int LEPROSO_SAMARIA   = 11;   // cap 10
+    constexpr int PRINCIPE_SAMARIA  = 12;   // cap 10
+    // ...y TRES que ya andaban por el mundo con hoja propia. Se les hace celda aqui igual
+    // porque el PNJ se dibuja desde npcs.png y de ningun otro sitio: sin ella, el rey Acab
+    // en su sala seria una hoguera.
+    constexpr int ACAB            = 13;   // caps 1 y 5
+    constexpr int GENERAL_SIRIO   = 14;   // caps 9 y 10
+    constexpr int OFICIAL_REAL    = 15;   // cap 5 (el tercer capitan de Ocozias)
+
+    inline Rect src(int index) {
+        return {static_cast<f32>(index * CELL), 0.0f,
                 static_cast<f32>(CELL), static_cast<f32>(CELL)};
     }
 }

@@ -125,6 +125,12 @@ set(MANTLE_SOURCES
 # =============================================================================
 # Executable
 # =============================================================================
+# Icono del .exe: MSVC compila el .rc sin necesidad de nada mas. Solo en Windows -- en
+# Linux/Mac el icono lo pone SDL_SetWindowIcon (Engine::init) y el .desktop / .app.
+if(WIN32)
+    list(APPEND MANTLE_SOURCES mantle.rc)
+endif()
+
 if(PLATFORM_ANDROID)
     add_library(${PROJECT_NAME} SHARED ${MANTLE_SOURCES})
 else()

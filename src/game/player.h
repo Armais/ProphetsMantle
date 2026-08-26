@@ -78,6 +78,7 @@ struct Player {
     f32  aura_timer    = 0.0f;   // Pulso del aura de Doble Porcion / burbujas de Sanar Aguas
     f32  chariot_timer = 0.0f;   // Estela de fuego del Carro mientras dura la embestida
     f32  trail_timer   = 0.0f;   // Cadencia de la estela
+    bool crossed_gap   = false;  // ya se ha logueado el cruce de hueco de esta embestida
     f32  reveal_pulse  = 0.0f;   // Cadencia de las marcas de Ojos Abiertos
     f32  dash_trail_timer = 0.0f;   // Cadencia de la estela del dash
 

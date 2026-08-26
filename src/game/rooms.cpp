@@ -3,21 +3,23 @@
 // =============================================================================
 
 #include "game/rooms.h"
+#include "game/events.h"
 #include "render/renderer.h"
 #include <cstring>
 #include <cmath>
 #include <queue>
 
-static constexpr int W = Config::ROOM_TILES_X;
-static constexpr int H = Config::ROOM_TILES_Y;
+// Tope de `Room::tiles`, NO el tamano de la sala: eso es `Room::tiles_w` / `tiles_h`, que
+// cambia por sala (exterior = 2x2 pantallas, arena de jefe = 1). Todo bucle sobre el mapa
+// va contra los campos de la sala; estos dos solo dimensionan arrays.
+static constexpr int MAXW = Config::ROOM_TILES_X;
+static constexpr int MAXH = Config::ROOM_TILES_Y;
 static constexpr int TS = Config::TILE_SIZE;
-static constexpr int CX = W / 2;   // 10
-static constexpr int CY = H / 2;   // 5
 
 // =============================================================================
 // Helpers
 // =============================================================================
-static bool in_bounds(int x, int y) { return x >= 0 && x < W && y >= 0 && y < H; }
+static bool in_bounds(int x, int y, int w, int h) { return x >= 0 && x < w && y >= 0 && y < h; }
 
 // Deterministic per-tile hash for visual variation
 static u32 tile_hash(int x, int y, int salt) {
@@ -28,20 +30,20 @@ static u32 tile_hash(int x, int y, int salt) {
 
 // Is (tx,ty) part of the "apron" right inside an opening (kept free of obstacles)
 static bool is_exit_apron(const Room& r, int tx, int ty) {
-    if (r.door_north && Room::is_gap_x(tx) && ty <= 2) return true;
-    if (r.door_south && Room::is_gap_x(tx) && ty >= H - 3) return true;
-    if (r.door_west  && Room::is_gap_y(ty) && tx <= 2) return true;
-    if (r.door_east  && Room::is_gap_y(ty) && tx >= W - 3) return true;
+    if (r.door_north && r.is_gap_x(tx) && ty <= 2) return true;
+    if (r.door_south && r.is_gap_x(tx) && ty >= r.tiles_h - 3) return true;
+    if (r.door_west  && r.is_gap_y(ty) && tx <= 2) return true;
+    if (r.door_east  && r.is_gap_y(ty) && tx >= r.tiles_w - 3) return true;
     return false;
 }
 
 // Free interior tile for decoration: not border, floor, not near centre, not in an apron
 static bool is_placeable(const Room& room, int tx, int ty, int margin_from_center) {
-    if (tx < 1 || tx >= W - 1 || ty < 1 || ty >= H - 1) return false;
+    if (tx < 1 || tx >= room.tiles_w - 1 || ty < 1 || ty >= room.tiles_h - 1) return false;
     if (room.tiles[ty][tx] != TileType::Floor) return false;
     if (is_exit_apron(room, tx, ty)) return false;
     if (margin_from_center > 0) {
-        if (std::abs(tx - CX) <= margin_from_center && std::abs(ty - CY) <= margin_from_center) return false;
+        if (std::abs(tx - (room.tiles_w / 2)) <= margin_from_center && std::abs(ty - (room.tiles_h / 2)) <= margin_from_center) return false;
     }
     return true;
 }
@@ -49,8 +51,8 @@ static bool is_placeable(const Room& room, int tx, int ty, int margin_from_cente
 static void scatter(Room& room, TileType t, int count, int margin) {
     for (int i = 0; i < count; i++) {
         for (int attempt = 0; attempt < 25; attempt++) {
-            int tx = randi_range(1, W - 2);
-            int ty = randi_range(1, H - 2);
+            int tx = randi_range(1, room.tiles_w - 2);
+            int ty = randi_range(1, room.tiles_h - 2);
             if (is_placeable(room, tx, ty, margin)) {
                 room.tiles[ty][tx] = t;
                 break;
@@ -61,14 +63,14 @@ static void scatter(Room& room, TileType t, int count, int margin) {
 
 // Convert a tile into a walkable one while carving a trail (river -> bridge, obstacle -> path)
 static void carve_tile(Room& room, int tx, int ty, bool mark_path) {
-    if (!in_bounds(tx, ty)) return;
+    if (!in_bounds(tx, ty, room.tiles_w, room.tiles_h)) return;
     TileType& t = room.tiles[ty][tx];
     switch (t) {
         case TileType::River:
         case TileType::Ford:
             t = TileType::Bridge; break;
         case TileType::Wall:
-            if (tx == 0 || tx == W - 1 || ty == 0 || ty == H - 1) {
+            if (tx == 0 || tx == room.tiles_w - 1 || ty == 0 || ty == room.tiles_h - 1) {
                 // Border walls only get carved on openings (the trail ends inside a gap)
                 if (mark_path) t = TileType::Path;
             } else {
@@ -81,6 +83,8 @@ static void carve_tile(Room& room, int tx, int ty, bool mark_path) {
         case TileType::Pit:
         case TileType::Bush:
         case TileType::TallGrass:
+        case TileType::Jar:
+        case TileType::Crack:
         case TileType::Floor:
             if (mark_path) t = TileType::Path; else if (t != TileType::Floor) t = TileType::Floor;
             break;
@@ -89,7 +93,14 @@ static void carve_tile(Room& room, int tx, int ty, bool mark_path) {
     }
 }
 
-// L-shaped trail from (x0,y0) to (x1,y1): 1 tile of Path in the middle, neighbours cleared
+// Senda del centro a una abertura. NO es una recta: SERPENTEA. En una sala de una pantalla
+// la L de antes pasaba desapercibida; en una de 2x2 dejaba una carretera perfectamente recta
+// cortando el campo de lado a lado, que es lo contrario de un exterior.
+//
+// El serpenteo va en el tramo LARGO, el que de verdad recorre la sala. Ponerlo en el tramo
+// de aproximacion no sirve de nada: con el centro ya alineado con el vano ese tramo tiene
+// CERO pasos, y la senda salia dead-straight igual (asi fallo el primer intento). Los
+// ultimos cuatro pasos van derechos, para que entre limpia por el vano.
 static void carve_trail(Room& room, int x0, int y0, int x1, int y1) {
     int x = x0, y = y0;
     auto step_here = [&](int cx, int cy, bool horizontal) {
@@ -98,22 +109,40 @@ static void carve_trail(Room& room, int x0, int y0, int x1, int y1) {
         if (horizontal) { carve_tile(room, cx, cy - 1, false); carve_tile(room, cx, cy + 1, false); }
         else            { carve_tile(room, cx - 1, cy, false); carve_tile(room, cx + 1, cy, false); }
     };
-    // Reach the target column/row first, then run straight into the opening
-    // (north/south exits: horizontal leg first; east/west: vertical leg first)
-    bool vertical_first = !(y1 == 0 || y1 == H - 1);
-    if (vertical_first) {
-        while (y != y1) { step_here(x, y, false); y += (y1 > y) ? 1 : -1; }
-        while (x != x1) { step_here(x, y, true);  x += (x1 > x) ? 1 : -1; }
+    const bool to_vertical_edge = (y1 == 0 || y1 == room.tiles_h - 1);
+    if (to_vertical_edge) {
+        const int dy = (y1 > y) ? 1 : -1;
+        const int wander = std::max(0, std::abs(y1 - y) - 4);
+        for (int i = 0; i < wander; i++) {
+            step_here(x, y, false);
+            y += dy;
+            if (randi_range(0, 3) == 0) {
+                int nx = x + (randi_range(0, 1) ? 1 : -1);
+                if (nx > 1 && nx < room.tiles_w - 2) { step_here(nx, y, true); x = nx; }
+            }
+        }
+        while (x != x1) { step_here(x, y, true);  x += (x1 > x) ? 1 : -1; }   // enfilar el vano
+        while (y != y1) { step_here(x, y, false); y += dy; }                  // recta final
     } else {
-        while (x != x1) { step_here(x, y, true);  x += (x1 > x) ? 1 : -1; }
+        const int dx = (x1 > x) ? 1 : -1;
+        const int wander = std::max(0, std::abs(x1 - x) - 4);
+        for (int i = 0; i < wander; i++) {
+            step_here(x, y, true);
+            x += dx;
+            if (randi_range(0, 3) == 0) {
+                int ny = y + (randi_range(0, 1) ? 1 : -1);
+                if (ny > 1 && ny < room.tiles_h - 2) { step_here(x, ny, false); y = ny; }
+            }
+        }
         while (y != y1) { step_here(x, y, false); y += (y1 > y) ? 1 : -1; }
+        while (x != x1) { step_here(x, y, true);  x += dx; }
     }
-    step_here(x, y, vertical_first ? false : true);
+    step_here(x, y, !to_vertical_edge);
 }
 
-// BFS over walkable tiles from (sx,sy). Fills `reach` (W*H bools).
-static void flood_fill(const Room& room, int sx, int sy, bool reach[H][W]) {
-    std::memset(reach, 0, sizeof(bool) * W * H);
+// BFS over walkable tiles from (sx,sy). Fills `reach` (matriz al maximo).
+static void flood_fill(const Room& room, int sx, int sy, bool reach[MAXH][MAXW]) {
+    std::memset(reach, 0, sizeof(bool) * MAXW * MAXH);
     std::queue<std::pair<int, int>> q;
     if (!room.is_tile_walkable(sx, sy)) return;
     reach[sy][sx] = true;
@@ -124,7 +153,7 @@ static void flood_fill(const Room& room, int sx, int sy, bool reach[H][W]) {
         const int dy[4] = {0, 0, 1, -1};
         for (int i = 0; i < 4; i++) {
             int nx = x + dx[i], ny = y + dy[i];
-            if (!in_bounds(nx, ny) || reach[ny][nx]) continue;
+            if (!in_bounds(nx, ny, room.tiles_w, room.tiles_h) || reach[ny][nx]) continue;
             if (!room.is_tile_walkable(nx, ny)) continue;
             reach[ny][nx] = true;
             q.push({nx, ny});
@@ -136,18 +165,25 @@ static void flood_fill(const Room& room, int sx, int sy, bool reach[H][W]) {
 // Biome decoration
 // =============================================================================
 static void decorate(Room& room, const BiomeStyle& biome) {
+    // Cuantas PANTALLAS mide esta sala. Todos los contadores del bioma estan pensados para
+    // una, asi que en una sala exterior (2x2) hay que multiplicarlos o el campo se queda
+    // desnudo: tres arboles repartidos en cuatro pantallas no decoran nada.
+    const int screens = std::max(1, (room.tiles_w * room.tiles_h) /
+                                    (Config::SCREEN_TILES_X * Config::SCREEN_TILES_Y));
     // River: 2 tiles wide, serpentine, kept to one side of the centre band so the
     // north/south trails never run along it. East/west trails cross it once (bridge).
     if (biome.river) {
         bool left = randi_range(0, 1) == 0;
-        int lo = left ? 2 : 12;
-        int hi = left ? 5 : 15;
+        // En PROPORCION al ancho: con los limites clavados para una sala de 20 tiles, en una
+        // de 40 el rio se quedaba siempre en el cuarto izquierdo.
+        int lo = left ? 2 : room.tiles_w * 3 / 5;
+        int hi = left ? room.tiles_w / 4 : room.tiles_w * 3 / 4;
         int col = randi_range(lo, hi);
         // Long meanders: the course drifts one column every other row (instead of a
         // per-row jitter that read as a sawtooth) and the bed breathes between 2 and 3 wide
         int width = randi_range(2, 3);
         int drift = randi_range(0, 1) ? 1 : -1;
-        for (int y = 1; y < H - 1; y++) {
+        for (int y = 1; y < room.tiles_h - 1; y++) {
             if ((y & 1) == 0) {
                 if (randi_range(0, 3) == 0) drift = -drift;
                 col += drift;
@@ -157,63 +193,205 @@ static void decorate(Room& room, const BiomeStyle& biome) {
             }
             for (int i = 0; i < width; i++) {
                 int rx = col + i;
-                if (rx > 0 && rx < W - 1) room.tiles[y][rx] = TileType::River;
+                if (rx > 0 && rx < room.tiles_w - 1) room.tiles[y][rx] = TileType::River;
             }
         }
         // 1-2 natural fords (the second one at least 2 rows away so both are real crossings)
         int fords = randi_range(1, 2);
         int first_fy = -10;
         for (int i = 0; i < fords; i++) {
-            int fy = randi_range(2, H - 3);
-            for (int tries = 0; tries < 8 && std::abs(fy - first_fy) < 2; tries++) fy = randi_range(2, H - 3);
+            int fy = randi_range(2, room.tiles_h - 3);
+            for (int tries = 0; tries < 8 && std::abs(fy - first_fy) < 2; tries++) fy = randi_range(2, room.tiles_h - 3);
             if (i == 0) first_fy = fy;
-            for (int x = 1; x < W - 1; x++)
+            for (int x = 1; x < room.tiles_w - 1; x++)
                 if (room.tiles[fy][x] == TileType::River) room.tiles[fy][x] = TileType::Ford;
         }
     }
 
     // Shallow puddles: walkable, but wading through them costs speed (Config::WATER_SPEED_MULT).
     // Only in river biomes, and only on plain floor so trails and props stay untouched.
+    // La forma NO puede ser un rectangulo: una caja de 2x2 con su ribera alrededor se lee
+    // como una piscina, con su bordillo y todo. Es una elipse con el borde mordido, que es
+    // justo lo que el autotileado de ribera (ver render_ground) necesita para dibujar una
+    // curva en vez de un escalon.
     if (biome.river) {
-        int puddles = randi_range(2, 4);
+        // MENOS charcas y mas grandes, no mas agua: una elipse de radio 2,8 son unos 15
+        // tiles, y con los 8-16 charcos de antes la sala salia inundada. Con este radio cada
+        // una ocupa 4-6 tiles, o sea lo mismo que sumaban las cajas de 2x2 de antes.
+        // Radio MINIMO de 1,6: por debajo de eso la elipse cabe en una cruz de cinco tiles y
+        // la charca sale con forma de pieza de tetris. Y una menos, para que el agua total no
+        // suba al agrandarlas.
+        // Pocas y MEDIANAS. Con cuatro de radio 2,5 se juntaban en un lago y el agua deja de
+        // ser un charco para ser terreno lento: el profeta vadeaba media sala (medido con la
+        // sonda de tacto — 94 tiros y cero bajas en el tramo de arqueros, con el bot metido en
+        // el agua). Y por debajo de radio 1,3 la elipse cabe en una cruz de cinco tiles y sale
+        // con forma de pieza de tetris. La ventana buena es estrecha.
+        int puddles = std::max(2, screens - 1);
         for (int i = 0; i < puddles; i++) {
-            int px = randi_range(2, W - 4), py = randi_range(2, H - 4);
-            int pw = randi_range(1, 2), ph = randi_range(1, 2);
-            for (int y = py; y < py + ph && y < H - 1; y++)
-                for (int x = px; x < px + pw && x < W - 1; x++)
-                    if (room.tiles[y][x] == TileType::Floor) room.tiles[y][x] = TileType::Water;
+            int cx = randi_range(4, room.tiles_w - 6), cy = randi_range(4, room.tiles_h - 6);
+            f32 rx = 1.3f + randf() * 0.6f, ry = 1.1f + randf() * 0.5f;
+            int reach = static_cast<int>(rx > ry ? rx : ry) + 1;
+            for (int y = cy - reach; y <= cy + reach; y++) {
+                for (int x = cx - reach; x <= cx + reach; x++) {
+                    if (x < 1 || x >= room.tiles_w - 1 || y < 1 || y >= room.tiles_h - 1) continue;
+                    if (room.tiles[y][x] != TileType::Floor) continue;
+                    f32 dx = static_cast<f32>(x - cx) / rx, dy = static_cast<f32>(y - cy) / ry;
+                    // El mordisco va por tile y es DETERMINISTA: con un randf() por celda la
+                    // charca cambiaria de forma en cada regeneracion de la misma semilla.
+                    f32 bite = 0.34f * static_cast<f32>(tile_hash(x, y, i * 7 + 3) % 100) / 100.0f;
+                    if (dx * dx + dy * dy + bite < 1.0f) room.tiles[y][x] = TileType::Water;
+                }
+            }
         }
     }
 
     // Buildings: small stone blocks (2x2 / 3x2) that break lines of sight in villages/cities
-    for (int b = 0; b < biome.buildings; b++) {
-        for (int attempt = 0; attempt < 40; attempt++) {
-            int bw = randi_range(2, 3), bh = 2;
-            int bx = randi_range(2, W - 3 - bw);
-            int by = randi_range(2, H - 3 - bh);
-            bool ok = true;
-            for (int y = by - 1; y <= by + bh && ok; y++)
-                for (int x = bx - 1; x <= bx + bw && ok; x++)
-                    if (!is_placeable(room, x, y, 2)) ok = false;
-            if (!ok) continue;
-            for (int y = by; y < by + bh; y++)
-                for (int x = bx; x < bx + bw; x++)
-                    room.tiles[y][x] = TileType::Wall;
-            break;
+    // Tambien en proporcion al area: dos bloques sueltos en una sala de 2x2 no se leen
+    // como una aldea, se leen como dos trozos de muro huerfanos en mitad del campo.
+    // Y en MANZANAS, no sueltos. Un rectangulo de ladrillo solo en mitad del campo se lee
+    // como un trozo de muro huerfano; lo que se lee como poblado es un grupo de casas con una
+    // CALLE entre ellas. Cada manzana reparte hasta 6 solares en una rejilla con calle de 1-2
+    // tiles, y deja alguno vacio para que no salga un damero.
+    int want_buildings = biome.buildings * screens;
+    for (int district = 0; district < 14 && want_buildings > 0; district++) {
+        int cols = randi_range(2, 3), rows = randi_range(1, 2);
+        int lot_w = randi_range(2, 3), lot_h = 2;
+        int street = randi_range(1, 2);
+        int dw = cols * lot_w + (cols - 1) * street;
+        int dh = rows * lot_h + (rows - 1) * street;
+        if (dw > room.tiles_w - 6 || dh > room.tiles_h - 6) continue;
+        int dx = randi_range(2, room.tiles_w - 3 - dw);
+        int dy = randi_range(2, room.tiles_h - 3 - dh);
+        bool ok = true;
+        for (int y = dy - 1; y <= dy + dh && ok; y++)
+            for (int x = dx - 1; x <= dx + dw && ok; x++)
+                if (!is_placeable(room, x, y, 2)) ok = false;
+        if (!ok) continue;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols && want_buildings > 0; c++) {
+                if (randi_range(0, 4) == 0) continue;      // un solar vacio rompe el damero
+                int bx = dx + c * (lot_w + street), by = dy + r * (lot_h + street);
+                for (int y = by; y < by + lot_h; y++)
+                    for (int x = bx; x < bx + lot_w; x++)
+                        room.tiles[y][x] = TileType::Wall;
+                want_buildings--;
+            }
         }
     }
 
-    auto jitter = [](int base) { return base <= 0 ? 0 : std::max(0, base + randi_range(-1, 2)); };
+    // HUECOS, y van AQUI ARRIBA a proposito: necesitan seis por cinco tiles rasos y con el
+    // mapa ya sembrado de arboles, rocas, matorral, tinajas y grietas no cabe ni uno (probado:
+    // cero huecos en un capitulo entero). `TileType::Pit` llevaba desde el primer commit con
+    // pintado y colision y NADIE lo colocaba: el Carro de Fuego no tenia nada que cruzar. Van solo en bioma rocoso, y
+    // cada uno con su recompensa AL OTRO LADO y a la vista — un precipicio sin nada detras
+    // es un muro con otra textura, y un premio que no se ve hasta tener la llave no invita a
+    // volver. Si una senda pasa por encima, `carve_tile` lo rellena: la ruta principal nunca
+    // depende de tener el milagro.
+    // Ni en la sala de INICIO ni en la arena del jefe. El hueco es una pieza de
+    // exploracion: en la de inicio es donde se aprende a andar (y donde corre la sonda de
+    // tacto, que se quedaba clavada detras de un precipicio), y en la arena solo seria una
+    // trampa en una pelea que ya va justa de sitio.
+    if (biome.border == BorderStyle::Cliff &&
+        room.type != RoomType::Start && room.type != RoomType::Boss) {
+        // Uno o dos POR SALA, y NO por pantalla: un hueco es una pieza de diseño, no
+        // decorado. Escalandolo por area salian 24 tiles de precipicio en una sala y el bot
+        // de la sonda de tacto se quedaba clavado detras (arqueros de 0,86 a 6,91 s).
+        for (int g = 0; g < randi_range(1, 2); g++) {
+            for (int attempt = 0; attempt < 30; attempt++) {
+                int bx = randi_range(3, std::max(4, room.tiles_w - 7));
+                int by = randi_range(3, std::max(4, room.tiles_h - 6));
+                bool ok = true;
+                for (int y = by - 1; y <= by + 3 && ok; y++)
+                    for (int x = bx - 1; x <= bx + 4 && ok; x++)
+                        if (!is_placeable(room, x, y, 3)) ok = false;
+                if (!ok) continue;
+                for (int y = by; y < by + 3; y++)
+                    for (int x = bx; x < bx + 2; x++)
+                        room.tiles[y][x] = TileType::Pit;
+                room.tiles[by + 1][bx + 3] = randi_range(0, 1) ? TileType::Jar : TileType::Crack;
+                break;
+            }
+        }
+    }
+
+    auto jitter = [&](int base) { return base <= 0 ? 0 : std::max(0, base * screens + randi_range(-1, 2)); };
     scatter(room, TileType::Tree,      jitter(biome.trees),  3);
     scatter(room, TileType::Rock,      jitter(biome.rocks),  2);
     scatter(room, TileType::Bush,      jitter(biome.bushes), 1);
     scatter(room, TileType::TallGrass, jitter(biome.grass),  1);
+
+    // Secretos de bioma (GDD2.0 fase 4). El gate del diseño es que se VEAN antes de poder
+    // abrirse, y por eso la tinaja y la grieta ESTORBAN el paso: el jugador tropieza con
+    // ellas mucho antes de tener la llave. Y van donde tienen sentido — tinajas donde hay
+    // casas, grietas donde hay roca —, con un par sueltos en el resto para que ningun
+    // capitulo se quede sin nada que investigar.
+    const bool poblado = biome.buildings > 0;
+    const bool rocoso  = biome.border == BorderStyle::Cliff;
+    // Contados POR SALA. Escalados por area salian once grietas y dieciseis tinajas, y la
+    // grieta PARA LOS TIROS: con ese numero, la mitad de los disparos del profeta se comian
+    // el paisaje. Un secreto tiene que ser un hallazgo, no un seto.
+    scatter(room, TileType::Jar,   poblado ? randi_range(4, 7) : randi_range(1, 3), 1);
+    scatter(room, TileType::Crack, rocoso  ? randi_range(2, 4) : randi_range(0, 2), 2);
 }
 
 // =============================================================================
 // Room::generate
 // =============================================================================
-void Room::generate(RoomType room_type, int chap, int difficulty) {
+// Un INTERIOR no se genera por biomas: se monta con una PLANTILLA. Es lo contrario del
+// exterior a proposito — ahi el generador reparte terreno, y aqui lo que hay es una habitacion
+// hecha, con sus muros, sus pilares y lo que sea que guarde dentro.
+static void build_interior(Room& room, int chapter) {
+    room.tiles_w = Config::SCREEN_TILES_X;
+    room.tiles_h = Config::SCREEN_TILES_Y;
+    room.border  = BorderStyle::Masonry;   // aqui el muro SI significa algo
+    std::memset(room.tiles, static_cast<int>(TileType::Floor), sizeof(room.tiles));
+
+    const int W = room.tiles_w, H = room.tiles_h;
+    for (int x = 0; x < W; x++) { room.tiles[0][x] = TileType::Wall; room.tiles[H - 1][x] = TileType::Wall; }
+    for (int y = 0; y < H; y++) { room.tiles[y][0] = TileType::Wall; room.tiles[y][W - 1] = TileType::Wall; }
+
+    // La puerta, en el centro del muro sur: es por donde se entro y por donde se sale.
+    room.door_tx = W / 2;
+    room.door_ty = H - 1;
+    room.has_doorway = true;
+    room.tiles[room.door_ty][room.door_tx] = TileType::Doorway;
+
+    // Pilares: dos filas simetricas. Son lo que hace que la habitacion tenga PLANTA y no sea
+    // una caja vacia, y ademas cortan la linea de vision, que es para lo que sirve un muro.
+    for (int i = 0; i < 2; i++) {
+        int px = (i == 0) ? 4 : W - 5;
+        room.tiles[3][px] = TileType::Wall;
+        room.tiles[H - 4][px] = TileType::Wall;
+    }
+
+    // Antorchas flanqueando la puerta y el fondo
+    room.tiles[H - 2][room.door_tx - 2] = TileType::Torch;
+    room.tiles[H - 2][room.door_tx + 2] = TileType::Torch;
+
+    // Lo que guarda: altar en los capitulos impares, cofre en los pares. Que un interior
+    // SIEMPRE pague es lo que hace que valga la pena buscar la puerta; no lleva enemigos
+    // porque el premio de explorar no puede ser otra pelea.
+    room.tiles[2][W / 2] = (chapter % 2) ? TileType::AltarGod : TileType::Chest;
+
+    // Tinajas contra las paredes: el secreto mas barato, y aqui es donde de verdad se
+    // esperan (2 Reyes 4:1-7 pasa entero dentro de una casa).
+    for (int i = 0; i < 5; i++) {
+        int jx = 2 + (i * (W - 5)) / 4;
+        int jy = (i % 2) ? 2 : H - 3;
+        if (room.tiles[jy][jx] == TileType::Floor) room.tiles[jy][jx] = TileType::Jar;
+    }
+}
+
+void Room::generate(RoomType room_type, int chap, int difficulty, int event, bool with_doorway) {
+    event_id = event;
+    has_doorway = false;
+    if (room_type == RoomType::Interior) {
+        type = room_type;
+        chapter = chap;
+        cleared = true;      // no hay nada que limpiar: un interior no sella salidas
+        build_interior(*this, chap);
+        return;
+    }
     type = room_type;
     chapter = chap;
     cleared = false;
@@ -226,17 +404,56 @@ void Room::generate(RoomType room_type, int chap, int difficulty) {
 
     const BiomeStyle biome = get_biome_style(chapter);
 
+    // Tamano de la sala. La ARENA DEL JEFE mide una pantalla: en una sala de 2x2 con la
+    // camara siguiendo al profeta el jefe se sale del cuadro y la pelea se convierte en
+    // perseguir una barra de vida. Todo lo demas es exterior y mide 2x2.
+    const bool one_screen = (room_type == RoomType::Boss);
+    tiles_w = one_screen ? Config::SCREEN_TILES_X : Config::ROOM_TILES_X;
+    tiles_h = one_screen ? Config::SCREEN_TILES_Y : Config::ROOM_TILES_Y;
+    border  = biome.border;      // ANTES de is_gap_x/is_gap_y: de el depende el ancho del vano
+
     // Fill with floor
     std::memset(tiles, static_cast<int>(TileType::Floor), sizeof(tiles));
 
-    // Borders: cliffs everywhere except an opening (gap) on connected sides
-    for (int x = 0; x < W; x++) {
-        if (!(door_north && is_gap_x(x))) tiles[0][x] = TileType::Wall;
-        if (!(door_south && is_gap_x(x))) tiles[H - 1][x] = TileType::Wall;
+    // Borde. `Cliff` y `Masonry` cierran con pared (`TileType::Wall`); `Natural` cierra con
+    // el propio terreno — roca suelta y arboles secos, que bloquean igual pero se leen como
+    // que el campo sigue mas alla. Dejarlo ABIERTO no es opcion: fuera de la rejilla
+    // `is_tile_walkable` deja pasar, y sin sala vecina `try_room_transition` devuelve al
+    // profeta de un tiron, que es un muro invisible y se siente peor que el muro.
+    auto edge_tile = [&](int x, int y) {
+        if (border != BorderStyle::Natural) return TileType::Wall;
+        // Mitad y mitad: una fila de rocas todas iguales vuelve a leerse como una tapia,
+        // solo que de mamposteria redonda. El arbol es el del bioma (palmera en el desierto).
+        return (tile_hash(x, y, chapter + 913) % 2 == 0) ? TileType::Tree : TileType::Rock;
+    };
+    for (int x = 0; x < tiles_w; x++) {
+        if (!(door_north && is_gap_x(x))) tiles[0][x] = edge_tile(x, 0);
+        if (!(door_south && is_gap_x(x))) tiles[tiles_h - 1][x] = edge_tile(x, tiles_h - 1);
     }
-    for (int y = 0; y < H; y++) {
-        if (!(door_west && is_gap_y(y))) tiles[y][0] = TileType::Wall;
-        if (!(door_east && is_gap_y(y))) tiles[y][W - 1] = TileType::Wall;
+    for (int y = 0; y < tiles_h; y++) {
+        if (!(door_west && is_gap_y(y))) tiles[y][0] = edge_tile(0, y);
+        if (!(door_east && is_gap_y(y))) tiles[y][tiles_w - 1] = edge_tile(tiles_w - 1, y);
+    }
+
+    // Segunda franja hacia dentro, IRREGULAR: unas veces otro bloqueo, otras matorral
+    // pisable, la mayoria nada. Sin ella el borde natural sigue siendo una linea recta de
+    // una sola fila, o sea un muro con otra textura. Se salta las aberturas para no
+    // estrechar la salida, y solo pisa suelo raso (las sendas y el rio van despues).
+    if (border == BorderStyle::Natural) {
+        auto fringe = [&](int x, int y, bool on_gap) {
+            if (on_gap || tiles[y][x] != TileType::Floor) return;
+            u32 hs = tile_hash(x, y, chapter + 41);
+            if      (hs % 5 == 0) tiles[y][x] = edge_tile(x, y);
+            else if (hs % 5 == 1) tiles[y][x] = ((hs >> 3) & 1) ? TileType::Bush : TileType::TallGrass;
+        };
+        for (int x = 1; x < tiles_w - 1; x++) {
+            fringe(x, 1,            door_north && is_gap_x(x));
+            fringe(x, tiles_h - 2,  door_south && is_gap_x(x));
+        }
+        for (int y = 1; y < tiles_h - 1; y++) {
+            fringe(1,           y,  door_west && is_gap_y(y));
+            fringe(tiles_w - 2, y,  door_east && is_gap_y(y));
+        }
     }
 
     // Biome decoration for open rooms (boss arena stays mostly clear)
@@ -250,75 +467,135 @@ void Room::generate(RoomType room_type, int chap, int difficulty) {
         arena.trees = 2; arena.rocks = 2; arena.bushes = 1; arena.grass = 3;
         decorate(*this, arena);
         // Clear the arena centre band
-        for (int y = 2; y <= H - 3; y++)
-            for (int x = 4; x <= W - 5; x++)
+        for (int y = 2; y <= tiles_h - 3; y++)
+            for (int x = 4; x <= tiles_w - 5; x++)
                 if (tiles[y][x] != TileType::Floor) tiles[y][x] = TileType::Floor;
     }
 
     // Trails from a hub near the centre to every opening: guarantees the exits are
     // reachable and gives the player an obvious route. The hub jitters a little on
     // combat rooms so the cross of paths is not identical every room.
-    int hx = CX, hy = CY;
-    if (room_type == RoomType::Normal || room_type == RoomType::Elite) {
-        hx = CX + randi_range(-2, 2);
-        hy = CY + randi_range(-1, 1);
+    // El nudo de las sendas se descentra en TODAS las salas menos la arena del jefe. Con el
+    // clavado en el centro, las cuatro sendas formaban una cruz perfecta — y en una sala de
+    // 2x2 una cruz perfecta se ve entera de un vistazo.
+    int hx = (tiles_w / 2), hy = (tiles_h / 2);
+    if (room_type != RoomType::Boss) {
+        hx += randi_range(-tiles_w / 8, tiles_w / 8);
+        hy += randi_range(-tiles_h / 8, tiles_h / 8);
     }
-    if (door_north) carve_trail(*this, hx, hy, CX, 0);
-    if (door_south) carve_trail(*this, hx, hy, CX, H - 1);
-    if (door_west)  carve_trail(*this, hx, hy, 0, CY);
-    if (door_east)  carve_trail(*this, hx, hy, W - 1, CY);
+    if (door_north) carve_trail(*this, hx, hy, (tiles_w / 2), 0);
+    if (door_south) carve_trail(*this, hx, hy, (tiles_w / 2), tiles_h - 1);
+    if (door_west)  carve_trail(*this, hx, hy, 0, (tiles_h / 2));
+    if (door_east)  carve_trail(*this, hx, hy, tiles_w - 1, (tiles_h / 2));
     // Keep the true centre walkable too (start-of-run spawn / boss arena reference)
-    carve_tile(*this, CX, CY, false);
+    carve_tile(*this, (tiles_w / 2), (tiles_h / 2), false);
 
-    // Torches flanking the openings on "built" biomes
-    if (biome.torches) {
-        if (door_north) { tiles[1][GAP_X0 - 1] = TileType::Torch; tiles[1][GAP_X1 + 1] = TileType::Torch; }
-        if (door_south) { tiles[H - 2][GAP_X0 - 1] = TileType::Torch; tiles[H - 2][GAP_X1 + 1] = TileType::Torch; }
-        if (door_west)  { tiles[GAP_Y0 - 1][1] = TileType::Torch; tiles[GAP_Y1 + 1][1] = TileType::Torch; }
-        if (door_east)  { tiles[GAP_Y0 - 1][W - 2] = TileType::Torch; tiles[GAP_Y1 + 1][W - 2] = TileType::Torch; }
+    // Torches flanking the openings on "built" biomes (nunca en campo abierto: alli el
+    // vano ocupa casi todo el lado y flanquearlo deja las antorchas en las esquinas)
+    if (biome.torches && border != BorderStyle::Natural) {
+        if (door_north) { tiles[1][gap_x0() - 1] = TileType::Torch; tiles[1][gap_x1() + 1] = TileType::Torch; }
+        if (door_south) { tiles[tiles_h - 2][gap_x0() - 1] = TileType::Torch; tiles[tiles_h - 2][gap_x1() + 1] = TileType::Torch; }
+        if (door_west)  { tiles[gap_y0() - 1][1] = TileType::Torch; tiles[gap_y1() + 1][1] = TileType::Torch; }
+        if (door_east)  { tiles[gap_y0() - 1][tiles_w - 2] = TileType::Torch; tiles[gap_y1() + 1][tiles_w - 2] = TileType::Torch; }
     }
 
-    // Special room props at the centre
-    if (room_type == RoomType::Altar)    tiles[CY][CX] = TileType::AltarGod;
-    if (room_type == RoomType::Treasure) tiles[CY][CX] = TileType::Chest;
-    if (room_type == RoomType::Event)    tiles[CY][CX] = TileType::Event;
+    // El prop de una sala especial YA NO va clavado en el centro. En una sala de 2x2 el
+    // profeta aparece justo ahi, asi que el encuentro saltaba antes de haber visto a nadie y
+    // el cofre se abria sin haberlo buscado. Ahora esta a unos tiles del nudo, sobre suelo
+    // pisable y con al menos dos vecinos libres (que no caiga en un bolsillo cerrado por
+    // arboles); la marca flotante del PNJ lo delata de lejos, que es medio motivo para ir.
+    auto place_special = [&](TileType t) {
+        int sx = (tiles_w / 2), sy = (tiles_h / 2);
+        if (tiles_w > Config::SCREEN_TILES_X) {
+            for (int attempt = 0; attempt < 40; attempt++) {
+                int tx = (tiles_w / 2) + randi_range(-tiles_w / 4, tiles_w / 4);
+                int ty = (tiles_h / 2) + randi_range(-tiles_h / 4, tiles_h / 4);
+                if (!in_bounds(tx, ty, tiles_w, tiles_h)) continue;
+                if (std::abs(tx - tiles_w / 2) < 5 && std::abs(ty - tiles_h / 2) < 3) continue;
+                TileType cur = tiles[ty][tx];
+                if (cur != TileType::Floor && cur != TileType::Path) continue;
+                int open = 0;
+                if (is_tile_walkable(tx - 1, ty)) open++;
+                if (is_tile_walkable(tx + 1, ty)) open++;
+                if (is_tile_walkable(tx, ty - 1)) open++;
+                if (is_tile_walkable(tx, ty + 1)) open++;
+                if (open < 2) continue;
+                sx = tx; sy = ty; break;
+            }
+        }
+        tiles[sy][sx] = t;
+    };
+    if (room_type == RoomType::Altar)    place_special(TileType::AltarGod);
+    if (room_type == RoomType::Treasure) place_special(TileType::Chest);
+    if (room_type == RoomType::Event)    place_special(TileType::Event);
     if (room_type == RoomType::Start) {
         // A Baal altar to smash for a first taste of faith
-        tiles[CY - 2][CX + 4] = TileType::AltarBaal;
+        tiles[(tiles_h / 2) - 2][(tiles_w / 2) + 4] = TileType::AltarBaal;
+    }
+
+    // La PUERTA al interior, si esta sala lo tiene. Va aqui, con el mapa ya terminado y las
+    // sendas trazadas: puesta antes, `carve_trail` la araba como cualquier obstaculo. Y se
+    // apoya en la senda (`Path`) a proposito — una puerta en mitad del descampado no se
+    // encuentra, y el gate de la fase 4 vale igual aqui: lo que se abre tiene que verse.
+    if (with_doorway) {
+        auto try_door = [&](TileType on) {
+            for (int attempt = 0; attempt < 200 && !has_doorway; attempt++) {
+                int dx = randi_range(3, tiles_w - 4);
+                int dy = randi_range(3, tiles_h - 4);
+                if (tiles[dy][dx] != on) continue;
+                if (std::abs(dx - tiles_w / 2) < 3 && std::abs(dy - tiles_h / 2) < 3) continue;
+                tiles[dy][dx] = TileType::Doorway;
+                door_tx = dx; door_ty = dy; has_doorway = true;
+            }
+        };
+        try_door(TileType::Path);
+        try_door(TileType::Floor);   // sin senda cerca, vale suelo raso
     }
 
     // Reachability from the centre (used to place enemies where they can actually fight)
-    bool reach[H][W];
-    flood_fill(*this, CX, CY, reach);
+    bool reach[MAXH][MAXW];
+    flood_fill(*this, (tiles_w / 2), (tiles_h / 2), reach);
 
     // Fallback: if any opening is unreachable, carve straight to it (should not happen)
     auto ensure = [&](bool door, int gx, int gy) {
         if (!door || reach[gy][gx]) return;
-        carve_trail(*this, CX, CY, gx, gy);
-        flood_fill(*this, CX, CY, reach);
+        carve_trail(*this, (tiles_w / 2), (tiles_h / 2), gx, gy);
+        flood_fill(*this, (tiles_w / 2), (tiles_h / 2), reach);
     };
-    ensure(door_north, CX, 0);
-    ensure(door_south, CX, H - 1);
-    ensure(door_west, 0, CY);
-    ensure(door_east, W - 1, CY);
+    ensure(door_north, (tiles_w / 2), 0);
+    ensure(door_south, (tiles_w / 2), tiles_h - 1);
+    ensure(door_west, 0, (tiles_h / 2));
+    ensure(door_east, tiles_w - 1, (tiles_h / 2));
 
     // Enemies for combat rooms
     if (room_type == RoomType::Normal || room_type == RoomType::Elite) {
         // Density grows with the chapter: ch1 = 2-4, ch5 = 4-10 (rooms used to top out at 8)
         int lo = 2 + difficulty / 2;
         int hi = std::min(3 + difficulty * 3 / 2, Config::MAX_ENEMIES_PER_ROOM);
+        // ...y con el AREA. Esa cuenta estaba pensada para una sala de UNA pantalla: tal
+        // cual, en una de 2x2 los mismos cuatro soldados se pierden en el descampado.
+        const int screens = std::max(1, (tiles_w * tiles_h) /
+                                        (Config::SCREEN_TILES_X * Config::SCREEN_TILES_Y));
+        // 3/4 del area, no el area entera: a densidad completa los diez o dieciseis
+        // enemigos convergen todos a la vez y la sala deja de ser un campo para ser una
+        // horda. A la mitad (lo primero que se probo) la sonda de tacto media 2,5 s de TTK
+        // porque el bot se pasaba el rato ANDANDO: sobraba campo y faltaba gente.
+        if (screens > 1) {
+            lo = std::min(lo * screens * 3 / 4, Config::MAX_ENEMIES_PER_ROOM);
+            hi = std::min(hi * screens * 3 / 4, Config::MAX_ENEMIES_PER_ROOM);
+        }
         int enemy_count = randi_range(lo, std::max(lo, hi));
         if (room_type == RoomType::Elite) enemy_count += 2;
 
         for (int i = 0; i < enemy_count; i++) {
             EnemySpawn spawn;
-            spawn.position = tile_to_world(CX + (i % 2 ? 4 : -4), CY + (i % 3) - 1);  // fallback
+            spawn.position = tile_to_world((tiles_w / 2) + (i % 2 ? 4 : -4), (tiles_h / 2) + (i % 3) - 1);  // fallback
 
             for (int attempt = 0; attempt < 40; attempt++) {
-                int tx = randi_range(1, W - 2);
-                int ty = randi_range(1, H - 2);
+                int tx = randi_range(1, tiles_w - 2);
+                int ty = randi_range(1, tiles_h - 2);
                 if (!reach[ty][tx]) continue;
-                if (std::abs(tx - CX) <= 3 && std::abs(ty - CY) <= 2) continue;   // not on top of the player
+                if (std::abs(tx - (tiles_w / 2)) <= 3 && std::abs(ty - (tiles_h / 2)) <= 2) continue;   // not on top of the player
                 if (is_exit_apron(*this, tx, ty)) continue;                          // not camping the doors
                 TileType t = tiles[ty][tx];
                 if (t == TileType::Bridge || t == TileType::Ford) continue;
@@ -342,15 +619,53 @@ void Room::generate(RoomType room_type, int chap, int difficulty) {
 }
 
 // =============================================================================
+// Secretos: abrirlos y que esconden
+// =============================================================================
+bool Room::tile_hides_loot(int tx, int ty) const {
+    // Uno de cada cuatro. Con menos no compensa buscar; con mas deja de ser un hallazgo y
+    // pasa a ser una cosecha. Va por `tile_hash` y no por sorteo: la misma semilla tiene que
+    // dar el mismo mapa de hallazgos, y asi no hay NADA que guardar.
+    return (tile_hash(tx, ty, chapter + 7717) % 100) < 26;
+}
+
+int Room::open_secrets(Vec2 center, f32 radius, u32 kinds, std::vector<Vec2>& out_loot) {
+    const int cx = static_cast<int>(center.x) / TS;
+    const int cy = static_cast<int>(center.y) / TS;
+    const int reach = static_cast<int>(radius) / TS + 1;
+    int opened = 0;
+    for (int y = cy - reach; y <= cy + reach; y++) {
+        for (int x = cx - reach; x <= cx + reach; x++) {
+            if (x < 1 || x >= tiles_w - 1 || y < 1 || y >= tiles_h - 1) continue;
+            Vec2 c = tile_to_world(x, y);
+            if (c.distance_to(center) > radius) continue;
+            u32 kind = 0;
+            switch (tiles[y][x]) {
+                case TileType::Bush:
+                case TileType::TallGrass: kind = SECRET_BUSH;  break;
+                case TileType::Jar:       kind = SECRET_JAR;   break;
+                case TileType::Crack:     kind = SECRET_CRACK; break;
+                case TileType::Water:     kind = SECRET_WATER; break;
+                default: break;
+            }
+            if (kind == 0 || (kinds & kind) == 0) continue;
+            tiles[y][x] = TileType::Floor;
+            opened++;
+            if (tile_hides_loot(x, y)) out_loot.push_back(c);
+        }
+    }
+    return opened;
+}
+
+// =============================================================================
 // Room::place_exit — chapter exit arch at the top centre (after the boss)
 // =============================================================================
 void Room::place_exit() {
     exit_open = true;
-    int ex = CX, ey = 2;
+    int ex = (tiles_w / 2), ey = 2;
     exit_tx = ex; exit_ty = ey;
     for (int x = ex - 1; x <= ex + 1; x++)
         for (int y = ey - 1; y <= ey + 1; y++)
-            if (in_bounds(x, y) && x > 0 && x < W - 1 && y > 0 && y < H - 1)
+            if (in_bounds(x, y, tiles_w, tiles_h) && x > 0 && x < tiles_w - 1 && y > 0 && y < tiles_h - 1)
                 tiles[y][x] = TileType::Path;
     tiles[ey][ex] = TileType::Exit;
 }
@@ -364,7 +679,7 @@ bool Room::find_free_tile_near(int tx, int ty, int& out_x, int& out_y) const {
             for (int dx = -r; dx <= r; dx++) {
                 if (std::abs(dx) != r && std::abs(dy) != r) continue;
                 int x = tx + dx, y = ty + dy;
-                if (x < 1 || x >= W - 1 || y < 1 || y >= H - 1) continue;
+                if (x < 1 || x >= tiles_w - 1 || y < 1 || y >= tiles_h - 1) continue;
                 if (is_tile_walkable(x, y)) { out_x = x; out_y = y; return true; }
             }
         }
@@ -378,9 +693,9 @@ bool Room::find_free_tile_near(int tx, int ty, int& out_x, int& out_y) const {
 bool Room::is_tile_walkable(int tx, int ty) const {
     // Out-of-bounds: allowed only through the openings (border tiles are walls otherwise)
     // so try_room_transition() can detect the crossing. Sealed while enemies are alive.
-    if (tx < 0 || tx >= W || ty < 0 || ty >= H) return !exits_locked;
+    if (tx < 0 || tx >= tiles_w || ty < 0 || ty >= tiles_h) return !exits_locked;
 
-    if (exits_locked && (tx == 0 || tx == W - 1 || ty == 0 || ty == H - 1)) return false;
+    if (exits_locked && (tx == 0 || tx == tiles_w - 1 || ty == 0 || ty == tiles_h - 1)) return false;
 
     switch (tiles[ty][tx]) {
         case TileType::Floor:
@@ -400,19 +715,26 @@ bool Room::is_tile_walkable(int tx, int ty) const {
         case TileType::Exit:
         case TileType::Torch:
         case TileType::Event:
+        case TileType::Doorway:
             return true;
         default:
-            return false;  // Wall, Pit, Tree, Rock, River = not walkable
+            // Wall, Pit, Tree, Rock, River, Jar, Crack = not walkable. La tinaja y la
+            // grieta ESTORBAN a proposito: un secreto que no se interpone no se ve.
+            return false;
     }
 }
 
 bool Room::is_tile_solid_for_projectiles(int tx, int ty) const {
-    if (tx < 0 || tx >= W || ty < 0 || ty >= H) return false;
+    if (tx < 0 || tx >= tiles_w || ty < 0 || ty >= tiles_h) return false;
     switch (tiles[ty][tx]) {
         case TileType::Wall:
         case TileType::Tree:
         case TileType::Rock:
             return true;
+        // La grieta NO para los tiros aunque no se pise: son dos masas BAJAS con una
+        // hendidura, y el disparo pasa por encima. Cuando si los paraba, la sonda de tacto
+        // media 94 tiros y CERO bajas en el tramo de arqueros — un secreto tiene que ser un
+        // hallazgo, no cobertura para el enemigo.
         default:
             return false;
     }
@@ -439,10 +761,17 @@ bool Room::is_walkable_world(Vec2 p) const {
     return is_tile_walkable(tx, ty);
 }
 
+bool Room::is_pit_world(Vec2 p) const {
+    int tx = static_cast<int>(std::floor(p.x / TS));
+    int ty = static_cast<int>(std::floor(p.y / TS));
+    if (tx < 0 || tx >= tiles_w || ty < 0 || ty >= tiles_h) return false;
+    return tiles[ty][tx] == TileType::Pit;
+}
+
 bool Room::is_slow_world(Vec2 p) const {
     int tx = static_cast<int>(std::floor(p.x / TS));
     int ty = static_cast<int>(std::floor(p.y / TS));
-    if (!in_bounds(tx, ty)) return false;
+    if (!in_bounds(tx, ty, tiles_w, tiles_h)) return false;
     return tiles[ty][tx] == TileType::Water;
 }
 
@@ -473,6 +802,9 @@ static Color fallback_color(TileType t) {
         case TileType::Bridge:    return {150, 100, 50, 255};
         case TileType::Path:      return {110, 85, 55, 255};
         case TileType::AltarBaal: return {142, 68, 173, 255};
+        case TileType::Jar:       return {186, 132, 74, 255};
+        case TileType::Doorway:   return {70, 52, 38, 255};
+        case TileType::Crack:     return {84, 72, 62, 255};
         case TileType::AltarGod:  return {241, 196, 15, 255};
         case TileType::Chest:     return {200, 160, 40, 255};
         case TileType::Tree:      return {34, 100, 34, 255};
@@ -487,13 +819,14 @@ static Color fallback_color(TileType t) {
 }
 
 void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
-    const BiomeStyle biome = get_biome_style(chapter);
+    BiomeStyle biome = get_biome_style(chapter);
+    if (type == RoomType::Interior) apply_interior_style(biome);
     constexpr f32 ts = static_cast<f32>(TS);
     const bool textured = (tileset != TEXTURE_NONE);
     const int water_frame = static_cast<int>(time * 2.0f);
 
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
+    for (int y = 0; y < tiles_h; y++) {
+        for (int x = 0; x < tiles_w; x++) {
             TileType t = tiles[y][x];
             f32 px = static_cast<f32>(x) * ts;
             f32 py = static_cast<f32>(y) * ts;
@@ -503,7 +836,8 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
                 Color c = fallback_color(t);
                 if (c.a > 0 && t != TileType::Tree && t != TileType::Rock && t != TileType::Bush &&
                     t != TileType::Chest && t != TileType::AltarGod && t != TileType::AltarBaal &&
-                    t != TileType::Torch && t != TileType::Exit && t != TileType::Event)
+                    t != TileType::Torch && t != TileType::Exit && t != TileType::Event &&
+                    t != TileType::Jar && t != TileType::Crack)
                     renderer.draw_rect(dst, c);
                 continue;
             }
@@ -512,7 +846,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
 
             // Base floor (biome family: sand / meadow / paving, 4 variants) under everything
             // that is not water/border-wall/pit
-            bool border_wall = (t == TileType::Wall) && (x == 0 || x == W - 1 || y == 0 || y == H - 1);
+            bool border_wall = (t == TileType::Wall) && (x == 0 || x == tiles_w - 1 || y == 0 || y == tiles_h - 1);
             if (!border_wall && !is_water_like(t) && t != TileType::Pit) {
                 TileSprite fs = static_cast<TileSprite>(static_cast<u32>(biome.floor_base) + (h % 4));
                 renderer.draw_sprite_rect(tileset, get_tile_src(fs), dst, biome.floor_tint);
@@ -523,8 +857,48 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
                     if (static_cast<int>(h2 % 100) < biome.detail_pct) {
                         TileSprite ds = biome.details[(h2 >> 8) % 3];
                         bool flip = ((h2 >> 12) & 1) != 0;
-                        renderer.draw_sprite_rect(tileset, get_tile_src(ds), dst, biome.floor_tint, flip);
+                        // A tile completo y centrados, los decorados dibujan LA REJILLA: en una
+                        // sala de 2x2 pantallas se ve un damero de manchas identicas. Se
+                        // encogen y se descentran dentro de su propia celda — nunca fuera de
+                        // ella, porque el suelo del tile de la derecha y el de abajo se pintan
+                        // despues y los recortarian.
+                        f32 k = 0.50f + static_cast<f32>((h2 >> 16) % 5) * 0.10f;
+                        f32 dsz = ts * k;
+                        f32 ox = static_cast<f32>((h2 >> 20) % 64) / 63.0f * (ts - dsz);
+                        f32 oy = static_cast<f32>((h2 >> 26) % 64) / 63.0f * (ts - dsz);
+                        f32 rot = static_cast<f32>((h2 >> 3) % 4) * 90.0f;
+                        renderer.draw_sprite_rect(tileset, get_tile_src(ds),
+                                                  {px + ox, py + oy, dsz, dsz},
+                                                  biome.floor_tint, flip, rot);
                     }
+                }
+
+                // Orilla de la senda. El tile de camino es opaco hasta su borde, asi que
+                // un trazado por celdas enteras se lee como una cadena de cuadrados sobre
+                // la hierba. Aqui la tierra se DERRAMA sobre la celda vecina: una lengua de
+                // fondo variable por lado, con el sprite del propio camino y alfa parcial.
+                //
+                // Se hace al DIBUJAR y no al generar: un fleco de tiles de verdad ensancha
+                // la senda (probado, y la deja el doble de ancha) en vez de romperle el
+                // contorno, y ademas cambiaria por donde se puede andar.
+                if (t == TileType::Floor || t == TileType::TallGrass) {
+                    const TileSprite ps = ((h >> 4) & 1) ? TileSprite::PathA : TileSprite::PathB;
+                    auto spill = [&](int nx, int ny, int side) {
+                        if (!in_bounds(nx, ny, tiles_w, tiles_h) || tiles[ny][nx] != TileType::Path) return;
+                        u32 hs = tile_hash(x, y, chapter + 149 + side * 17);
+                        f32 d = ts * (0.20f + static_cast<f32>(hs % 40) * 0.010f);   // fondo 0.20..0.59
+                        Color c = biome.floor_tint;
+                        c.a = static_cast<u8>(110 + (hs >> 8) % 90);
+                        Rect r = (side == 0) ? Rect{px, py, ts, d}
+                               : (side == 1) ? Rect{px + ts - d, py, d, ts}
+                               : (side == 2) ? Rect{px, py + ts - d, ts, d}
+                                             : Rect{px, py, d, ts};
+                        renderer.draw_sprite_rect(tileset, get_tile_src(ps), r, c);
+                    };
+                    spill(x, y - 1, 0);
+                    spill(x + 1, y, 1);
+                    spill(x, y + 1, 2);
+                    spill(x - 1, y, 3);
                 }
             }
 
@@ -546,22 +920,47 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
                 case TileType::Bridge:
                     renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::Bridge), dst, Color::white());
                     break;
-                case TileType::Pit:
-                    renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::Pit), dst, biome.floor_tint);
+                case TileType::Pit: {
+                    // El hueco es UNA mancha y no una fila de agujeros. A tile completo, una
+                    // banda de tres por dos salia como seis ovalos identicos en rejilla — el
+                    // mismo defecto que tenian los decorados del suelo. El fondo se pinta
+                    // plano y la celda con relieve va SOLO donde el hueco termina.
+                    renderer.draw_rect(dst, {17, 12, 10, 255});
+                    auto pit_at = [&](int nx, int ny) {
+                        return in_bounds(nx, ny, tiles_w, tiles_h) && tiles[ny][nx] == TileType::Pit;
+                    };
+                    // Labio de tierra SOLO en los lados que dan a suelo firme: es lo que hace
+                    // que el hueco se lea hundido. La celda `TileSprite::Pit` no vale aqui —
+                    // dibuja un ovalo por casilla, y en una banda de dos de ancho NO HAY ni un
+                    // tile interior, asi que salian seis ovalos en rejilla.
+                    const Color lip = {94, 70, 50, 235};
+                    constexpr f32 L = 2.0f;
+                    if (!pit_at(x, y - 1)) renderer.draw_rect({px, py, ts, L}, lip);
+                    if (!pit_at(x, y + 1)) renderer.draw_rect({px, py + ts - L, ts, L}, lip);
+                    if (!pit_at(x - 1, y)) renderer.draw_rect({px, py, L, ts}, lip);
+                    if (!pit_at(x + 1, y)) renderer.draw_rect({px + ts - L, py, L, ts}, lip);
                     break;
+                }
                 case TileType::TallGrass:
                     renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::Grass), dst, biome.prop_tint);
                     break;
                 case TileType::Wall: {
-                    bool border = (x == 0 || x == W - 1 || y == 0 || y == H - 1);
+                    bool border = (x == 0 || x == tiles_w - 1 || y == 0 || y == tiles_h - 1);
+                    // Un canon NO es una tapia. `Cliff*` son sillares (hiladas rectas) y eso es
+                    // lo correcto en ciudad y palacio; el borde de acantilado usa la cara de
+                    // ROCA, con las juntas desalineadas. Los edificios del interior siguen
+                    // siendo silleria — los dibuja collect_props().
+                    const bool rocky = (biome.border != BorderStyle::Masonry);
                     if (y == 0) {
-                        // Top border: tall stone face rising out of view
-                        renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::CliffTall),
+                        // Top border: tall face rising out of view
+                        renderer.draw_sprite_rect(tileset,
+                                                  get_tile_src(rocky ? TileSprite::CliffRockTall : TileSprite::CliffTall),
                                                   {px, py - ts, ts, ts * 2.0f}, biome.wall_tint);
                     } else if (border) {
-                        renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::Cliff), dst, biome.wall_tint);
+                        renderer.draw_sprite_rect(tileset,
+                                                  get_tile_src(rocky ? TileSprite::CliffRock : TileSprite::Cliff),
+                                                  dst, biome.wall_tint);
                     }
-                    // Interior walls (buildings) are drawn as tall props in collect_props()
                     break;
                 }
                 default:
@@ -574,7 +973,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
             // instead of a staircase of squares.
             if (is_water_like(t) && t != TileType::Bridge) {
                 auto land = [&](int nx, int ny) {
-                    if (!in_bounds(nx, ny)) return false;   // outside the room: no bank on the border
+                    if (!in_bounds(nx, ny, tiles_w, tiles_h)) return false;   // outside the room: no bank on the border
                     return !is_water_like(tiles[ny][nx]);
                 };
                 // Sides and diagonals, clockwise from north
@@ -606,7 +1005,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
     if (textured) {
         constexpr int BANDS = 5;
         constexpr f32 BAND_H = 0.8f;
-        for (int x = 0; x < W; x++) {
+        for (int x = 0; x < tiles_w; x++) {
             if (tiles[0][x] != TileType::Wall || tiles[1][x] == TileType::Wall) continue;
             for (int b = 0; b < BANDS; b++) {
                 f32 k = 1.0f - static_cast<f32>(b) / BANDS;
@@ -617,17 +1016,63 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time) const {
     }
 }
 
-void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex) const {
-    const BiomeStyle biome = get_biome_style(chapter);
+void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
+                         u32 npc_tex, f32 time) const {
+    BiomeStyle biome = get_biome_style(chapter);
+    if (type == RoomType::Interior) apply_interior_style(biome);
     constexpr f32 ts = static_cast<f32>(TS);
     const bool textured = (tileset != TEXTURE_NONE);
 
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
+    for (int y = 0; y < tiles_h; y++) {
+        for (int x = 0; x < tiles_w; x++) {
             TileType t = tiles[y][x];
             f32 px = static_cast<f32>(x) * ts;
             f32 py = static_cast<f32>(y) * ts;
             u32 h = tile_hash(x, y, chapter + 77);
+
+            // Encuentro: si el locutor es una PERSONA, aqui hay alguien de pie, y se dibuja
+            // como cualquier personaje — misma celda de 32 unidades, misma sombra, mismo
+            // orden por Y. Hasta esta pasada esto era la celda de ANTORCHA del tileset.
+            // Si el locutor es una ESCENA (los cuervos, el altar del Carmelo, la boca de la
+            // cueva) no hay nadie a quien dibujar: la hoguera de siempre marca el sitio, que
+            // es lo honesto — ponerle una cara a un pasaje seria mentir sobre lo que se mira.
+            if (t == TileType::Event && npc_tex != TEXTURE_NONE) {
+                const int who = (event_id >= 0) ? get_event_def(event_id).npc : Npc::NONE;
+                if (who != Npc::NONE) {
+                    const f32 feet = py + 13.0f;
+                    if (shadow_tex != TEXTURE_NONE) {
+                        DrawCmd sh;
+                        sh.sort_y = -999.0f;
+                        sh.texture_id = shadow_tex;
+                        sh.src = {0, 0, 64, 32};
+                        sh.dst = {px + ts * 0.5f - 8.0f, feet - 3.0f, 16.0f, 6.0f};
+                        sh.tint = {0, 0, 0, 110};
+                        out.push_back(sh);
+                    }
+                    DrawCmd n;
+                    n.sort_y = feet;
+                    n.texture_id = npc_tex;
+                    n.src = Npc::src(who);
+                    // Los pies de la hoja caen en la fila 112 de 128, o sea a 28 de las 32
+                    // unidades: por eso el alto se cuelga de `feet` hacia arriba y no del
+                    // borde del tile, y el PNJ pisa el suelo igual que el profeta.
+                    n.dst = {px + ts * 0.5f - 16.0f, feet - 28.0f, 32.0f, 32.0f};
+                    out.push_back(n);
+                    // Marca flotante: se ve desde lejos que ahi espera alguien, que es medio
+                    // motivo para desviarse del camino.
+                    if (!event_used) {
+                        DrawCmd m;
+                        m.sort_y = feet + 0.1f;
+                        m.texture_id = tileset;
+                        m.src = get_tile_src(TileSprite::Star);
+                        f32 bob = std::sin(time * 3.0f + static_cast<f32>(x)) * 1.5f;
+                        m.dst = {px + ts * 0.5f - 4.0f, feet - 34.0f + bob, 8.0f, 8.0f};
+                        m.tint = {255, 226, 150, 255};
+                        out.push_back(m);
+                    }
+                    continue;
+                }
+            }
 
             TileSprite sprite = TileSprite::COUNT;
             Color tint = Color::white();
@@ -636,9 +1081,9 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex)
                 case TileType::Wall: {
                     // Interior wall block: the bottom row of the block draws a tall face that also
                     // covers the row above (blocks are 2 tall); upper rows draw nothing.
-                    bool border = (x == 0 || x == W - 1 || y == 0 || y == H - 1);
+                    bool border = (x == 0 || x == tiles_w - 1 || y == 0 || y == tiles_h - 1);
                     if (border) break;
-                    bool below_wall = (y + 1 < H - 1) && tiles[y + 1][x] == TileType::Wall;
+                    bool below_wall = (y + 1 < tiles_h - 1) && tiles[y + 1][x] == TileType::Wall;
                     if (below_wall) break;
                     sprite = TileSprite::CliffTall; tint = biome.wall_tint; tall = true;
                     break;
@@ -651,6 +1096,9 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex)
                 case TileType::Chest:     sprite = TileSprite::Chest; break;
                 case TileType::AltarGod:  sprite = TileSprite::AltarGod;  tall = true; break;
                 case TileType::AltarBaal: sprite = TileSprite::AltarBaal; tall = true; break;
+                case TileType::Jar:       sprite = TileSprite::Jar;   tint = biome.prop_tint; break;
+                case TileType::Doorway:   sprite = TileSprite::Door;  tall = true; break;
+                case TileType::Crack:     sprite = TileSprite::Crack; tint = biome.prop_tint; break;
                 case TileType::Torch:     sprite = TileSprite::Torch; tall = true; break;
                 case TileType::Exit:      sprite = TileSprite::Exit;  tall = true; break;
                 // Encuentro: una hoguera encendida marca donde espera el personaje. El
@@ -700,12 +1148,12 @@ void Room::render_exit_barriers(Renderer& renderer, f32 time) const {
     Color glow = {220, 60, 40, static_cast<u8>(90 + 90 * pulse)};
     Color core = {255, 170, 90, static_cast<u8>(140 + 100 * pulse)};
 
-    f32 gx0 = GAP_X0 * ts, gw = (GAP_X1 - GAP_X0 + 1) * ts;
-    f32 gy0 = GAP_Y0 * ts, gh = (GAP_Y1 - GAP_Y0 + 1) * ts;
+    f32 gx0 = gap_x0() * ts, gw = (gap_x1() - gap_x0() + 1) * ts;
+    f32 gy0 = gap_y0() * ts, gh = (gap_y1() - gap_y0() + 1) * ts;
     if (door_north) { renderer.draw_rect({gx0, 0, gw, 6}, glow);  renderer.draw_rect({gx0, 2, gw, 2}, core); }
-    if (door_south) { renderer.draw_rect({gx0, H * ts - 6, gw, 6}, glow); renderer.draw_rect({gx0, H * ts - 4, gw, 2}, core); }
+    if (door_south) { renderer.draw_rect({gx0, tiles_h * ts - 6, gw, 6}, glow); renderer.draw_rect({gx0, tiles_h * ts - 4, gw, 2}, core); }
     if (door_west)  { renderer.draw_rect({0, gy0, 6, gh}, glow);  renderer.draw_rect({2, gy0, 2, gh}, core); }
-    if (door_east)  { renderer.draw_rect({W * ts - 6, gy0, 6, gh}, glow); renderer.draw_rect({W * ts - 4, gy0, 2, gh}, core); }
+    if (door_east)  { renderer.draw_rect({tiles_w * ts - 6, gy0, 6, gh}, glow); renderer.draw_rect({tiles_w * ts - 4, gy0, 2, gh}, core); }
 }
 
 // =============================================================================
@@ -751,45 +1199,78 @@ void FloorMap::generate(int chapter) {
     rooms[boss_idx].type  = RoomType::Boss;
     boss_room = boss_idx;
 
-    // Place one Treasure and one Altar on random rooms (not Start/Boss)
+    // Reparto de tipos entre las salas que no son ni la de inicio ni la del jefe. Escala con
+    // el tamano de la rejilla: el reparto de una 3x3 (un tesoro, un altar, un encuentro y una
+    // elite) dejaba OCHO salas de relleno en una 4x3, y explorar dejaba de pagar.
     std::vector<int> candidates;
-    for (int i = 0; i < room_count; i++) {
-        if (i != start_idx && i != boss_idx) {
-            candidates.push_back(i);
+    for (int i = 0; i < room_count; i++)
+        if (i != start_idx && i != boss_idx) candidates.push_back(i);
+
+    // Bolsa BARAJADA del pozo del capitulo: cada sala Event se lleva un id distinto. Sin
+    // barajar, dos partidas del mismo capitulo contarian siempre las mismas dos escenas y el
+    // pozo no serviria para nada.
+    const EventPool pool = get_chapter_events(chapter);
+    int bag[8];
+    const int bag_n = std::min(pool.count, 8);
+    for (int i = 0; i < bag_n; i++) bag[i] = pool.first + i;
+    for (int i = bag_n - 1; i > 0; i--) std::swap(bag[i], bag[randi_range(0, i)]);
+    int assigned = 0;
+
+    auto take = [&](RoomType t, int n) {
+        for (int k = 0; k < n && !candidates.empty(); k++) {
+            int a = randi_range(0, static_cast<i32>(candidates.size()) - 1);
+            rooms[candidates[a]].type = t;
+            if (t == RoomType::Event && assigned < bag_n)
+                rooms[candidates[a]].event_id = bag[assigned++];
+            candidates.erase(candidates.begin() + a);
         }
-    }
+    };
 
-    if (candidates.size() >= 2) {
-        int a = randi_range(0, static_cast<i32>(candidates.size()) - 1);
-        int treasure_idx = candidates[a];
-        candidates.erase(candidates.begin() + a);
+    const int extra = room_count >= 12 ? 1 : 0;
+    // El encuentro va PRIMERO: el relato pesa mas que una sala extra de combate. Y son 2-3,
+    // nunca mas escenas de las que tenga el capitulo: dos salas con el mismo encuentro
+    // contarian la misma cosa dos veces, que es justo por lo que antes habia una sola.
+    take(RoomType::Event, std::min(pool.count, room_count >= 16 ? 3 : 2));
+    take(RoomType::Treasure, 1 + extra);
+    take(RoomType::Altar,    1 + extra);
+    take(RoomType::Elite,    1 + extra);
+    // Lo que queda son salas normales, y varias caen FUERA del camino al jefe: eso es lo que
+    // convierte explorar en una decision y no en un pasillo.
 
-        int b = randi_range(0, static_cast<i32>(candidates.size()) - 1);
-        int altar_idx = candidates[b];
-        candidates.erase(candidates.begin() + b);
-
-        rooms[treasure_idx].type = RoomType::Treasure;
-        rooms[altar_idx].type = RoomType::Altar;
-
-        // Encuentro biblico del capitulo (game/events.h): uno por mapa, siempre presente.
-        // Va antes que la Elite porque el relato pesa mas que una sala extra de combate.
-        if (!candidates.empty()) {
-            int e = randi_range(0, static_cast<i32>(candidates.size()) - 1);
-            rooms[candidates[e]].type = RoomType::Event;
-            candidates.erase(candidates.begin() + e);
+    // Un INTERIOR por capitulo (GDD2.0 fase 3), colgado de una sala exterior cualquiera que
+    // no sea la de inicio ni la del jefe. Su nodo va DETRAS de la rejilla: asi `room_at(gx,gy)`
+    // nunca lo devuelve (le ponemos coordenadas -1) y el minimapa lo puede saltar, que es lo
+    // que evita que el mapa mienta. Y como `SaveData::current_room` es un INDICE y la rejilla
+    // se regenera igual con la misma semilla, guardar dentro de un interior funciona sin tocar
+    // el formato del fichero.
+    if (room_count < MAX_ROOMS) {
+        // El anfitrion se elige SIN sortear: `(chapter*7) % room_count` y hacia delante hasta
+        // encontrar una sala que no sea la de inicio ni la del jefe. Cambia por capitulo, que
+        // es lo unico que hace falta, y NO consume del generador — con `randi_range` aqui, el
+        // sorteo entero se desplazaba y con el todos los mapas de la partida (se vio en la
+        // sonda de tacto: el bot se salia de la sala a media medida).
+        int host = -1;
+        for (int k = 0; k < room_count && host < 0; k++) {
+            int i = (chapter * 7 + k) % room_count;
+            if (i == start_idx || i == boss_idx) continue;
+            host = i;
         }
-
-        // Place one Elite room if there are candidates left
-        if (!candidates.empty()) {
-            int c = randi_range(0, static_cast<i32>(candidates.size()) - 1);
-            rooms[candidates[c]].type = RoomType::Elite;
+        if (host >= 0) {
+            int in_idx = room_count++;
+            rooms[in_idx] = RoomNode{};
+            rooms[in_idx].type = RoomType::Interior;
+            rooms[in_idx].grid_x = -1;
+            rooms[in_idx].grid_y = -1;
+            rooms[in_idx].interior_of = host;
+            rooms[host].interior_room = in_idx;
+            SDL_Log("FloorMap: interior %d colgado de la sala %d", in_idx, host);
         }
     }
 
     current_room = start_idx;
 
-    SDL_Log("FloorMap: generated %dx%d grid (%d rooms), start=%d, boss=%d",
-            gw, gh, room_count, start_idx, boss_idx);
+    SDL_Log("FloorMap: generated %dx%d grid (%d rooms), start=%d, boss=%d, relatos=%d/%d",
+            gw, gh, room_count, start_idx, boss_idx, assigned, pool.count);
 }
 
 // =============================================================================

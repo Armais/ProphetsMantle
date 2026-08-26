@@ -26,6 +26,56 @@ cmake --build build --config Release
 
 The executable is output to the project root (`MANTLE.exe`, see `RUNTIME_OUTPUT_DIRECTORY` in CMakeLists.txt) so that the relative `assets/` path resolves; `build/Release/MANTLE.exe` is a stale copy.
 
+### Icono y logo (2026-08-26, rehecho el mismo dia)
+
+**El primer icono lo rechazo el usuario** ("no se ven a Elias ni Eliseo ni ningun manto") y la
+leccion vale mas que el arte: **un icono se juzga a 32 px, no en el render a 1024**. Aquel
+tenia DOS motivos distintos —los profetas de cuerpo entero de 64 px para arriba, un pano con
+llama de 48 para abajo— y a 32 px no se reconocia ninguno de los dos: una figura de pie mide
+cuatro pixeles de ancho, y una tela colgada en el aire con fuego encima es un brasero.
+
+Ahora es **UNA composicion y dos encuadres de ella**: Elias y Eliseo hombro con hombro, de los
+hombros para arriba, con el manto cruzando en diagonal entre los dos (orillo de oro en el
+bajo). `logo` = busto ancho (256/128/64); `mark` = el mismo busto recortado a las dos cabezas
+(48/32/24/16). Lo que sobrevive al reducir es una CABEZA, y lo que distingue a los dos es
+pelo y barba oscuros contra calva y naranja contra azul — no el detalle de la cara.
+
+- **El gate es `python tools/branding/contact.py <png>...`**: una tira con el icono a
+  16/24/32/48/64/128/256 px sobre fondo claro **y** oscuro, con la columna de 32 marcada. Se
+  mira ANTES de dar nada por bueno, y por eso vive aparte de `make_icon.py` (que empaqueta lo
+  ya decidido). Fue lo que descarto los otros tres bocetos, y **conviene no repetirlos**: el
+  traspaso (Elias echando el manto sobre Eliseo) deja el pano colgando por delante y se lee
+  como un escudo; el manto solo, con capucha y llama, sale campana o brasero; y una M
+  tipografica aguanta 16 px pero renuncia a los dos profetas.
+- Arte: `tools/blender/mantle_sprites/logo.py` (mismo pipeline que los personajes: Workbench,
+  cavity, `post_soft`; el icono tiene que parecer el mismo muneco que se juega). El encuadre
+  sale **cuadrado por el lado mayor**, asi que estrechar la caja del `mark` es justo lo que
+  agranda las cabezas. Ojo con el cayado: son CUATRO objetos (`_staff` y, colgando de el,
+  `_tip`/`_tip_core`/`_tip_halo`), y borrar solo el padre deja la punta encendida flotando
+  sobre la cabeza del profeta.
+- **Las fuentes NO van en `assets/`**: `logo.py` escribe `logo.png` y `mark_512.png` en
+  `tools/branding/src/` porque no las carga el juego. En `assets/branding/` queda solo lo que
+  se distribuye: `mantle.ico` (lo empotra `mantle.rc`) y `mark_256.png` (`SDL_SetWindowIcon`).
+- Empaquetado: `python tools/branding/make_icon.py [preview]` escribe `mantle.ico` **a mano**
+  (cabecera + una entrada de 16 bytes por tamano + el PNG de cada uno). `Image.save(sizes=)`
+  no vale: mete la MISMA imagen reescalada en todos los tamanos y aqui hace falta un encuadre
+  distinto por tamano. Ademas **redibuja el contorno en cada tamano**: el de Blender esta en
+  pixeles del render (5 px en 512) y al bajar a 16 se evapora.
+- `mantle.rc` en la raiz, anadido a `MANTLE_SOURCES` **solo bajo `if(WIN32)`** — eso da el
+  icono del FICHERO. `SDL_SetWindowIcon` en `Engine::init` da el de la ventana y la barra de
+  tareas, y cubre Linux y Mac. Para comprobar lo que vera el explorador, extraerlo del `.exe`
+  ya compilado: `[System.Drawing.Icon]::ExtractAssociatedIcon($exe)` devuelve justo los 32 px.
+- **El manto que cruza es una malla continua** (`logo._sheet`, bmesh), no piezas de `parts`:
+  con una caja vertical salio una puerta de armario y con trece cajas en fila un xilofono —
+  cada caja trae su bisel y su cavity y se leen como objetos sueltos. Lo que la hace parecer
+  tela son los pliegues: ondular la malla en PROFUNDIDAD y dejar que el sombreado dibuje las
+  luces. Sus parametros `tilt` (cruza en diagonal) y `flare` (estrecho arriba, ancho abajo)
+  son lo que separa una prenda de un trapo tendido. Y **los dos extremos tienen que caber en
+  el cuadro**: un pano que se sale por los dos lados pierde el largo y se lee como un tablon.
+- Sin llama, a proposito: la que habia se apilaba encima del pano y era justo lo que lo
+  convertia en brasero. Si algun dia vuelve el fuego, necesita un perfil curvo (un solido de
+  revolucion): apilando esferas sale un huevo y con cajas afiladas, un avion de papel.
+
 ### IMPORTANT: Always build after finishing an implementation
 
 **Every implementation ends with a compiled `MANTLE.exe` at the project root, ready to play.** Do not hand back edited sources and let the user discover they are running a stale binary — build, report the result, and only then close the microphase. If the build fails, fix it and build again.
@@ -79,7 +129,8 @@ src/
     miracles.h/cpp      - 10 miracles (5 per prophet), cooldown/duration system
     enemies.h/cpp       - 8 enemy types with AI behaviors, spawning
     items.h/cpp         - 16 items (5 categories), item registry, heredables (el 15 es El Manto de Elias)
-    rooms.h/cpp         - Tile-based rooms (20x11 tiles), floor map generation, 10 chapters
+    rooms.h/cpp         - Tile-based rooms (exterior 40x22 tiles = 2x2 pantallas; arena de jefe 20x11),
+                          bordes por bioma, floor map generation, 10 chapters
     combat.h/cpp        - AABB/circle collision, damage, projectiles, i-frames
   ui/
     hud.h/cpp           - In-game HUD (health, faith, miracle slots)
@@ -95,12 +146,12 @@ assets/
   audio/sfx/            - 37 SFX sintetizados (.ogg, mismo generador; incluye variantes _2/_3 por sonido)
   sprites/cine/         - Prologue panels: 8 escenas x 3 capas (1600x720 PNG con alfa, ver ui/cinematic.h)
   sprites/vfx.png       - Hoja de efectos propia: 8 fotogramas x 7 filas, celda 128 px (ver spawn_fx)
-  sprites/portraits.png - 22 celdas, 6x4, celda 96 px (Bestiario del Códice + los 10 encuentros)
+  sprites/portraits.png - 28 celdas, 6x5, celda 96 px (Bestiario del Códice + los locutores del pozo)
   sprites/              - Character sheets: 12 PNG (896x1920, 7 cols x 15 rows of 128x128 = 32 game units
                           x ASSET_SCALE 4, rows = AnimID, smooth alpha + 2px dark outline)
-                          + tiles.png (terrain tileset, 64px cells = 16 units x4, 8 cols x 8 rows: rows 0-4 terrain/props/
+                          + tiles.png (terrain tileset, 64px cells = 16 units x4, 8 cols x 9 rows: rows 0-4 terrain/props/
                           pickups, row 5 floor families grass_a-d + stone_a-d, row 6 ground decals, row 7 shore
-                          autotiling pieces; see TileSprite in game/rooms.h)
+                          autotiling pieces + cliff_rock + jar + crack, rows 7-8 cliff_rock_tall + door; see TileSprite in game/rooms.h)
   fonts/                - LilitaOne-Regular.ttf (OFL) baked into glyph atlases at init (fallback: SDL debug text)
   CREDITS.md            - Procedencia y licencia de TODO asset (se actualiza al meterlo, no despues)
 tools/
@@ -117,7 +168,7 @@ tools/
                             (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
                             rings (helmet band, hood cowl) and soft cap edges.
                             tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=64,
-                            TILE_ROWS=8; `only=[...]` patches the existing tiles.png instead of blanking it);
+                            TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
                             top-down FLAT cells, DETAILS = transparent top-down decals, SMALL/PROPS/PROPS_TALL = 30 deg.
                             cine.py renders the 8 prologue panels (`cine.main(SPRITES_DIR, TMP_DIR, only=[n])`,
@@ -152,7 +203,7 @@ tools/
                             paneles usan `render.post_soft_rect`.
   blender/blend/          - Source .blend per character (not runtime assets)
   blender/mantle_sprites/vfx.py       - hoja de efectos (EEVEE + emision, ver seccion propia)
-  blender/mantle_sprites/portraits.py - las 22 celdas (Workbench, encuadre por bounding box;
+  blender/mantle_sprites/portraits.py - las 28 celdas (Workbench, encuadre por bounding box;
                                         19 retratos de personaje + 3 viñetas de escena en `SCENES`)
   audio/gen_audio.py      - sintetizador numpy de TODO el audio -> .ogg via ffmpeg
                             (`python tools/audio/gen_audio.py`; `all wav` deja los .wav).
@@ -171,7 +222,7 @@ tools/
 | Audio | `audio/audio.h` | `Audio` | MIX_Mixer*, MIX_Track*, MIX_Audio* |
 | Faith | `game/faith.h` | `FaithSystem` | Core mechanic, 6 tiers |
 | Combat | `game/combat.h` | (free functions) | O(n^2) collision, projectiles |
-| Rooms | `game/rooms.h` | `Room`, `FloorMap` | 16px tiles, 20x11 grid, grid navigation |
+| Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; `Room::tiles_w/tiles_h` (40x22 exterior, 20x11 arena) |
 | Save | `systems/save.h` | `SaveSystem` | Binary format, version 1 |
 | Progression | `systems/progression.h` | `ProgressionSystem` | 8 meta-upgrades |
 | Achievements | `systems/achievements.h` | `AchievementSystem` | 18 logros, bitmask en el guardado |
@@ -205,12 +256,13 @@ Each chapter defines its own grid dimensions and room distribution:
 
 | Cap | Grid | Total Rooms | Layout Notes |
 |-----|------|-------------|--------------|
-| 1 | 3x3 | 9 | Start=bottom-center, Boss=top-center, river biome |
-| 2 | 3x3 | 9 | Start=left-center, Boss=right-center |
-| 3 | 4x3 | 12 | Vertical mountain ascent, Start=bottom, Boss=peak |
-| 4 | 3x3 | 9 | Cave exploration, darker rooms |
-| 5 | 4x3 | 12 | Open fields, wider grid |
-| 6-10 | 3x3 to 4x4 | 9-16 | Scales with difficulty |
+| 1-4 | 4x3 | 12 | Start=bottom-center, Boss=top-center |
+| 5 | 4x4 | 16 | Cierra el Acto I |
+| 6-9 | 4x3 | 12 | |
+| 10 | 4x4 | 16 | Cierra el Acto II |
+
+Y **cada sala mide 2x2 pantallas** (40x22 tiles, 640x352 unidades), asi que un capitulo son
+~48 pantallas contra las 9 de antes. La excepcion es la **arena del jefe: una pantalla**.
 
 #### Room Transition Mechanic
 
@@ -222,7 +274,7 @@ Each chapter defines its own grid dimensions and room distribution:
 
 #### Border Openings Design
 
-Every border is a cliff (`Wall`) except an **opening** on each connected side: `Room::GAP_X0..GAP_X1` (cols 7-12) on north/south, `GAP_Y0..GAP_Y1` (rows 3-7) on east/west. A dirt trail (`Path`) is carved from a hub near the centre to every opening (river → `Bridge`, obstacles cleared), so exits are always reachable and visually obvious. Combat rooms seal the openings (`exits_locked`, red pulsing bands, border tiles non-walkable) until every enemy is dead.
+El borde lo decide el BIOMA (`BiomeStyle::border`, ver la seccion del mundo exterior): acantilado, terreno o silleria. La abertura de cada lado conectado la dan `Room::gap_x0()..gap_x1()` / `gap_y0()..gap_y1()`, que en bioma `Natural` se abren a casi todo el lado y en `Cliff`/`Masonry` dejan un vano estrecho centrado. A dirt trail (`Path`) is carved from a hub near the centre to every opening (river → `Bridge`, obstacles cleared), so exits are always reachable and visually obvious. Combat rooms seal the openings (`exits_locked`, red pulsing bands, border tiles non-walkable) until every enemy is dead.
 
 - Interior `Wall` tiles are "buildings" (villages/cities), drawn as tall stone blocks in the sorted prop pass
 - Door tile types (DoorNorth/South/East/West) are **not generated** but the enum values remain for potential future use
@@ -241,7 +293,7 @@ Not all rooms in the grid are identical. `FloorMap::generate()` distributes room
 #### Per-Room Content
 
 Each `Room` generates independently on first visit:
-- **Tile map**: 20x11 grid with biome-specific decoration (trees, river, rocks, bushes, tall grass for Cap 1)
+- **Tile map**: `tiles_w` x `tiles_h` (40x22 en exterior) con decoracion del bioma, y los contadores de props/enemigos escalados por AREA (ver la seccion del mundo exterior)
 - **Openings**: cliff walls on every border except a centred gap on connected sides; trails lead from the centre to each gap. No door tiles are placed.
 - **Enemies**: Spawned on walkable tiles, away from player entry point, type based on chapter
 - **Tile collision**: Wall, Tree, Rock, River = solid (block movement). Bush, TallGrass = decorative (walkable)
@@ -300,9 +352,38 @@ Each `Room` generates independently on first visit:
 - Do NOT add external dependencies without discussion — the project statically links everything
 - Do NOT create `.md` documentation files unless explicitly asked
 
-## Game Design Document (GDD)
+## Referencia de diseño: THE LEGEND OF ZELDA: A LINK TO THE PAST
 
-Source: `../IdeaJuegoEliasEliseo.pdf` (GDD v1.0, Febrero 2026)
+**La referencia del juego es *A Link to the Past*** (decisión del usuario, 2026-08-25). No es
+una comparación suelta: es el criterio con el que se resuelve cualquier duda de diseño de
+mundo, exploración o ritmo. Lo que significa en concreto:
+
+- **El exterior no tiene muros.** En ALTTP el límite del campo son acantilados, agua, matorral
+  y vallas — nunca sillería. Los muros existen **dentro** de palacios, cuevas y casas. MANTLE
+  hacía justo lo contrario: `Room::generate` rodeaba de `TileType::Wall` hasta el desierto. El
+  borde lo decide el **bioma** (`BiomeStyle::border`), no el generador.
+- **El exterior SCROLLEA; los interiores van sala a sala.** Zona exterior grande con la cámara
+  siguiendo al profeta; interior = una pantalla con la cámara clavada — que es lo que el juego
+  hacía siempre, y sigue saliendo gratis: con la sala a 1 pantalla el clamp de `Camera` no deja
+  mover nada.
+- **Se investiga porque hay secretos.** Matorral que se corta, piedras que se levantan, grietas,
+  cuevas ocultas, cofres fuera del camino. Una sala que solo lleva al jefe no motiva a nadie.
+- **Los milagros son las llaves de exploración**, como el guante o el gancho: Fuego del Cielo
+  abre grietas y quema matorral, Sanar Aguas seca charcas, Ojos Abiertos revela lo invisible (ya
+  existe), Carro de Fuego cruza huecos. Es lo que hace que valga la pena **volver**.
+- **Los PNJ están de pie en el mundo** y se les habla. No son un icono del tileset.
+- **Un objetivo claro y un mapa que lo señala** (`ChapterLore::objective` ya existe).
+
+## Game Design Document
+
+**Vigente: `GDD2.0.md`, en la raíz del repo.** Se versiona con el código y es la única fuente
+de verdad para diseño.
+
+**OBSOLETO: `../IdeaJuegoEliasEliseo.pdf` (GDD v1.0, Febrero 2026).** Está implementado de cabo
+a rabo y ya no dirige nada; se conserva como documento histórico. Lo que sigue en esta sección
+son las tablas del v1.0 que el código **aún refleja** (cifras de personaje, fe, milagros,
+enemigos, controles): valen como referencia de lo implementado, no como plan. Si el v1.0 y
+`GDD2.0.md` se contradicen, manda `GDD2.0.md`.
 
 ### Elevator Pitch
 
@@ -499,6 +580,327 @@ táctil y el HUD salía con botones de teléfono en una partida de teclado.
   gameplay ve la resolucion). En `tools/`, `render.render_sheet` ya **no** cuantiza por
   defecto (`quantize=False`), que es lo que run.py pedia desde siempre.
 
+### El Ascenso y el epilogo, recorridos (GDD2.0 fases 5 y 6, 2026-08-26)
+
+Los dos momentos que cierran cada acto eran **paginas de texto que se pasaban con ENTER**.
+Ahora se RECORREN: una cadena de encuentros con decision, uno detras de otro, y la pagina de
+cierre al final. Comparten maquinaria con el pozo de encuentros —que es justo lo que el plan
+predijo— y por eso costaron poco: son ids de `namespace Ev` fuera de todo capitulo
+(`event_chapter` devuelve 0 para ellos) mas un contador de paso en el Engine.
+
+**El Ascenso (2 Reyes 2:1-14): CUATRO paradas.** Gilgal, Betel, el Jordan y «pide lo que
+quieras». Tres veces le dice que se quede y tres veces hay que negarse — eso es lo que el
+pasaje repite, asi que es lo que el jugador repite.
+
+- **Quedarse no rompe nada: acorta la herencia**, que es exactamente lo que significa no llegar
+  hasta el final del camino. Cada parada en la que te quedas atras resta un 10% a la fe
+  heredada. **Seguirle las tres veces y pedir la doble porcion deja la herencia EXACTAMENTE
+  como estaba** antes de que el Ascenso fuera jugable — esa era la condicion del track, y por
+  eso `ascension_check` sigue midiendo lo mismo.
+- **El Manto cae igual** (se le cayo a el, no te lo dio: 2 Reyes 2:13). Lo que se pide o no se
+  pide es el **espiritu doblado**: sin la doble porcion no hay milagro heredado, «y si no, no»
+  (2:10).
+- Las decisiones **se apuntan, no se aplican**: la herencia se reparte entera en
+  `finish_ascension`. Aplicar ahi la fe perdida seria descontarla dos veces, porque la fe
+  heredada se calcula sobre la que tengas al llegar.
+
+**El epilogo "El Legado" (2 Reyes 9; 13:14-21): TRES escenas.** Jehu y la muerte de Jezabel
+—que cumple al pie de la letra la palabra de Elias sobre la vina de Nabot y cierra el arco del
+Acto I—, el arco de Joas y los huesos de Eliseo, cuyo ultimo milagro ocurre cuando el profeta
+lleva un ano muerto.
+
+- Aqui la partida **ya se ha acabado**, asi que estas decisiones no mueven vida ni fe: no queda
+  partida que mover, e inventarle un premio mecanico a una escena de cierre seria relleno. Lo
+  que cambian es lo que se te cuenta — y **la del arco cambia las ultimas palabras del juego**
+  (`story_epilogue(s, joash_full)`), que en ese pasaje es exactamente lo que estaba en juego.
+- Sigue siendo **desbloqueble**: fe en Profeta Ungido (>=75) al ganar el capitulo 10. Quien gane
+  con la fe por los suelos se lleva su pantalla de victoria con su nota, igual que antes.
+
+**`DialogueState::dark`**: las dos cadenas se juegan **sobre negro** y no sobre el mundo. Pasan
+fuera de una sala, y dejar detras la arena del jefe del capitulo 5 —o la del 10— seria mentir
+sobre donde estas.
+
+Guiones: `ascension_check.txt` y `epilogo_check.txt`, ampliados para fotografiar cada parada.
+Gates del log: `Ascension: le seguiste 3 de 3 veces, doble porcion=si` y `Epilogo: el arco de
+Joas hasta el final`. En autoplay el dialogo decide solo y **siempre toma la primera opcion**,
+asi que el bot recorre el camino completo — que es justo el que tiene que dar la herencia de
+siempre.
+
+### Interiores con muros de verdad (GDD2.0 fase 3, 2026-08-26)
+
+La otra mitad de la gramatica de *A Link to the Past*. El exterior dejo de tener muros en la
+fase 1; aqui el muro vuelve **donde significa algo**: dentro de un edificio. Uno por capitulo,
+con su nombre (`get_interior_name`): la cueva del arroyo, el templo de Baal, el palacio de Acab,
+el aposento sunamita...
+
+- **Un interior mide UNA pantalla**, y con eso la camara se queda clavada sola —`Camera` recorta
+  contra `Room::world_w/h`—, o sea que el "interior sala a sala" del GDD **sale gratis**, igual
+  que salio en la arena del jefe. Esa era toda la maquinaria que hacia falta y ya estaba puesta.
+- **No se genera por biomas: se monta con una PLANTILLA** (`build_interior`). Es lo contrario del
+  exterior a proposito: fuera el generador reparte terreno, dentro hay una habitacion hecha, con
+  su anillo de muro, cuatro pilares que cortan la linea de vision, antorchas flanqueando la
+  puerta, tinajas contra las paredes y **siempre un premio** (altar en capitulos impares, cofre
+  en pares). **Sin enemigos**: el premio de explorar no puede ser otra pelea.
+- **`apply_interior_style`**: dentro no hay hierba. Con el suelo del bioma, un interior se lee
+  como un PATIO — el mismo arenal con flores y matas, solo que con muros alrededor. Se cambia la
+  familia de suelo por la de silleria y los decorados por grietas, cascotes y moho.
+
+**El enlace, que es donde estaba el riesgo del track:**
+
+- El nodo del interior va **DETRAS de la rejilla** en `FloorMap::rooms`, con `grid_x/grid_y = -1`
+  (asi `room_at(gx,gy)` no lo devuelve nunca). `RoomNode::interior_room` en la sala de fuera y
+  `interior_of` en el interior.
+- **El guardado NO cambia de formato**, que era la condicion de abandono: `SaveData::current_room`
+  es un INDICE y la rejilla se regenera igual con la misma semilla, asi que guardar dentro de un
+  interior funciona tal cual.
+- **El minimapa no miente**: `draw_minimap` **salta** los nodos con `interior_of >= 0`, y estando
+  dentro marca como actual **la sala de fuera** — dejar el mapa sin ninguna sala marcada es peor
+  que aproximar.
+- `Engine::use_doorway` guarda la sala en `room_cache` antes de irse, igual que una transicion
+  normal: al volver, los enemigos muertos siguen muertos y el cofre abierto sigue abierto.
+- `Engine::spawn_tx/spawn_ty` manda sobre `entry_direction`: por una puerta **no se llega por un
+  borde**. Y la puerta respeta el **coyote time**, porque al salir se aparece justo debajo de la
+  de fuera y sin esa gracia se volveria a entrar en bucle.
+
+**El anfitrion del interior se elige SIN sortear** (`(chapter*7 + k) % room_count`, saltando la
+sala de inicio y la del jefe). Con `randi_range` ahi, el sorteo entero se desplazaba y con el
+**todos los mapas de la partida**: la sonda de tacto lo caza en el acto — el bot se salia de la
+sala a media medida y los leones y los arqueros daban CERO bajas. Regla general que vale para
+cualquier cosa que se anada a `FloorMap::generate`: **si no necesita azar, no lo gastes**.
+
+La **puerta** (`TileType::Doorway`, celda `door` en las filas 7-8 del tileset) se coloca en la
+sala de fuera **con el mapa ya terminado y las sendas trazadas** — puesta antes, `carve_trail` la
+araba como cualquier obstaculo — y se apoya en la senda: una puerta en mitad del descampado no se
+encuentra. El vano oscuro es **geometria hundida**, no un plano oscuro: con luz de estudio,
+Workbench aclara cualquier plano oscuro hasta gris medio (misma leccion que la boca de la cueva
+en portraits.py).
+
+Guion: **`scripts/interiores_check.txt`**, con el comando de autoplay **`door`** — deja al
+profeta **al lado** de la puerta, no encima (pisarla la dispara, y asi no se podria fotografiar
+antes de cruzarla) y dice por donde entrar. Ojo: el tile de al lado tiene que estar **dentro** de
+la sala, porque `is_tile_walkable` deja pasar fuera de la rejilla (lo necesita
+`try_room_transition`) y la puerta del muro sur de un interior dejaba al profeta en el vacio.
+Gate del log: la secuencia `Loaded room 7 -> 12 -> 7`.
+
+### Secretos y milagros como llaves (GDD2.0 fase 4, 2026-08-26)
+
+La tercera queja del usuario era que *"no se motiva al jugador a investigar"*. La fase 1 dio
+sitio que recorrer; esto da **razones para desviarse**, con el mecanismo de *A Link to the Past*:
+los milagros son las llaves, y lo que abren se ve mucho antes de tener con que abrirlo.
+
+**El gate de diseño, que manda sobre todo lo demas: un secreto tiene que VERSE antes de poder
+abrirse.** Si la grieta no se ve hasta que tienes el milagro, no hay motivo para volver — y
+volver es todo el punto. Por eso la tinaja, la grieta y el hueco **estorban el paso**: el jugador
+tropieza con ellos en el capitulo 1 y no puede abrirlos hasta el 3 o el 4.
+
+| Llave | Abre | Pasaje |
+|---|---|---|
+| Un tiro cualquiera | tinaja (`TileType::Jar`) y matorral | — |
+| **Fuego del Cielo** | matorral y **grietas** (`TileType::Crack`), radio 80 | 1 Reyes 18:38 |
+| **Sanar Aguas** | **seca la charca**, radio 56 | 2 Reyes 2:21 |
+| **Carro de Fuego** | **cruza el hueco** (`TileType::Pit`) mientras dura | 2 Reyes 2:11 |
+| **Ojos Abiertos** | (ya existia) revela el mapa y marca enemigos y objetos | 2 Reyes 6:17 |
+
+- **Todo pasa por `Room::open_secrets(centro, radio, mascara, out_loot)`**, un solo sitio. La
+  mascara `SecretKind` es lo que decide que abre cada llave. Devuelve DONDE ha aparecido un
+  hallazgo y no suelta la pieza: eso lo hace el Engine, para que haya **un solo lugar que decida
+  que paga un secreto**.
+- **La celda ES el estado.** La sala entera se cachea en `FloorMap::room_cache`, asi que abrir un
+  secreto persiste durante la partida **sin tocar el formato del guardado** — que era el criterio
+  de abandono del track. Y `Room::tile_hides_loot` va por `tile_hash`: la misma semilla esconde
+  lo mismo en los mismos sitios, asi que tampoco hay nada que guardar.
+- **La OFRENDA es lo mas probable (60%)**, y a proposito: vida y fe las suelta cualquier enemigo,
+  asi que un secreto que pagara sobre todo en eso no daria ningun motivo para desviarse. Lo que
+  hace que explorar de mas signifique algo es que pague **entre partidas**
+  (`ItemComponent::Pickup::Offering` -> `progression.offerings`, guardado en el acto con
+  `save(false)` para no re-sellar la fecha de caducidad). Y **que paga cada hallazgo sale de SU
+  POSICION**, no de `randi_range`: sortearlo movería el generador de mapas (es el mismo `rand()`)
+  y ademas un guion de regresion no podria exigir una ofrenda concreta.
+- **`Entity ECSWorld::gap_crosser`**: quien puede cruzar huecos AHORA. Es una entidad y no un
+  componente porque dura dos segundos, y `walkable_at` la mira antes de rendirse. Se apaga sola
+  cuando acaba la embestida — si se quedara puesta, el profeta andaria sobre los precipicios el
+  resto del capitulo.
+- **El Carro de Fuego parado embiste hacia DONDE MIRAS** (`last_move_dir`), no hacia arriba. Con
+  el `{0,-1}` que tenia, lanzarlo sin moverse salia siempre al norte — y siendo la unica llave
+  que cruza un hueco, el hueco que tenias delante se quedaba sin cruzar.
+
+**Densidad: contada POR SALA, no por area** — es la excepcion a la regla de la fase 1, y se
+cerro midiendo. Escalando por area salian 11 grietas, 16 tinajas y **24 tiles de precipicio** en
+una sola sala: la sonda de tacto se disparo a 12,6 s de TTK con el bot clavado detras de un
+hueco. Valores buenos: 4-7 tinajas en poblado (1-3 fuera), 2-4 grietas en roca (0-2 fuera) y
+**1-2 huecos, nunca en la sala de INICIO ni en la arena del jefe** (en la de inicio es donde se
+aprende a andar y donde corre la sonda; en la arena solo seria una trampa en una pelea que ya va
+justa de sitio). Y **la grieta NO para los tiros** aunque no se pise: son dos masas bajas con una
+hendidura y el disparo pasa por encima — un secreto tiene que ser un hallazgo, no cobertura para
+el enemigo.
+
+**Dos celdas nuevas del tileset** (fila 7): `jar` y `crack`. La tinaja lleva perfil de PANZA (dos
+troncos de cono opuestos) y no un cilindro — un cilindro con asas es un cubo de fregar —, y lo
+que la lee como vasija a 16 unidades es el cuello estrecho y el borde volteado, antes que las
+asas. La grieta se monta sobre la silueta del canto rodado PARTIDA EN DOS: con cajas salieron
+dos maletas grises, y la hendidura tiene que ir **delante y llegar al suelo** (puesta detras la
+tapaban las dos mitades y quedaba en una muesca en la coronilla).
+
+**El hueco se pinta como UNA mancha**, no con la celda del tileset: `TileSprite::Pit` dibuja un
+ovalo por casilla, y en una banda de dos de ancho **no hay ni un tile interior**, asi que salian
+seis ovalos en rejilla. Se pinta un relleno oscuro plano y un labio de tierra SOLO en los lados
+que dan a suelo firme, que es lo que lo lee como hundido.
+
+**El objetivo del capitulo sale ya en el mapa grande** (`ChapterLore::objective`, que existia
+desde el primer commit y no pintaba nadie: el mapa solo sabia decir "ve al rojo").
+
+Guion: **`scripts/secretos_check.txt`**, con dos comandos de autoplay nuevos que existen porque
+sin ellos la comprobacion depende de la suerte del mapa: **`pit`** (coloca al profeta al borde de
+un hueco y MIRANDO hacia el) y **`collect`** (atrae todas las recogidas de la sala — un hallazgo
+cae donde estaba el secreto y un guion no sabe donde fue). Gates del log: `Secret loot: N
+hallazgo(s) ... (N ofrenda, N fe, N vida)`, `Secret offerings: +N (total M)` y `Chariot: crossing
+a pit`.
+
+### Deuda visual del exterior (2026-08-26)
+
+Cinco defectos que **solo se ven desde que la sala mide cuatro pantallas**, y ninguno era un
+fallo de logica: todos eran de legibilidad. La regla comun a los cinco es la misma — **a 4x,
+cualquier cosa dibujada a tile completo y centrada dibuja la REJILLA**.
+
+- **Los decorados del suelo se encogen y se descentran** dentro de su celda (0,50-0,90 del
+  tile, desplazamiento y giro de 90 grados por `tile_hash`). A tile completo salia un damero
+  de manchas identicas. **Nunca se salen de su propia celda**: el suelo del tile de la derecha
+  y el de abajo se pintan despues y los recortarian.
+- **Las charcas son elipses con el borde mordido**, no cajas. Una caja de 2x2 con su ribera
+  alrededor se lee como una **piscina**, con bordillo y todo; una elipse ragged es justo lo que
+  el autotileado de ribera necesita para dibujar una curva. El mordisco va por `tile_hash` y no
+  por `randf()`, para que la misma semilla de la misma forma.
+  **La ventana buena del radio es ESTRECHA y se cerro midiendo, no a ojo**: por debajo de 1,3
+  la elipse cabe en una cruz de cinco tiles y la charca sale con forma de pieza de tetris; por
+  encima de 2,5 las charcas se juntan en un LAGO, y el agua no es decorado — es terreno lento
+  (`Config::WATER_SPEED_MULT`). Con cuatro charcas de radio 2,5 la sonda de tacto midio **94
+  tiros y CERO bajas** en el tramo de arqueros, con el bot vadeando media sala. Valores buenos:
+  `max(2, screens-1)` charcas, rx 1,3-1,9 y ry 1,1-1,6.
+- **Los edificios van en MANZANAS**, con calle de 1-2 tiles entre solares y algun solar vacio.
+  Un rectangulo de ladrillo solo en mitad del campo se lee como un trozo de muro huerfano; lo
+  que se lee como poblado es un grupo de casas con una calle.
+- **El acantilado deja de ser una tapia.** `TileSprite::CliffRock` / `CliffRockTall` (celdas
+  nuevas, filas 7-8 del tileset) tienen las **juntas verticales y desalineadas**: cada columna
+  corta sus bloques por su cuenta, con anchos desiguales, giros de +-11 grados y taper. `Cliff` /
+  `CliffTall` siguen siendo silleria y ahi se quedan — en ciudad y palacio el ladrillo es lo
+  correcto, y los edificios del interior los siguen usando. Lo elige `biome.border` en
+  `render_ground`. Tres intentos que no conviene repetir: con bloques grandes salen losas lisas;
+  sin junta (bloques solapados) sale una pared lisa con manchas; y las lascas en gris claro
+  (`stone`) se leen como escombro pegado con cola.
+- **La senda se DERRAMA sobre la celda vecina** (`spill` en `render_ground`): el sprite del
+  camino sobre el tile de al lado, en una franja de fondo variable por lado y alfa parcial. El
+  tile de camino es opaco hasta su borde, asi que un trazado por celdas enteras es una cadena de
+  cuadrados marrones sobre la hierba. **Se hace al DIBUJAR, no al generar**: probado con un
+  fleco de tiles de verdad, y lo que hace es ENSANCHAR la senda al doble en vez de romperle el
+  contorno — ademas de cambiar por donde se puede andar.
+
+**Subir `TILE_ROWS` obliga a re-renderizar el tileset ENTERO** (`tiles.main` sin `only`):
+`_load_sheet` devuelve `None` si la forma no cuadra, y entonces un parcheo con `only` deja en
+blanco las otras 50 celdas. El re-render completo cuesta ~5 s y no es identico bit a bit (el
+antialiasing de Workbench varia entre sesiones), pero si lo es a ojo: se comprobo celda a celda.
+
+Gate: las capturas de `scripts/mapas_check.txt`, antes y despues.
+
+### Mundo exterior: salas de 2x2 pantallas, camara y bordes por bioma (2026-08-26)
+
+Primera fase del `GDD2.0.md`, y la que arregla las dos quejas de fondo: los mapas eran
+diminutos y habia muros donde no tocan. Referencia: *A Link to the Past* (ver la seccion de
+arriba).
+
+- **`Room::tiles_w` / `tiles_h`.** La sala deja de tener un tamano fijo. `Room::tiles` se
+  dimensiona al MAXIMO (`Config::ROOM_TILES_X/Y` = 40x22) y cada sala dice cuanto ocupa de
+  verdad. **Ningun bucle sobre el mapa puede volver a usar las constantes**: en `rooms.cpp`
+  las viejas `static constexpr W/H` se llaman ahora `MAXW`/`MAXH` y solo dimensionan arrays.
+- **La arena del jefe mide UNA pantalla** (`Config::SCREEN_TILES_X/Y` = 20x11). No es un
+  detalle: en una sala de 2x2 con la camara siguiendo al profeta el jefe se sale del cuadro
+  y la pelea se convierte en perseguir una barra de vida. Es tambien el molde de los
+  interiores de la fase 3.
+- **La camara se enciende.** `Camera` existia desde el primer commit y **no la llamaba
+  nadie** — con la sala midiendo exactamente una pantalla no habia nada que seguir.
+  `Engine::camera` sigue al profeta y recorta contra `Room::world_w()/world_h()`, asi que en
+  una sala de una pantalla **se queda clavada sola** y el comportamiento de siempre sale
+  gratis. Al entrar en una sala la camara SALTA (`camera.position = spawn_pos`): sin eso
+  hacia un barrido desde la sala anterior por encima del fundido.
+- **`Renderer::begin_world()` / `end_world()`.** Acotan la pasada de mundo, y **hacen falta
+  de verdad**: `world_to_screen` se aplica a TODO lo que dibuja el Renderer —`draw_rect`,
+  `draw_text` y por tanto el HUD entero—, asi que sin cerrarla el HUD se iria con el
+  profeta. Dentro: suelo, props, entidades, barreras de salida y los numeros de dano (van
+  sobre el enemigo, son mundo). Fuera: vinieta, fogonazo, fundido de sala y HUD. La
+  SACUDIDA se queda global a proposito, como hasta ahora, para no mover el tacto ya medido.
+- **`BiomeStyle::border`** con tres valores. `Cliff` (canon, montana, cueva) y `Masonry`
+  (ciudad, casa noble, campamento) cierran con `TileType::Wall`; **`Natural`** (desierto,
+  campos, ribera) cierra con el propio terreno: roca y arboles del bioma en el anillo, mas
+  una **franja irregular** hacia dentro (a veces otro bloqueo, a veces matorral pisable).
+  Reparto: 1 Cliff - 2 Natural - 3 Cliff - 4 Cliff - 5 Natural - 6 Masonry - 7 Natural -
+  8 Masonry - 9 Natural - 10 Masonry.
+  - **Dejar el borde ABIERTO no es opcion**: fuera de la rejilla `is_tile_walkable` deja
+    pasar, y sin sala vecina `try_room_transition` devuelve al profeta de un tiron — un muro
+    invisible, que se siente peor que el muro.
+  - En `Natural` el lado conectado se abre **casi entero** (`gap_x0()..gap_x1()` = 2..w-3);
+    un vano de seis tiles en mitad de un campo lo convierte en un corral con puerta. Las
+    antorchas de `biome.torches` se apagan ahi por lo mismo: "flanquear" un vano que ocupa
+    todo el lado las deja en las esquinas.
+- **Las sendas SERPENTEAN** (`carve_trail`). En una sala de una pantalla la L de antes
+  pasaba desapercibida; en una de 2x2 dejaba una carretera perfectamente recta cortando el
+  campo de lado a lado. **El serpenteo va en el tramo LARGO**: puesto en el de aproximacion
+  no hace nada, porque con el nudo ya alineado con el vano ese tramo tiene CERO pasos y la
+  senda salia recta igual (asi fallo el primer intento). Los ultimos cuatro pasos van
+  derechos para entrar limpio por el vano, y el nudo se descentra en todas las salas menos
+  la del jefe — centrado, las cuatro sendas forman una cruz perfecta.
+- **Todo lo que se contaba "por sala" se escala por AREA**: props, charcos, edificios y
+  enemigos (`screens` en `decorate` y en `generate`). Con los contadores pensados para una
+  pantalla, una sala de 2x2 salia desnuda. La densidad de enemigos va a **3/4 del area**, no
+  al area entera: a densidad completa los dieciseis convergen a la vez y la sala deja de ser
+  un campo para ser una horda; a la mitad sobraba campo y faltaba gente (medido).
+  El **rio** tambien se coloca en proporcion (`tiles_w * 3 / 5`...): con los limites
+  clavados para 20 tiles se quedaba siempre en el cuarto izquierdo.
+- **Los props de sala especial ya no van en el centro** (`place_special`). El profeta
+  aparece justo ahi al entrar, asi que el encuentro saltaba antes de haber visto a nadie y
+  el cofre se abria sin haberlo buscado. Se colocan a unos tiles del nudo, sobre suelo
+  pisable y con al menos dos vecinos libres (que no caigan en un bolsillo cerrado).
+- **Rejillas 4x3 / 4x4** y `FloorMap::MAX_ROOMS` 25. El reparto de tipos escala con el
+  numero de salas (2 Tesoro, 2 Altar, 2 Elite en rejillas de 12+), **menos el Encuentro, que
+  sigue siendo UNO**: `get_event_def` da un solo encuentro por capitulo, asi que dos salas
+  Event contarian la misma escena dos veces. Sube a 2-3 cuando exista el pozo de encuentros
+  (GDD2.0 fase 2), no antes.
+
+**El PNJ del encuentro ya no es una antorcha.** Literalmente lo era: `collect_props` dibujaba
+`TileType::Event` con la celda `TileSprite::Torch`. Ahora hay una hoja propia
+`assets/sprites/npcs.png` (16 celdas de 128 px, **una sola fila, solo `Idle`**, generada por
+`tools/blender/mantle_sprites/npcs.py` con las recetas que ya existian para los retratos).
+
+- Se dibuja **como prop ordenado por Y**, no como entidad del ECS. Es lo mismo en pantalla
+  —sombra blanda, orden por profundidad, 32 unidades— y no gasta ni un componente ni una
+  entidad de las 512: el locutor no pelea, no anda y no muere.
+- Los pies de la hoja caen en la fila 112 de 128 igual que en las hojas de personaje, asi
+  que el alto se cuelga de `feet` hacia arriba (`feet - 28`) y el PNJ pisa el suelo a la
+  misma altura que el profeta.
+- **`EventDef::npc`** (indice de `namespace Npc` en `render/sprites.h`) va el ultimo del
+  struct y con valor por defecto, igual que `portrait`. `Npc::NONE` = este encuentro no es
+  una persona sino la ESCENA (los cuervos, el altar del Carmelo, la boca de la cueva): ahi
+  se queda la hoguera, que es lo honesto.
+- Marca flotante dorada sobre la cabeza mientras el encuentro esta sin resolver: es lo que
+  se ve de lejos, y medio motivo para desviarse.
+
+**Comando de autoplay `goto <tipo>`** (`event`, `treasure`, `altar`, `elite`, `boss`,
+`start`), ademas del indice de siempre. No es comodidad: el reparto de salas se mueve en
+cuanto cambia una linea de `FloorMap::generate`, y un `goto 11` clavado deja de apuntar a la
+sala que el guion queria comprobar **sin decir ni pio**. Guion: `scripts/mapas_check.txt`.
+
+**La sonda de tacto depende del MAPA, no solo del motor.** `feel_baseline` corre en la sala
+de inicio, que mide cuatro pantallas, asi que el bot se pasa el rato andando y el TTK lo
+manda la distancia. Medido el 2026-08-26 con la MISMA build y solo cambiando la semilla:
+soldados 2,68 - 3,34 s, leones **0,00 - 2,39 s**, arqueros **0,86 - 24,77 s**. O sea que la
+cifra absoluta no significa nada por si sola: lo unico comparable son dos pasadas con la
+**misma semilla** (por eso el guion la fija en `seed 20260825`) y **la misma generacion de
+sala**. Cualquier cambio en `Room::generate` mueve el sorteo y con el la medida, sin que el
+motor se haya tocado.
+
+Cifras buenas de referencia hoy (seed 20260825, tras secretos y milagros-llave): soldados
+**2,74 s**, leones **1,50 s**, arqueros **0,79 s**, 1 golpe recibido en todo el recorrido.
+Ojo con el tramo del jefe: `killall` deja la sala por limpia, asi que el bot **se sale de la
+arena** por la abertura y el tramo se corta solo.
+
 ## Current State and TODOs
 
 The project compiles and runs and the full 10-chapter loop is playable end to end:
@@ -515,8 +917,8 @@ The project compiles and runs and the full 10-chapter loop is playable end to en
 - **El Códice** (`ui/codex.h`): cinco pestañas — Capítulos / Bestiario / **Milagros** / **Objetos** / **Logros** (ver la sección de Logros). La de milagros se llamaba "Reliquias" y listaba milagros (nombre equivocado); las reliquias son objetos y viven en la de Objetos, que lista los 16 de `ItemRegistry` (incluidos los dos `event_only`) con el color de rareza en la fila y, abajo, el efecto + el pasaje **sin referencia**. El contador "Descubierto X/Y" cuenta las cuatro pestañas y ahora cuadra con lo que se puede ver. El contador va arriba a la derecha y la ayuda de teclas abajo: en 180 unidades de alto no caben las dos bajo el panel del pasaje.
 - **Working**: HUD — minimap (TAB = big map), boss direction hint, chapter banners, messages, boss bar, miracle slots with cost/lock state, item row under the vitals (rarity-coloured frames, R marks the held consumable, número de cargas del consumible), floating damage numbers and a 0.05 s hit-stop on boss hits; audio (procedural music per scene + SFX, stereo with reverb; `Audio::load_*` falls back .ogg → .wav).
 - **HUD** (`ui/hud.cpp`): framed glossy bars (`draw_bar`) with tileset icon badges (`draw_badge`, heart/orb/skull on a soft disc), miracle slots with bevel frame, cooldown sweep, key badge and orb+cost, boss bar with name plate, TTF text everywhere.
-- **Debug**: `--script <file>` autoplay (wait/hold/press/aim/shot/walk/bot/goto/chapter/killall/spawn/god/seed/give/learn/faith/cards/mcards/stats/say/quit; `intro` lanza el prólogo y `cine n` salta a una de sus 8 estampas y para el avance automático, para poder fotografiarla; `chapter n` jumps to a chapter to check biomes/bosses; `event <n>` abre el encuentro de un capítulo sin caminar hasta su sala — la sala `RoomType::Event` la sortea el generador, así que sin él verificar los diez encuentros dependía de la suerte del mapa; `spawn <enemyType> <n>` siembra enemigos de un tipo concreto junto al jugador — sin él, comprobar una conducta del Acto II depende de que el capítulo la sortee; `feel <etiqueta>` imprime el TRAMO de tacto desde la marca anterior (TTK, golpes recibidos, tiros, daño); `fx <id> [tamaño] [duración]` suelta un efecto de la hoja propia delante del profeta; `give <itemId>`, `learn <miracleId> <slot>` (slot 0..2), `faith <n>`, `cards`/`mcards` open the choice screens — con ellos se puede fotografiar cualquier efecto sin jugar hasta él; `press weapon` = ataque secundario, `press m3` = tercer milagro). Añadidos al cerrar el plan del GDD: `ascend` (dispara la Ascensión sin rematar al jefe del cap. 5 — es el único camino al Manto), `advance` (cierra el capítulo; en el 10 es lo que dispara la victoria), `agesave <horas>` (envejece el guardado para probar la caducidad de 48 h), `unlocks <n>` (fija `SaveData::unlocks`, para volver a bloquear el epílogo), `meta <id>` (compra una mejora de El Santuario sin ofrendas) y `touch`/`drag`/`untouch <x> <y> [dedo]` (toques sintéticos en coordenadas de juego: el ratón NO genera eventos `SDL_EVENT_FINGER_*`, así que sin ellos los controles táctiles solo se podían probar en un teléfono). `stats` imprime además una segunda línea `LOADOUT` con profeta, slots, recarga y objetos. `bot n` termina solo si no hay enemigos en la sala. `killall` lista primero y mata después, para que los hijos del Agua Corrupta no caigan en el mismo barrido, y **sus bajas cuentan** en el marcador (`combat_events` se vacía después de leerse, no antes de llenarse). Un `shot` **no suelta** lo que se estuviera manteniendo: `hold map 0.6` + `shot` es la única forma de fotografiar el mapa grande. F12 screenshot (`screenshots/`, 1280x720), room ASCII dump in the log while a script runs. Put a `wait 0.1` after each `shot` so the capture lands before the next command.
-- **Guiones de verificación** en `scripts/`: `lore_check.txt` y `pulido_check.txt` (regresión, deben pasar siempre), **`feel_baseline.txt`** (MEDIDA de tacto, no captura: se ejecuta antes y después de tocar `Config::Feel` y se comparan las líneas `FEEL`), `feel_check.txt`, `audio_check.txt` (criterio negativo: cero `Failed to load`), `logros_check.txt` (desbloquea 18/18 desde guardado limpio), `vfx_check.txt` (efectos, retratos y paleta), `encuentros_check.txt` (los diez encuentros y sus retratos), `hint_check.txt`, `actoII_check.txt` (conductas del Acto II), `codice_check.txt` (las 4 pestañas del Códice), `milagros_check.txt` (Ojos Abiertos, cargas del consumible, tercer slot y guardar/cargar), `intro_check.txt` (las 8 estampas del prólogo), `ascension_check.txt` (Manto de Elías + milagro heredado), `caducidad_check.txt` y `tactil_check.txt` (**los dos piden `--touch`**), `epilogo_check.txt` (las dos ramas de la victoria) y `discipulos_check.txt`.
+- **Debug**: `--script <file>` autoplay (wait/hold/press/aim/shot/walk/bot/goto/chapter/killall/spawn/god/seed/give/learn/faith/cards/mcards/stats/say/quit; `intro` lanza el prólogo y `cine n` salta a una de sus 8 estampas y para el avance automático, para poder fotografiarla; `chapter n` jumps to a chapter to check biomes/bosses; `event <capítulo> [índice]` abre un encuentro del pozo de ese capítulo sin caminar hasta su sala — las salas `RoomType::Event` las sortea el generador y solo coloca 2-3 de las 3-4 que hay, así que sin él verificar los 35 encuentros dependería de la suerte del mapa; loguea id, locutor, retrato y PNJ; `spawn <enemyType> <n>` siembra enemigos de un tipo concreto junto al jugador — sin él, comprobar una conducta del Acto II depende de que el capítulo la sortee; `feel <etiqueta>` imprime el TRAMO de tacto desde la marca anterior (TTK, golpes recibidos, tiros, daño); `fx <id> [tamaño] [duración]` suelta un efecto de la hoja propia delante del profeta; `give <itemId>`, `learn <miracleId> <slot>` (slot 0..2), `faith <n>`, `cards`/`mcards` open the choice screens — con ellos se puede fotografiar cualquier efecto sin jugar hasta él; `press weapon` = ataque secundario, `press m3` = tercer milagro). Añadidos al cerrar el plan del GDD: `ascend` (dispara la Ascensión sin rematar al jefe del cap. 5 — es el único camino al Manto), `advance` (cierra el capítulo; en el 10 es lo que dispara la victoria), `agesave <horas>` (envejece el guardado para probar la caducidad de 48 h), `unlocks <n>` (fija `SaveData::unlocks`, para volver a bloquear el epílogo), `meta <id>` (compra una mejora de El Santuario sin ofrendas), `pit` (coloca al profeta al borde de un hueco y mirando hacia el), `collect` (atrae las recogidas de la sala), `door` (deja al profeta al lado de la puerta de la sala) y `touch`/`drag`/`untouch <x> <y> [dedo]` (toques sintéticos en coordenadas de juego: el ratón NO genera eventos `SDL_EVENT_FINGER_*`, así que sin ellos los controles táctiles solo se podían probar en un teléfono). `stats` imprime además una segunda línea `LOADOUT` con profeta, slots, recarga y objetos. `bot n` termina solo si no hay enemigos en la sala. `killall` lista primero y mata después, para que los hijos del Agua Corrupta no caigan en el mismo barrido, y **sus bajas cuentan** en el marcador (`combat_events` se vacía después de leerse, no antes de llenarse). Un `shot` **no suelta** lo que se estuviera manteniendo: `hold map 0.6` + `shot` es la única forma de fotografiar el mapa grande. F12 screenshot (`screenshots/`, 1280x720), room ASCII dump in the log while a script runs. Put a `wait 0.1` after each `shot` so the capture lands before the next command.
+- **Guiones de verificación** en `scripts/`: `lore_check.txt` y `pulido_check.txt` (regresión, deben pasar siempre), **`feel_baseline.txt`** (MEDIDA de tacto, no captura: se ejecuta antes y después de tocar `Config::Feel` y se comparan las líneas `FEEL`), `feel_check.txt`, `audio_check.txt` (criterio negativo: cero `Failed to load`), `logros_check.txt` (desbloquea 18/18 desde guardado limpio), `vfx_check.txt` (efectos, retratos y paleta), `encuentros_check.txt` (los **35** encuentros del pozo, en ES y EN; su gate es el log, no las capturas), `hint_check.txt`, `actoII_check.txt` (conductas del Acto II), `codice_check.txt` (las 5 pestañas del Códice), **`secretos_check.txt`** (secretos de bioma y los tres milagros-llave), **`interiores_check.txt`** (entrar y salir de un interior sin perder el estado de fuera), `milagros_check.txt` (Ojos Abiertos, cargas del consumible, tercer slot y guardar/cargar), `intro_check.txt` (las 8 estampas del prólogo), `ascension_check.txt` (Manto de Elías + milagro heredado), `caducidad_check.txt` y `tactil_check.txt` (**los dos piden `--touch`**), `epilogo_check.txt` (las dos ramas de la victoria) y `discipulos_check.txt`.
 
 ### Prólogo cinemático "El Cielo Cerrado" (`ui/cinematic.h`)
 
@@ -549,9 +951,9 @@ El arte lo genera `tools/blender/mantle_sprites/cine.py` (ver abajo). Música:
 - **Entity recycling**: `ECSWorld::create()` calls `reset_components()` — ids come back through the free list, and stale component data (a projectile's `hit_list` still naming the boss) silently broke damage. Never assume a spawner clears every field it does not set.
 - `Engine::room_fade` (0.3 s black veil under the HUD) plays on every `load_room`; particles are tinted `TileSprite::Star` sprites.
 - **Working**: items — `GameScene::Choice` offers 3 cards after Elite/Boss rooms, on opening the treasure chest and in 1 of 5 normal rooms (`open_item_choice`). `ItemRegistry::roll_choices` never repeats an owned item, so a run tops out at the 14 sorteables (los tres `event_only` no entran). `Player::grant_item` applies HP/damage/speed/faith/cadence plus relics (Tablas → `FaithSystem::floor_value`, Arca → `miracle_power`) and consumables (R). Heredable items pass to Eliseo on the Ascension. Weapons (Honda/Vara) are a **secondary attack** on `Action::AttackSecondary` (tecla `I`): `Player::fire_secondary` — la Honda lanza una piedra que atraviesa con la animacion de disparo, la Vara barre en arco con `AnimID::CastMiracle` y cinco brotes verdes. Al recogerla el mensaje dice la tecla, y la celda del HUD lleva icono por arma + la `I` + el nombre.
-- **Working**: save **v7** — chapter seed + room + HP/faith + items + consumable (con sus cargas) + los 3 slots de milagro + `unlocks` (contenido desbloqueado entre partidas); auto-saves on every cleared room, and "Continuar" regenerates the same map and drops the player in the saved room (rooms are regenerated, so cleared ones have their enemies back). El fichero es un volcado binario de `SaveData`, asi que **anadir un campo rompe el formato**: `SaveSystem::load` lleva dos lectores de compatibilidad (`SaveDataV3` + `migrate_v3` y `SaveDataV4` + `migrate_v4`) que suben las partidas v3 y v4 sin perderlas y reescriben el fichero en v5. Si vuelves a cambiar `SaveData`, sube la version y anade otro lector igual — no se tiran partidas. v1 y v2 si se rechazan.
+- **Working**: save **v8** — chapter seed + room + HP/faith + items + consumable (con sus cargas) + los 3 slots de milagro + `unlocks` (contenido desbloqueado entre partidas) + `codex_events` (relatos vistos); auto-saves on every cleared room, and "Continuar" regenerates the same map and drops the player in the saved room (rooms are regenerated, so cleared ones have their enemies back). El fichero es un volcado binario de `SaveData`, asi que **anadir un campo rompe el formato**: `SaveSystem::load` lleva dos lectores de compatibilidad (`SaveDataV3` + `migrate_v3` y `SaveDataV4` + `migrate_v4`) que suben las partidas v3 y v4 sin perderlas y reescriben el fichero en v5. Si vuelves a cambiar `SaveData`, sube la version y anade otro lector igual — no se tiran partidas. v1 y v2 si se rechazan.
 - **v7 reservo de golpe TODOS los campos que iban a hacer falta**, aunque nacieran a cero: ajustes del jugador (`music_volume`, `sfx_volume`, `aim_assist`, `sensitivity`, `language`, `settings_flags`) y desbloqueos (`items_unlocked`, `skins_unlocked`, `skin_equipped`, `entitlements`). Cinco frentes distintos necesitaban persistir algo; subir version por separado habrian sido cinco migraciones que mantener. **Los ajustes ON/OFF viven en la mascara `settings_flags` (`SETTING_*`) y no en bools sueltos por una razon concreta: anadir un bit NO rompe el formato del fichero.** Hasta v6 no se guardaba **ningun** ajuste — el volumen que ponias volvia a su sitio en el siguiente arranque.
-- Comando de autoplay **`savedump`**: vuelca partida + meta + ajustes al log en tres lineas `SAVEDUMP`. Es lo unico que permite comprobar desde un guion que una migracion no ha perdido nada, porque la meta entera no se ve en ninguna pantalla del juego. Guion: `scripts/guardado_v7_check.txt` (migra un v6 real, siembra meta, gana el cap. 10 y comprueba que `delete_save` deja la partida a cero y la meta intacta).
+- Comando de autoplay **`savedump`**: vuelca partida + meta + ajustes al log en tres lineas `SAVEDUMP`. Es lo unico que permite comprobar desde un guion que una migracion no ha perdido nada, porque la meta entera no se ve en ninguna pantalla del juego. Guion: `scripts/guardado_check.txt` (migra un fichero viejo real, siembra meta, gana el cap. 10 y comprueba que `delete_save` deja la partida a cero y la meta intacta).
 - **Caducidad móvil (GDD 4.4)**: `SaveData::save_timestamp` son **segundos desde la época** (`SDL_GetCurrentTime`); antes eran `SDL_GetTicks`, que arranca a cero en cada sesión y no medía días, y por eso `is_run_expired()` estaba escrita y no la llamaba nadie. A las 48 h la fila "Continuar" del menú pasa a leer **"Partida abandonada +N"**: aceptarla ingresa el 50 % de la tarifa del capítulo (`get_abandoned_offerings`, que ya NO es un porcentaje del banco de ofrendas — eso duplicaba el ahorro del jugador) y **borra** la partida conservando la meta-progresión. Solo se aplica con reglas de móvil (`Engine::mobile_rules`, que `--touch` enciende en PC). Los sellos antiguos (< 1e9) se dan por "sin fecha" y no caducan.
 ### `assets/data` y `assets/shaders`: borradas a propósito (2026-08-25)
 
@@ -646,6 +1048,82 @@ juego, luego la paleta, y el Bestiario **al final**, porque salir del Códice de
 en el menú de pausa y todo lo que exige estar jugando (`chapter`, `spawn`) se descarta ahí
 en silencio.
 
+### El pozo de encuentros: 10 -> 35 relatos (GDD2.0 fase 2, 2026-08-26)
+
+Lo que el usuario puso por escrito: *"el flujo de la historia tiene que tener en cuenta TODO LO
+REFERENTE A ELIAS Y ELISEO DEL LIBRO DE REYES"*. Habia **10** encuentros y ahora hay **35**, uno
+por cada episodio que `GDD2.0.md` §2 enumera para los diez capitulos.
+
+**Un POZO por capitulo, no un encuentro.** `get_event_def` toma ahora un **id** de
+`namespace Ev` (game/events.h) y `get_chapter_events(capitulo)` devuelve `{primero, cuantos}`:
+el orden del enum ES la tabla, y por eso los ids estan agrupados por capitulo. Un encuentro
+nuevo se anade AL FINAL DE SU CAPITULO.
+
+- **El generador coloca 2-3 salas `Event`** (`std::min(pool.count, room_count >= 16 ? 3 : 2)`)
+  y reparte ids de una **bolsa barajada**: cada sala cuenta una escena DISTINTA. Con 3-4
+  encuentros por capitulo y 2-3 salas, **en una sola partida no se ven todos ni queriendo** —
+  que es exactamente lo que hace que explorar y repetir capitulo signifiquen algo.
+- El id viaja en `FloorMap::RoomNode::event_id` -> `Room::event_id` (cuarto parametro de
+  `Room::generate`, con valor por defecto -1). **No se deduce del capitulo**: eso es lo que
+  antes obligaba a que hubiera una sola sala Event por mapa.
+- `DialogueState::event_id` y `Engine::apply_event_choice(event_id, opcion)`. El switch de
+  efectos es **plano por id**, no por capitulo.
+- `FloorMap::generate` loguea `relatos=N/M`: es lo unico que permite comprobar desde un guion
+  que el reparto no se ha roto.
+
+**Cada encuentro tiene una decision con coste real y ninguna de las dos opciones es gratis.**
+Los que son MILAGRO (la tinaja, el niño resucitado, el hacha que flota) dan efecto de partida;
+los que son decision MORAL (el tercer capitan de Ocozias, los sirios de Dotan) mueven la fe.
+Dos detalles que valen para los que vengan:
+
+- **Elegir contra el texto no contradice el texto.** "Encender tu el fuego del Carmelo",
+  "callar ante Acab" o "maldecir a los muchachos de Betel" son decisiones del JUGADOR en su
+  partida, no afirmaciones sobre lo que paso. La regla de fidelidad se rompe cuando el JUEGO
+  afirma algo falso (el caso del "Leproso Enloquecido"), no cuando el jugador falla.
+- **`add_damage` tiene suelo (4)**: los sirios de Dotan cobran su precio en DAÑO y no en fe —
+  dejas ir a un ejercito que tenias contado—, y sin suelo la eleccion piadosa dejaba el cayado
+  en nada.
+- El objeto 21 (Panes de Cebada) **es** 2 Reyes 4:43, asi que repartir los panes te lo da.
+
+**`Renderer::wrap_text` ya no trunca en silencio.** Era el unico fallo de texto que no se ve
+venir —el ingles no siempre es mas corto y la caja de dialogo con retrato pierde ~35 unidades
+de ancho—, y con 35 encuentros en dos idiomas revisarlo a ojo son 140 capturas. Ahora emite
+**`TEXT TRUNCATED (N lineas de W u): "..."`**, una vez por texto y con techo de 96 (una caja se
+redibuja cada frame: sin el techo saldrian sesenta lineas por segundo). El gate de cualquier
+guion de texto pasa a ser **cero lineas de esas**. Comprobado: los 23 guiones de `scripts/`
+pasan con cero, o sea que TODO el texto del juego cabe en ES y en EN.
+
+**El Codice cuenta el relato** (`SaveData::codex_events`, mascara de 64 bits, **guardado v8**
+con su `SaveDataV7` + `migrate_v7`): la pestana de Capitulos ensena **"Relatos N/M"** sobre el
+pasaje, y el contador global pasa de 50 a **85** (10 capitulos + 8 enemigos + 10 milagros +
+22 objetos + 35 relatos). Se marca al ABRIR el encuentro, no al resolverlo: el relato ya lo has
+leido. `migrate_v7` deja `codex_events` a cero a proposito — el fichero viejo no guarda CUALES
+se vieron, e inventarselo seria mentir en el contador.
+
+**Retratos y PNJ (fase 3).** Seis locutores nuevos con receta en `characters.py`, y cada uno
+existe para que se distinga de los demas a 24 unidades: `abdias` (el UNICO cano del juego),
+`hijo_profetas` (el unico con la cabeza descubierta y el pelo largo suelto), `hombre_baalsalisa`
+(gama de la mies), `muchacha_cautiva` (la UNICA mujer sin velo — una esclava no lleva velo de
+casada, y eso dice lo que es), `leproso_samaria` (capucha abierta y ceniza; los cuatro leprosos
+son los HEROES de 2 Reyes 7, nunca enemigos) y `principe_samaria` (azul y plata, para no
+confundirlo con Naaman ni con el General Sirio). Ademas, **`acab`, `general_sirio` y
+`soldado_acab` tienen ahora celda en `npcs.png`** aunque ya tengan hoja de personaje: el PNJ se
+dibuja desde `npcs.png` **y de ningun otro sitio**, asi que sin celda el rey Acab en su sala
+seria una hoguera.
+
+**Las vinetas de los que son ESCENA**: siete encuentros mas llevan vineta en vez de cara (el
+arroyo seco, los dos pensamientos, la nubecilla, el enebro, las tres unciones, los siete mil y
+el manto sobre el Jordan). **Regla que costo tres pasadas y vale para cualquier vineta futura**:
+la camara de vineta va casi de FRENTE (13 grados de picado), asi que **un hundido del terreno no
+se ve** — lo tapa lo que tenga delante. Las que funcionan tienen por sujeto un OBJETO, no un
+relieve: por eso el cuervo, el altar y la boca de la cueva salieron a la primera, y por eso el
+arroyo seco acabo siendo un monton de cantos de rio con un ultimo charco, y no un cauce.
+
+**Dos se quedan sin imagen a proposito** y llevan `Portrait::NONE`, que es un estado
+**soportado** (la caja se dibuja identica a antes de que el campo existiera): "el valle de las
+zanjas", porque una zanja es justo el relieve que esta camara no puede ensenar, y "en el camino
+de Betel", porque lo que hay que mirar ahi es una burla y no una cosa.
+
 ### Retratos en los encuentros (2026-08-25)
 
 Los diez encuentros de `game/events.h` llevan imagen, y son de **dos clases**. Siete
@@ -668,8 +1146,8 @@ mirando, así que llevan una **viñeta** de lo que el pasaje describe. El campo 
   una **cuarta línea** (4 líneas + 2 opciones = 70 de las 78 unidades de la caja). Sin
   retrato todas las coordenadas son las de siempre: un encuentro sin cara se ve **idéntico**
   a antes de que el campo existiera.
-- **Hoja**: `assets/sprites/portraits.png` pasa de 6x2 a **6x4, 22 celdas** (229 KB;
-  `assets/` sigue en 24 MB). Los **ocho primeros siguen siendo `EnemyType`** — el Bestiario
+- **Hoja**: `assets/sprites/portraits.png` paso de 6x2 a **6x4, 22 celdas**, y con el pozo de
+  encuentros a **6x5, 28 celdas** (293 KB; `assets/` sigue en 25 MB). Los **ocho primeros siguen siendo `EnemyType`** — el Bestiario
   indexa por tipo sin tabla de traducción — y lo nuevo se **añade al final**: del 12 al 18
   las personas, en orden de capítulo, y del 19 al 21 las tres viñetas.
 - **Siete caras nuevas en `characters.py`**: `viuda_sarepta`, `eliseo_labrador`,

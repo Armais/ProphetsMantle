@@ -5,6 +5,7 @@
 #include "ui/hud.h"
 #include "core/i18n.h"
 #include "core/config.h"
+#include "game/lore.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -666,10 +667,18 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     }
 
     int cur = fm->current_room;
+    // Dentro de un INTERIOR se marca la sala de FUERA: es donde el jugador esta de verdad
+    // en la rejilla. Dejar el mapa sin ninguna sala marcada es peor que aproximar.
+    if (cur >= 0 && cur < fm->room_count && fm->rooms[cur].interior_of >= 0)
+        cur = fm->rooms[cur].interior_of;
     bool blink = (static_cast<int>(ctx.time * 3.0f) % 2) == 0;
 
     for (int i = 0; i < fm->room_count; i++) {
         const auto& node = fm->rooms[i];
+        // Los interiores NO salen en el mapa: no estan en la rejilla (grid -1) y pintarlos
+        // en una celda inventada seria justo lo que el gate del track prohibe — que el
+        // mapa mienta. Su sala de fuera si sale, y es la que hay que buscar.
+        if (node.interior_of >= 0) continue;
         bool visited = fm->room_generated[i] && fm->room_cache[i].visited;
         // "Y vio el monte lleno": Ojos Abiertos vale por haber estado en la sala de al lado
         bool adjacent = ctx.map_revealed;
@@ -720,8 +729,16 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     }
 
     if (big) {
-        renderer.draw_text_centered(tr("Llega al JEFE (rojo) y derrótalo para abrir la salida", "Reach the BOSS (red) and beat it to open the exit"), oy + total_h + 12.0f, {200, 200, 200, 255}, 0.75f);
-        renderer.draw_text_centered(tr("Suelta TAB para volver", "Release TAB to go back"), oy + total_h + 22.0f, {160, 160, 160, 255}, 0.75f);
+        // EL OBJETIVO DEL CAPITULO. `ChapterLore::objective` existia desde el primer commit y
+        // no lo pintaba nadie: el mapa grande solo sabia decir "ve al rojo". Es lo que
+        // convierte el mapa en una respuesta a "¿que hago aqui?" (GDD2.0 fase 4).
+        if (ctx.room) {
+            const char* obj = get_chapter_lore(ctx.room->chapter).objective;
+            if (obj && obj[0])
+                renderer.draw_text_centered(obj, oy + total_h + 10.0f, {248, 216, 130, 255}, 0.85f);
+        }
+        renderer.draw_text_centered(tr("Llega al JEFE (rojo) y derrótalo para abrir la salida", "Reach the BOSS (red) and beat it to open the exit"), oy + total_h + 20.0f, {200, 200, 200, 255}, 0.75f);
+        renderer.draw_text_centered(tr("Suelta TAB para volver", "Release TAB to go back"), oy + total_h + 29.0f, {160, 160, 160, 255}, 0.75f);
     }
 }
 

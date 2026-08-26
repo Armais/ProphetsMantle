@@ -254,13 +254,18 @@ void story_ascension(StorySystem& s) {
     }
 }
 
-void story_epilogue(StorySystem& s) {
+void story_epilogue(StorySystem& s, bool joash_full) {
     ChapterLore l = get_epilogue_lore();
     StoryPage p;
     p.title = tr("EL LEGADO", "THE LEGACY");
     p.subtitle = tr("Israel ha visto la mano de Dios", "Israel has seen the hand of God");
     p.verse = l.verse;
     for (int i = 0; i < 4; i++) p.body[i] = l.lines[i];
+    p.footer = joash_full
+        ? tr("Golpeaste la tierra hasta el final, y Siria fue consumida.",
+             "You smote the ground to the end, and Syria was consumed.")
+        : tr("Te detuviste a la tercera. Siria fue herida tres veces, y volvio.",
+             "You stayed at the third. Syria was smitten thrice, and came again.");
     p.accent = {225, 220, 245, 255};
     s.add(p);
 }

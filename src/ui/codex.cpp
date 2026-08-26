@@ -147,11 +147,21 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
 
     Scripture s = {"", nullptr};
     bool known = false;
-    const char* effect = nullptr;   // solo objetos: que hace, encima del pasaje
+    const char* effect = nullptr;   // encima del pasaje: que hace el objeto, o cuantos relatos
+    char rel_buf[40] = {};          // vive hasta el final de la funcion: `effect` le apunta
     switch (tab) {
         case CodexTab::Chapters:
             known = codex_knows_chapter(save, selected + 1);
-            if (known) s = get_chapter_lore(selected + 1).verse;
+            if (known) {
+                s = get_chapter_lore(selected + 1).verse;
+                int total_ev = 0;
+                int seen_ev = codex_chapter_events(save, selected + 1, total_ev);
+                if (total_ev > 0) {
+                    snprintf(rel_buf, sizeof(rel_buf), tr("Relatos  %d / %d", "Stories  %d / %d"),
+                             seen_ev, total_ev);
+                    effect = rel_buf;
+                }
+            }
             break;
         case CodexTab::Bestiary: {
             EnemyType t = static_cast<EnemyType>(selected);
@@ -223,6 +233,7 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     for (int i = 0; i < ENEMY_COUNT; i++)   { total++; if (codex_knows_enemy(save, static_cast<EnemyType>(i))) found++; }
     for (int i = 0; i < static_cast<int>(MiracleID::COUNT); i++) { total++; if (codex_knows_miracle(save, static_cast<MiracleID>(i))) found++; }
     for (const auto& it : registry.items)   { total++; if (codex_knows_item(save, it.id)) found++; }
+    for (int i = 0; i < Ev::COUNT; i++)     { total++; if (codex_knows_event(save, i)) found++; }
     char count_buf[48];
     if (tab == CodexTab::Achievements) {
         int got = 0;

@@ -11,6 +11,7 @@
 #include "core/config.h"
 #include "core/ecs.h"
 #include "render/renderer.h"
+#include "render/camera.h"
 #include "input/input.h"
 #include "audio/audio.h"
 #include "game/faith.h"
@@ -60,6 +61,7 @@ struct ItemChoice {
 
 // Encuentro biblico en curso (GameScene::Dialogue). El texto sale de get_event_def().
 struct DialogueState {
+    int  event_id = -1;      // id de `namespace Ev` (game/events.h), no el capitulo
     int  chapter  = 0;
     int  line     = 0;       // Linea de dialogo que se esta leyendo
     int  selected = 0;
@@ -67,6 +69,9 @@ struct DialogueState {
     bool resolved = false;   // Ya se eligio: se muestra el resultado
     const char* result = ""; // Texto de la opcion elegida
     f32  auto_timer = 0.0f;  // > 0 (autoplay): decide solo
+    // El Ascenso se juega sobre NEGRO y no sobre el mundo: pasa fuera de una sala, y
+    // dejar detras la arena del jefe del capitulo 5 seria mentir sobre donde estas.
+    bool dark = false;
 };
 
 enum class Act : u8 {
@@ -159,6 +164,12 @@ struct Engine {
     // Room / Map
     FloorMap  floor_map;
     Room      current_room_data;
+    // La camara del mundo exterior. `Camera` existia desde el primer commit y NO la llamaba
+    // nadie: con la sala midiendo exactamente una pantalla no habia nada que seguir. Ahora
+    // una sala exterior son 2x2 pantallas y esto es lo que las hace recorribles. En una sala
+    // de una pantalla — la arena del jefe, y los interiores de la fase siguiente — su
+    // recorte contra los limites la deja clavada, o sea el comportamiento de siempre.
+    Camera    camera;
     Direction entry_direction = Direction::None;  // Which side the player entered from
     Entity    boss_entity = ENTITY_NONE;
 
@@ -168,6 +179,7 @@ struct Engine {
     u32 tileset_texture = TEXTURE_NONE;
     u32 vfx_texture     = TEXTURE_NONE;   // assets/sprites/vfx.png (ver spawn_fx)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
+    u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
 
     // Frame draw list (reused)
     std::vector<DrawCmd> draw_list;
@@ -255,12 +267,33 @@ struct Engine {
 
     // Room loading
     void load_room(int room_index);
+    // Tile en el que debe aparecer el profeta al cargar la sala (-1 = el sitio de siempre,
+    // segun `entry_direction`). Lo usan las puertas: al entrar y al salir de un interior no
+    // se llega por un borde, se llega POR LA PUERTA.
+    int spawn_tx = -1, spawn_ty = -1;
+    void use_doorway();                         // entrar al interior o volver de el
+
+    // --- El Ascenso (2 Reyes 2:1-14) ---------------------------------------------
+    // Cuatro paradas SEGUIDAS con decision, en vez de las cinco lineas de texto que
+    // habia. `ascent_step` es -1 fuera del Ascenso; 0..3 durante el viaje.
+    int  ascent_step    = -1;
+    int  ascent_follows = 0;      // cuantas veces le seguiste (0..3)
+    bool ascent_double  = true;   // pediste la doble porcion
+    void ascent_next();           // siguiente parada, o el carro de fuego
+
+    // --- El epilogo "El Legado" (2 Reyes 9; 13:14-21) -----------------------------
+    // Mismo mecanismo que el Ascenso: tres escenas seguidas y luego la pagina de cierre.
+    // `joash_full` recuerda si el rey golpeo hasta el final, y con eso cambian las
+    // ultimas palabras del juego.
+    int  epilogue_step = -1;
+    bool joash_full    = true;
+    void epilogue_next();
     void spawn_room_enemies();
     void try_room_transition();  // Check if player crossed a room border
     void update_room_state();    // Clear detection, boss death, tile interactions
-    void open_dialogue(int chapter);            // Encuentro biblico -> GameScene::Dialogue
+    void open_dialogue(int event_id);           // Encuentro biblico -> GameScene::Dialogue
     void update_dialogue(f32 dt);               // Avance de lineas + eleccion
-    void apply_event_choice(int chapter, int option);   // Efecto de la decision
+    void apply_event_choice(int event_id, int option);  // Efecto de la decision
     void open_item_choice(const char* title);      // Roll 3 item offers -> GameScene::Choice
     void open_miracle_choice(const char* title);   // Roll 3 miracle offers -> GameScene::Choice
     void update_item_choice(f32 dt);            // Navigation + confirm on the choice screen

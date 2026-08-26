@@ -4,7 +4,12 @@
 #
 # Que hay que ver en el log:
 #   Victory without the epilogue (faith 10 < 75)  -> pantalla de victoria CON la nota
-#   Victory: epilogue unlocked (faith 100)        -> paginas del epilogo y luego victoria
+#   Victory: epilogue unlocked (faith 100)        -> las TRES escenas y luego la victoria
+#   "Epilogo: el arco de Joas hasta el final"      -> la eleccion del arco cambia el cierre
+#
+# El epilogo se RECORRE, igual que el Ascenso: Jehu y la muerte de Jezabel (que cumple la
+# palabra de Elias sobre la vina de Nabot), el arco de Joas y los huesos de Eliseo. En
+# autoplay el dialogo decide solo y siempre toma la primera opcion.
 
 wait 1.0
 press confirm
@@ -47,7 +52,13 @@ wait 2.5
 faith 100
 wait 0.3
 advance
-wait 2.0
+wait 1.2
+shot 81a_epilogo_jehu
+wait 4.4
+shot 81b_epilogo_arco_joas
+wait 4.4
+shot 81c_epilogo_huesos
+wait 4.4
 shot 81_epilogo_pagina
 wait 0.1
 wait 8.0

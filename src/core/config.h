@@ -201,12 +201,24 @@ enum class AimMode : u8 {
 // =============================================================================
 // Rooms
 // =============================================================================
-constexpr int ROOM_WIDTH          = GAME_WIDTH;
-constexpr int ROOM_HEIGHT         = GAME_HEIGHT;
 constexpr int TILE_SIZE           = 16;
-constexpr int ROOM_TILES_X        = GAME_WIDTH / TILE_SIZE;   // 20
-constexpr int ROOM_TILES_Y        = GAME_HEIGHT / TILE_SIZE;  // 11 (+ remainder)
-constexpr int MAX_ENEMIES_PER_ROOM = 12;
+
+// Una PANTALLA en tiles. Es el tamano de un interior (palacio, cueva, casa) y de la arena
+// del jefe, donde la camara se queda clavada — que es lo que el juego hacia en TODAS las
+// salas hasta la pasada del mundo exterior.
+constexpr int SCREEN_TILES_X      = GAME_WIDTH / TILE_SIZE;   // 20
+constexpr int SCREEN_TILES_Y      = GAME_HEIGHT / TILE_SIZE;  // 11 (+ resto)
+
+// Una sala EXTERIOR: 2x2 pantallas, con la camara siguiendo al profeta (referencia ALTTP,
+// ver CLAUDE.md). Tambien es el tope de `Room::tiles`, asi que un interior de una pantalla
+// usa la misma matriz y deja el resto sin tocar.
+constexpr int ROOM_TILES_X        = SCREEN_TILES_X * 2;       // 40
+constexpr int ROOM_TILES_Y        = SCREEN_TILES_Y * 2;       // 22
+constexpr int ROOM_W_UNITS        = ROOM_TILES_X * TILE_SIZE; // 640
+constexpr int ROOM_H_UNITS        = ROOM_TILES_Y * TILE_SIZE; // 352
+
+// Sube con el area: doce enemigos repartidos en cuatro pantallas es un descampado.
+constexpr int MAX_ENEMIES_PER_ROOM = 18;
 
 // =============================================================================
 // Run / Session
