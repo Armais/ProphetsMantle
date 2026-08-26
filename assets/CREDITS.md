@@ -4,21 +4,34 @@ Registro de procedencia de **todo** lo que hay en `assets/`. La regla del proyec
 un asset sin procedencia anotada aquí es un asset que hay que sacar, así que este fichero
 se actualiza **al meter** el asset, no después.
 
-Estado a 2026-08-25: **no hay ni un asset de terceros salvo la tipografía.** Todo lo
-demás se genera con las herramientas del propio repositorio, así que el juego se puede
-distribuir comercialmente sin más trámite que respetar la OFL de la fuente.
+Estado a 2026-08-26: **no hay ningún asset de terceros con obligaciones, salvo la
+tipografía (OFL).** La música hornea samples de percusión que Sonic Pi trae de serie, en
+**CC0 1.0 (dominio público, sin atribución obligatoria)**; todo lo demás se genera con las
+herramientas del propio repositorio. El juego se puede distribuir comercialmente sin más
+trámite que respetar la OFL de la fuente.
 
 ## Audio — 100 % generado por el proyecto
 
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
-| 10 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/gen_audio.py` |
+| 10 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
 | 37 efectos de sonido | `assets/audio/sfx/*.ogg` | `tools/audio/gen_audio.py` |
 | 15 exclamaciones de voz | `assets/audio/sfx/voz_*.ogg` | `tools/audio/gen_audio.py` (132 KB) |
 
-Síntesis propia con numpy: cuerdas Karplus-Strong, flauta de caña (*ney*), percusión
-sintetizada, sala tipo Schroeder y compresor de bus. **No hay muestras de terceros, ni
-samples de bibliotecas, ni material con licencia ajena.**
+**Música (2026-08-26): compuesta por el proyecto en Sonic Pi.** Las 10 partituras viven en
+`tools/audio/sonicpi/*.rb` y son composición original (reorquestan los temas que ya generaba
+`gen_audio.py`); `record.py` arranca el daemon de Sonic Pi sin GUI, graba la salida de
+SuperCollider bit a bit, corta el periodo exacto del bucle y encodea el `.ogg`. Sonic Pi y
+SuperCollider son **herramientas de generación** (como Blender o ffmpeg): no se distribuye ni
+se enlaza nada suyo con el juego. La percusión usa samples que Sonic Pi trae de serie
+(tablas, bombos, platos), publicados bajo **CC0 1.0 (dominio público)**, sin obligación de
+atribución; el resto es síntesis de los sintetizadores de Sonic Pi. Las versiones anteriores
+(síntesis numpy) quedan en `tools/audio/music_backup/` y `gen_audio.py` sigue pudiendo
+regenerarlas.
+
+Los SFX y las voces siguen siendo síntesis propia con numpy: cuerdas Karplus-Strong, flauta
+de caña (*ney*), percusión sintetizada, sala tipo Schroeder y compresor de bus. **En SFX y
+voz no hay muestras de terceros, ni samples de bibliotecas, ni material con licencia ajena.**
 
 **Las voces también son síntesis, no grabaciones ni TTS.** Modelo fuente-filtro: pulso
 glotal (diente de sierra suavizado, con *jitter* de tono y *shimmer* de amplitud) pasado
@@ -28,9 +41,13 @@ habría metido una dependencia externa y una licencia ajena, y este repo no las 
 Regenerar con:
 
 ```
-python tools/audio/gen_audio.py            # todo, salida .ogg
+python tools/audio/gen_audio.py            # SFX y voz, salida .ogg
 python tools/audio/gen_audio.py all wav    # .wav sin comprimir (depuración)
 python tools/audio/gen_audio.py voz_       # solo un grupo, por prefijo de nombre
+
+# Música (Sonic Pi): arrancar el daemon y grabar cada pista
+python tools/audio/sonicpi/record.py boot            # proceso de larga vida
+python tools/audio/sonicpi/record.py capture <pista> <periodo_s>   # y mandar el .rb por el MCP
 ```
 
 La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compilación
