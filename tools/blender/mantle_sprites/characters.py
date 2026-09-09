@@ -1,6 +1,7 @@
 """Character builders: shared humanoid (spec-driven), lion (quadruped) and blob."""
 import math
 from mathutils import Vector, Matrix
+from . import parts
 from .parts import get_mat, hexc, vivid, box, sphere, tube, attach, attach_obj, set_origin, rotate_about, scale_about
 from .rig import build_armature
 
@@ -224,15 +225,17 @@ def build_humanoid(name, spec):
     if spec.get('sash'):
         A(box(f'{name}_sash', (0, -0.115, 1.25), (0.09, 0.02, 0.44), M('sash', spec['sash']),
               round=0.9), 'spine')
-    # tunic skirt / robe
+    # tunic skirt / robe. Con parts.DETAIL (paneles) la tela cae con pliegues: nueve
+    # lobulos que crecen hacia el bajo. En una hoja de 128 px no se ven y no se piden.
+    folds = dict(flutes=9, flute_amp=0.07) if parts.DETAIL else {}
     if spec.get('tunic_len', 'short') == 'long':
         robe = M('robe', spec.get('robe', spec['tunic']))
         r_waist, r_hem = (0.165, 0.335) if spec.get('slim') else (0.19, 0.30)
         A(tube(f'{name}_robe', (0, 0, 1.00), (0, 0, 0.10), r_waist, r_hem, robe, segs=32,
-               rim_round=0.03), 'hips')
+               rim_round=0.03, **folds), 'hips')
     else:
         A(tube(f'{name}_skirt', (0, 0, 1.00), (0, 0, 0.62), 0.19, 0.24, tunic, segs=32,
-               rim_round=0.03), 'hips')
+               rim_round=0.03, **folds), 'hips')
     if spec.get('mantle'):
         mantle = M('mantle', spec['mantle'])
         A(box(f'{name}_mantle', (0, 0.135, 1.18), (0.42, 0.07, 0.56), mantle,
@@ -652,7 +655,7 @@ SPECS = {
         skin='#d9a066', hair='#1a1410', beard='#1a1410',
         eyes='#242a34', brow='noble', mouth_color='#7a3a34',
         band='#c8ccd4',
-        tunic='#2f4a86', tunic_len='long', robe='#233a६6', sleeves='#3a5a9e',
+        tunic='#2f4a86', tunic_len='long', robe='#233a66', sleeves='#3a5a9e',
         armor='#c8ccd4', belt='#c8ccd4', cape='#1d2f5e', bracer='#c8ccd4', shoes='#2a2a2a',
         weapon=None, attack='raise')),
 }
