@@ -76,6 +76,18 @@ once paneles y nadie lo vio porque solo se miraba la cobertura del log.
   de posar y con el armature en el origen (`attach` fija en reposo). El regazo se ESTRECHA
   hacia la rodilla y va plano (y x0.58): de seccion constante era un cojin rectangular
   sobre el que el profeta parecia sentado. Las poses de pie no cambian ni un vertice.
+- **El signo de las piernas estaba al reves en las cuatro poses de arrodillado/sentado**
+  (`POSE_KNEEL`, `POSE_DRINK`, `POSE_ENTHRONED` y `POSE_RECOIL`), y eso es lo que el usuario
+  vio como «Elias con el cuerpo al reves» (dos quejas, 2026-09-09). Una rotacion X positiva
+  es la MISMA rotacion para todos los huesos: la punta de un hueso que apunta ARRIBA (spine,
+  chest, head) va hacia delante y la de uno que apunta ABAJO (muslos, brazos) va hacia
+  ATRAS. `POSE_POINT` ya lo decia de los brazos; las piernas se escribieron con el signo de
+  la columna y el muslo «alzado» salia horizontal hacia atras a la altura de la cadera. Con
+  la falda rigida solo asomaba una pierna suelta; con el drapeado, la rodilla entera detras
+  de la espalda — un fallo de pose que el drapeado no creo pero si hizo evidente. Regla:
+  muslo adelantado = X NEGATIVO; espinilla que baja desde una rodilla alzada = X positivo
+  (deshace el del muslo); espinilla que va por el suelo hacia atras = X positivo grande.
+  `_drape_legs` elige el muslo del regazo por el valor ABSOLUTO del giro.
 - **`parts.set_quality('cine')`** (bisel 8 tramos, esferas 64x40, tubos 48, `DETAIL`):
   `render_panel` lo pone al montar y lo RESTAURA al acabar, porque una hoja renderizada
   despues en la misma sesion de Blender tiene que salir como siempre. `DETAIL` enciende los

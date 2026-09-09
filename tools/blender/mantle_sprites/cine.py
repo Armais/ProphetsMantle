@@ -675,7 +675,7 @@ def _drape_legs(name, arm, pose):
     algun muslo pasa de 45 grados; una pose de pie deja al personaje exactamente igual.
     Va ANTES de posar y con el armature en el origen: `attach` fija la pieza en reposo.
     """
-    bl, br = _leg_bend(pose, 'L'), _leg_bend(pose, 'R')
+    bl, br = abs(_leg_bend(pose, 'L')), abs(_leg_bend(pose, 'R'))
     if max(bl, br) < 45.0:
         return
     F, B = ('L', 'R') if bl >= br else ('R', 'L')   # F = el muslo mas doblado lleva el regazo
@@ -734,10 +734,22 @@ def _drape_legs(name, arm, pose):
 
 
 # Poses used by more than one panel (world axes, see rig.pose_apply)
+#
+# SIGNO DE LAS PIERNAS (2026-09-09, tras la queja «Elias parece con el cuerpo al reves»):
+# una rotacion X positiva es la MISMA rotacion para todos los huesos, y eso significa que
+# la punta de un hueso que apunta ARRIBA (spine, chest, head) va hacia delante y la de uno
+# que apunta ABAJO (muslos, brazos) va hacia ATRAS. POSE_POINT ya lo sabia para los brazos
+# («X negativo lleva el brazo AL FRENTE»); las piernas de las poses de arrodillado se
+# escribieron con el signo de la columna, y el muslo «alzado» salia horizontal hacia atras
+# a la altura de la cadera, con la espinilla cayendo por detras del cuerpo. Con la falda
+# rigida de antes solo se veia una pierna suelta; con el drapeado, la rodilla entera
+# detras de la espalda. Regla: muslo adelantado = X NEGATIVO; espinilla que baja desde
+# una rodilla alzada = X positivo (deshace el del muslo); espinilla que va por el suelo
+# hacia atras = X positivo grande.
 POSE_KNEEL = {
     'root': {'loc': (0.0, 0.0, -0.42)},
-    'thigh.L': {'rot': [('X', 82.0)]}, 'shin.L': {'rot': [('X', -92.0)]},
-    'thigh.R': {'rot': [('X', 20.0)]}, 'shin.R': {'rot': [('X', -95.0)]},
+    'thigh.L': {'rot': [('X', -82.0)]}, 'shin.L': {'rot': [('X', 92.0)]},
+    'thigh.R': {'rot': [('X', 20.0)]}, 'shin.R': {'rot': [('X', 72.0)]},
     'spine': {'rot': [('X', 10.0)]}, 'chest': {'rot': [('X', 8.0)]},
     'head': {'rot': [('X', 16.0)]},
     'upper_arm.L': {'rot': [('X', -28.0), ('Y', 14.0)]},
@@ -758,9 +770,9 @@ POSE_POINT = {   # "delante de quien estoy": mano IZQUIERDA al rey, cayado en al
 }
 
 POSE_ENTHRONED = {
-    'root': {'loc': (0.0, 0.0, -0.30)},
-    'thigh.L': {'rot': [('X', 84.0)]}, 'shin.L': {'rot': [('X', -86.0)]},
-    'thigh.R': {'rot': [('X', 84.0)]}, 'shin.R': {'rot': [('X', -86.0)]},
+    'root': {'loc': (0.0, 0.0, -0.36)},
+    'thigh.L': {'rot': [('X', -84.0)]}, 'shin.L': {'rot': [('X', 86.0)]},
+    'thigh.R': {'rot': [('X', -84.0)]}, 'shin.R': {'rot': [('X', 86.0)]},
     'upper_arm.L': {'rot': [('X', -14.0), ('Y', 26.0)]},
     'upper_arm.R': {'rot': [('X', -14.0), ('Y', -26.0)]},
     'forearm.L': {'rot': [('X', -58.0)]}, 'forearm.R': {'rot': [('X', -58.0)]},
@@ -802,8 +814,8 @@ POSE_RAISE = {   # firme en el promontorio, el cayado erguido y el manto al vien
 
 POSE_DRINK = {   # de rodillas junto al agua, la mano hacia el arroyo
     'root': {'loc': (0.0, 0.0, -0.44)},
-    'thigh.L': {'rot': [('X', 86.0)]}, 'shin.L': {'rot': [('X', -96.0)]},
-    'thigh.R': {'rot': [('X', 34.0)]}, 'shin.R': {'rot': [('X', -102.0)]},
+    'thigh.L': {'rot': [('X', -86.0)]}, 'shin.L': {'rot': [('X', 96.0)]},
+    'thigh.R': {'rot': [('X', 34.0)]}, 'shin.R': {'rot': [('X', 60.0)]},
     'spine': {'rot': [('X', 26.0)]}, 'chest': {'rot': [('X', 20.0)]},
     'head': {'rot': [('X', 26.0)]},
     'upper_arm.L': {'rot': [('X', -62.0), ('Y', 12.0)]},
