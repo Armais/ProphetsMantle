@@ -56,14 +56,15 @@ stats tras_pelea
 # =============================================================================
 # 3) killall solo mata hostiles y la sala se declara limpia con discipulos vivos
 # =============================================================================
-# Hace falta una sala de COMBATE (la de inicio no lo es y nunca se "despeja"), y
-# sin fijar la semilla el mapa cambia en cada partida.
+# Hace falta una sala de COMBATE. Desde los mapas fijos (2026-08-27) el reparto de salas
+# es CONFIGURACION (CHAPTER_LAYOUT, rooms.cpp) y no depende de la semilla: en el cap. 1
+# las Normal son 1, 6 y 8 (la 3 paso a ser sala de Encuentro).
 seed 4242
 chapter 1
 wait 3.0
 press confirm
 wait 2.5
-goto 3
+goto 6
 wait 1.5
 learn 8 2
 faith 100

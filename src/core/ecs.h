@@ -191,6 +191,9 @@ struct ProjectileComponent {
     u8 hit_count = 0;
 
     bool already_hit(Entity e) const {
+        // Lista llena = proyectil agotado: sin este corte, con mark_hit callado el 9o
+        // objetivo recibia el dano CADA frame mientras la piedra lo cruzaba.
+        if (hit_count >= 8) return true;
         for (u8 i = 0; i < hit_count; i++) if (hit_list[i] == e) return true;
         return false;
     }

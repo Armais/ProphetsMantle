@@ -4,9 +4,16 @@
 // MANTLE - Encuentros biblicos (salas RoomType::Event)
 // =============================================================================
 //
-// Un POZO por capitulo, no un encuentro. `FloorMap::generate` coloca 2-3 salas Event y
-// sortea sin repetir, asi que dos partidas del mismo capitulo no cuentan lo mismo y quien
-// no explora se pierde relato.
+// Un POZO por capitulo, no un encuentro. Desde los mapas fijos (2026-08-27) el pozo COMPLETO
+// se coloca en celdas fijas (`CHAPTER_LAYOUT` en rooms.cpp): toda partida puede ver todos los
+// relatos, y quien no explora se los pierde.
+//
+// El pozo sigue el ORDEN DE 1-2 REYES (pasada de coherencia, 2026-08-31): nada que el prologo
+// o un capitulo anterior ya conto se vuelve a jugar como presente. Por eso el cap. 1 no tiene
+// audiencia con Acab (1 R 17:1 es el prologo, y Querit viene despues), el cap. 6 no repite el
+// cruce del Jordan (lo cuenta la cinematica del Ascenso), y Hazael y la uncion de Jehu
+// (2 R 8-9) viven en el cap. 10 y no en el 9: en el libro van DESPUES del sitio de Samaria,
+// y ponerlos antes mataba a Ben-adad una sala antes de pelear contra el.
 //
 // Aqui solo vive el TEXTO; el efecto de cada opcion lo aplica
 // Engine::apply_event_choice(id, opcion) usando los sistemas existentes (fe, vida, danio,
@@ -56,30 +63,34 @@ struct EventDef {
 namespace Ev {
 enum : int {
     // --- Acto I ----------------------------------------------------------
-    CUERVOS_QUERIT = 0, NI_ROCIO_NI_LLUVIA, ARROYO_SECO,                    // cap 1
+    CUERVOS_QUERIT = 0, RASTREADOR_DE_ACAB, ARROYO_SECO,                    // cap 1
     VIUDA_SAREPTA, TINAJA_HARINA, HIJO_DE_LA_VIUDA,                         // cap 2
     ALTAR_CARMELO, ABDIAS, DOS_PENSAMIENTOS, NUBECILLA,                     // cap 3
     BOCA_CUEVA, ENEBRO_ANGEL, TRES_UNCIONES, SIETE_MIL,                     // cap 4
     LLAMADO_ELISEO, VINA_NABOT, TERCER_CAPITAN,                             // cap 5
     // --- Acto II ---------------------------------------------------------
-    AGUAS_JERICO, MANTO_JORDAN, MUCHACHOS_BETEL,                            // cap 6
-    ACEITE_VIUDA, ZANJAS_MOAB, MUERTE_EN_LA_OLLA, PANES_CEBADA,             // cap 7
+    AGUAS_JERICO, CINCUENTA_BUSCAN, MUCHACHOS_BETEL, HIEL_DE_JERICO,        // cap 6
+    ACEITE_VIUDA, ZANJAS_MOAB, MUERTE_EN_LA_OLLA, PANES_CEBADA, REY_DE_MOAB,// cap 7
     APOSENTO_SUNAMITA, NINO_SUNAMITA, HACHA_QUE_FLOTA, TIERRAS_SUNAMITA,    // cap 8
-    NAAMAN_PUERTA, MUCHACHA_CAUTIVA, HAZAEL_BENADAD,                        // cap 9
-    CRIADO_ELISEO, SIRIOS_DOTAN, CUATRO_LEPROSOS, PRINCIPE_SAMARIA,         // cap 10
+    NAAMAN_PUERTA, MUCHACHA_CAUTIVA, TIERRA_DE_ISRAEL,                      // cap 9
+    CRIADO_ELISEO, SIRIOS_DOTAN, CUATRO_LEPROSOS, PRINCIPE_SAMARIA,
+    HAZAEL_BENADAD, UNCION_JEHU,                                            // cap 10
     // --- La Ascension (2 Reyes 2:1-14) -----------------------------------
     // No pertenecen a ningun capitulo: son las cuatro paradas del viaje, y se juegan
     // SEGUIDAS al acabar el Acto I. `event_chapter` devuelve 0 para ellas a proposito.
     ASC_GILGAL, ASC_BETEL, ASC_JERICO, ASC_JORDAN,
     // --- El epilogo: "El Legado" (2 Reyes 9; 13:14-21) -------------------
-    // Tambien seguidas, y tambien fuera de todo capitulo. Cierran los DOS arcos: la palabra
-    // de Elias sobre la vina de Nabot, que se cumple con Jehu, y el ultimo milagro de
-    // Eliseo, que ocurre cuando ya lleva un ano muerto.
+    // Tambien seguidas, y tambien fuera de todo capitulo. Cierra los dos arcos de los
+    // profetas y NADA mas (decision del usuario, 2026-08-30: todo relato va anclado a
+    // Elias o Eliseo): Jehu/Jezabel cumple la palabra de Elias sobre la vina de Nabot,
+    // el arco de Joas es el lecho de muerte de Eliseo y los huesos su ultimo milagro.
     EPI_JEHU, EPI_ARCO_JOAS, EPI_HUESOS,
     COUNT
 };
 
-// Las cuatro paradas, en orden. El Ascenso es el unico "pozo" que no se sortea: se recorre.
+// Las paradas de cada cadena, en orden. Las cadenas no se sortean: se recorren.
+// Ojo con el techo: `SaveData::codex_events` es un u64 y COUNT va por 46 de 64.
+// Si el pozo vuelve a crecer mas alla de 64 ids hace falta una segunda mascara (v10).
 constexpr int ASCENT_STOPS = 4;
 constexpr int EPILOGUE_STOPS = 3;
 }
@@ -97,11 +108,11 @@ inline EventPool get_chapter_events(int chapter) {
         case 3:  return {Ev::ALTAR_CARMELO,     4};
         case 4:  return {Ev::BOCA_CUEVA,        4};
         case 5:  return {Ev::LLAMADO_ELISEO,    3};
-        case 6:  return {Ev::AGUAS_JERICO,      3};
-        case 7:  return {Ev::ACEITE_VIUDA,      4};
+        case 6:  return {Ev::AGUAS_JERICO,      4};
+        case 7:  return {Ev::ACEITE_VIUDA,      5};
         case 8:  return {Ev::APOSENTO_SUNAMITA, 4};
         case 9:  return {Ev::NAAMAN_PUERTA,     3};
-        case 10: return {Ev::CRIADO_ELISEO,     4};
+        case 10: return {Ev::CRIADO_ELISEO,     6};
         default: return {0, 0};
     }
 }
@@ -137,17 +148,20 @@ inline EventDef get_event_def(int id) {
           tr("El hambre aprieta, pero la confianza crece.", "Hunger bites, but trust grows.")}},
         Portrait::CUERVOS_QUERIT
     };
-    case Ev::NI_ROCIO_NI_LLUVIA: return {
-        tr("Ante el rey Acab", "Before king Ahab"),
-        {tr("Nadie te ha anunciado. Has entrado, y la sala entera se ha callado.", "No one announced you. You walked in, and the whole hall fell silent."),
-         tr("En el estrado, Baal de bronce. Debajo, el rey que lo mandó labrar.", "On the dais, Baal in bronze. Below it, the king who had it cast."),
-         tr("Lo que digas ahora cierra el cielo sobre Israel, o no lo cierra.", "What you say now shuts heaven over Israel, or does not.")},
-        {"1 Reyes 17:1", nullptr},
-        {{tr("Jurarlo en su cara", "Swear it to his face"), tr("-10 HP máx", "-10 max HP"),
-          tr("«No habrá lluvia ni rocío sino por mi palabra». Sales de Samaria perseguido, y con lo puesto.", "«There shall not be dew nor rain but according to my word». You leave Samaria hunted, with what you wear.")},
-         {tr("Callar y salir de la ciudad", "Keep silence and leave"), tr("-8 Fe", "-8 Faith"),
-          tr("Guardas la palabra y guardas las fuerzas. El bronce sigue en su sitio.", "You keep the word and keep your strength. The bronze stays where it stands.")}},
-        Portrait::ACAB, Npc::ACAB
+    // El juramento ante Acab (1 R 17:1) es el PROLOGO: aqui, en Querit, lo que hay es la
+    // caceria que ese juramento desato. El rastreador viste el uniforme de la casa del rey
+    // — misma celda que el Soldado de Acab del Bestiario y que el tercer capitan.
+    case Ev::RASTREADOR_DE_ACAB: return {
+        tr("El rastreador de Acab", "Ahab's tracker"),
+        {tr("Un rastreador del rey baja al cañón siguiendo el agua, y se arrodilla a beber de tu arroyo.", "A king's tracker comes down the canyon following the water, and kneels to drink from your brook."),
+         tr("La sequía que juraste seca los pozos de Israel: los que quedan tienen vigía.", "The drought you swore is drying the wells of Israel: those that remain are watched."),
+         tr("«Acab ha hecho jurar a reinos enteros que no te han hallado». Aún no te ha visto.", "«Ahab hath taken an oath of whole kingdoms that they found thee not». He has not seen you yet.")},
+        {"1 Reyes 18:10", nullptr},
+        {{tr("Quedarte inmóvil entre las peñas", "Keep still among the rocks"), nullptr,
+          tr("Bebe, llena el odre y se va monte arriba. El escondite de Dios aguanta lo que Dios quiera.", "He drinks, fills his skin and climbs away. God's hiding place holds as long as God wills.")},
+         {tr("Salir y desarmarlo", "Step out and disarm him"), "-10 HP",
+          tr("Lo mandas al desierto sin lanza y sin odre. Contará dónde corre el agua — y quién la guarda.", "You send him into the desert without spear or skin. He will tell where the water runs — and who keeps it.")}},
+        Portrait::OFICIAL_REAL, Npc::OFICIAL_REAL
     };
     case Ev::ARROYO_SECO: return {
         tr("El arroyo seco", "The dried brook"),
@@ -345,7 +359,6 @@ inline EventDef get_event_def(int id) {
           tr("Cincuenta y uno más. Nadie volverá a subir a este monte, y nadie volverá a escucharte tampoco.", "Fifty-one more. No one will climb this hill again, and no one will listen to you again either.")}},
         Portrait::OFICIAL_REAL, Npc::OFICIAL_REAL
     };
-
     // =========================================================================
     // Cap. 6 - Las Aguas de Jerico (2 Reyes 2:13-25)
     // =========================================================================
@@ -361,17 +374,20 @@ inline EventDef get_event_def(int id) {
           tr("El agua raspa la garganta. Pero la ciudad ve que no la temes.", "The water scrapes your throat. But the city sees you do not fear it.")}},
         Portrait::HOMBRE_JERICO, Npc::HOMBRE_JERICO
     };
-    case Ev::MANTO_JORDAN: return {
-        tr("El manto sobre el Jordán", "The mantle on the Jordan"),
-        {tr("El carro de fuego ya no está. En tus manos queda el manto que se le cayó.", "The chariot of fire is gone. What is left in your hands is the mantle that fell from him."),
-         tr("El río corre delante, y detrás miran cincuenta hijos de los profetas.", "The river runs before you, and fifty sons of the prophets watch behind."),
-         tr("«¿Dónde está Jehová, el Dios de Elías?».", "«Where is the Lord God of Elijah?».")},
-        {"2 Reyes 2:13-14", nullptr},
-        {{tr("Golpear el agua con el manto", "Smite the waters with the mantle"), tr("-15 Fe", "-15 Faith"),
-          tr("Las aguas se apartaron a un lado y a otro, y pasaste. «Reposó el espíritu de Elías sobre Eliseo».", "The waters parted hither and thither, and you went over. «The spirit of Elijah doth rest on Elisha».")},
-         {tr("Rodear por el vado", "Go round by the ford"), "-12 HP",
-          tr("Cruzas con el agua al pecho, como cualquiera. Los cincuenta te siguen mirando.", "You cross chest-deep, like any man. The fifty are still watching.")}},
-        Portrait::MANTO_JORDAN
+    // El cruce del Jordan con el manto (2 R 2:13-14) lo cuenta la cinematica del Ascenso:
+    // aqui, en Jerico, lo que sigue es 2 R 2:15-18 — los cincuenta que quieren salir a
+    // buscar a Elias por montes y valles.
+    case Ev::CINCUENTA_BUSCAN: return {
+        tr("Los cincuenta de Jericó", "The fifty of Jericho"),
+        {tr("«El espíritu de Elías reposó sobre Eliseo». Los hijos de los profetas se inclinan hasta tierra.", "«The spirit of Elijah doth rest on Elisha». The sons of the prophets bow to the ground."),
+         tr("«Hay aquí cincuenta varones fuertes: que vayan y busquen a tu señor.", "«Behold, there be with thy servants fifty strong men: let them go and seek thy master."),
+         tr("Quizá lo ha levantado el Espíritu y lo ha echado en algún monte o en algún valle».", "Peradventure the Spirit hath taken him up, and cast him upon some mountain, or into some valley».")},
+        {"2 Reyes 2:16-18", nullptr},
+        {{tr("Ceder y dejarles buscar", "Yield, and let them search"), tr("-10 Fe", "-10 Faith"),
+          tr("Insisten hasta avergonzarte, y cedes. Tres días buscan por montes y valles. «¿No os dije que no fueseis?».", "They urge you till you are ashamed, and you yield. Three days they search hill and valley. «Did I not say unto you, Go not?».")},
+         {tr("«No enviéis»", "«Ye shall not send»"), nullptr,
+          tr("Lo dices una vez y no lo repites. Lo que viste subir en el torbellino no está en ningún valle.", "You say it once and do not say it again. What you saw go up in the whirlwind lies in no valley.")}},
+        Portrait::HIJO_PROFETAS, Npc::HIJO_PROFETAS
     };
     case Ev::MUCHACHOS_BETEL: return {
         tr("En el camino de Betel", "On the way up to Bethel"),
@@ -384,6 +400,18 @@ inline EventDef get_event_def(int id) {
          {tr("Volverte y maldecirlos", "Turn back and curse them"), tr("-20 Fe", "-20 Faith"),
           tr("Los maldijiste en el nombre de Jehová. Salieron dos osas del monte. Nadie volvió a burlarse.", "You cursed them in the name of the Lord. Two she-bears came out of the wood. No one mocked again.")}},
         Portrait::NONE
+    };
+    case Ev::HIEL_DE_JERICO: return {
+        tr("Un anciano de Jericó", "An elder of Jericho"),
+        {tr("«En días de Acab, Hiel de Bet-el reedificó esta ciudad sobre el juramento de Josué.", "«In the days of Ahab, Hiel of Bethel built this city again upon the oath of Joshua."),
+         tr("Echó el cimiento sobre Abiram su primogénito, y sobre Segub su hijo menor puso las puertas».", "He laid the foundation in Abiram his firstborn, and set up the gates in his youngest son Segub»."),
+         tr("Una ciudad levantada al precio de dos hijos. Por eso nadie se extraña de que sus aguas sean malas.", "A city raised at the price of two sons. No one wonders that its waters are naught.")},
+        {"1 Reyes 16:34", nullptr},
+        {{tr("Orar sobre los cimientos", "Pray over the foundations"), tr("-10 Fe", "-10 Faith"),
+          tr("Nombras a los dos muchachos delante de Dios. La palabra jurada se cumplió entera; la misericordia también puede cumplirse.", "You name the two boys before God. The sworn word was fulfilled to the letter; mercy can be fulfilled too.")},
+         {tr("Beber de sus aguas de paso", "Drink of its waters in passing"), "-8 HP",
+          tr("El agua mala raspa. Lo que Hiel enterró sigue debajo, esperando la sal.", "The bad water scrapes. What Hiel buried is still underneath, waiting for the salt.")}},
+        Portrait::HOMBRE_JERICO, Npc::HOMBRE_JERICO
     };
 
     // =========================================================================
@@ -436,6 +464,18 @@ inline EventDef get_event_def(int id) {
          {tr("Guardarlos para el camino", "Keep them for the road"), tr("-8 Fe", "-8 Faith"),
           tr("Cargas los panes en el zurrón. Pesan poco y alimentan menos de lo que podrían.", "You load the loaves in your sack. They weigh little, and feed fewer than they might.")}},
         Portrait::HOMBRE_BAALSALISA, Npc::HOMBRE_BAALSALISA
+    };
+    case Ev::REY_DE_MOAB: return {
+        tr("Sobre el muro de Moab", "On the wall of Moab"),
+        {tr("Mesa, rey de Moab, ve la batalla perdida: probó a romper el cerco con setecientas espadas, y no pudo.", "Mesha, king of Moab, sees the battle lost: he tried to break through with seven hundred swords, and could not."),
+         tr("Entonces toma a su hijo primogénito, el que había de reinar, y lo sube al muro, a la vista de los tres ejércitos.", "Then he takes his eldest son, that should have reigned, and brings him up on the wall, in the sight of the three armies."),
+         tr("Lo que hace allí no debe hacerse. Y hubo grande enojo contra Israel.", "What he does there ought not to be done. And there was great indignation against Israel.")},
+        {"2 Reyes 3:26-27", nullptr},
+        {{tr("Levantar el sitio", "Raise the siege"), tr("-3 de daño", "-3 damage"),
+          tr("Israel se aparta del muro y se vuelve a su tierra. Hay victorias que no se pueden cobrar.", "Israel departs from the wall and returns to its own land. There are victories no one can collect.")},
+         {tr("Quedarte a tomar la ciudad", "Stay and take the city"), tr("-20 Fe", "-20 Faith"),
+          tr("El muro te gana. Nadie que vio aquello peleó ya como antes, ni tú tampoco.", "The wall defeats you. No one who saw that fought as before again — nor do you.")}},
+        Portrait::NONE
     };
 
     // =========================================================================
@@ -491,8 +531,11 @@ inline EventDef get_event_def(int id) {
     };
 
     // =========================================================================
-    // Cap. 9 - Naaman el Sirio (2 Reyes 5; 8:7-15)
+    // Cap. 9 - Naaman el Sirio (2 Reyes 5)
     // =========================================================================
+    // Hazael y la uncion de Jehu (2 R 8-9) vivian aqui y se mudaron al cap. 10:
+    // en el libro van DESPUES del sitio de Samaria, y ver a Ben-adad en su lecho
+    // de muerte un capitulo antes de pelear contra el era mentir sobre el orden.
     case Ev::NAAMAN_PUERTA: return {
         tr("Naamán, general de Siria", "Naaman, captain of Syria"),
         {tr("Ha venido con caballos y carros, y se ha parado a tu puerta.", "He has come with horses and chariots, and stopped at your door."),
@@ -517,22 +560,26 @@ inline EventDef get_event_def(int id) {
           tr("Atiendes al general y su comitiva. La muchacha vuelve a la cocina y nadie pregunta su nombre.", "You attend the captain and his train. The maid goes back to the kitchen, and no one asks her name.")}},
         Portrait::MUCHACHA_CAUTIVA, Npc::MUCHACHA_CAUTIVA
     };
-    case Ev::HAZAEL_BENADAD: return {
-        tr("Hazael de Damasco", "Hazael of Damascus"),
-        {tr("Ben-adad está enfermo y ha mandado a preguntarte si sanará. Cuarenta camellos de presente.", "Ben-hadad is sick and has sent to ask if he shall recover. Forty camels' burden of presents."),
-         tr("Le sostienes la mirada al mensajero hasta que se avergüenza, y entonces lloras.", "You fix your eyes on the messenger until he is ashamed, and then you weep."),
-         tr("«¿Por qué llora mi señor?». Lloras por lo que ese hombre va a hacerle a Israel.", "«Why weepeth my lord?». You weep for what that man will do to Israel.")},
-        {"2 Reyes 8:7-15", nullptr},
-        {{tr("Decirle la verdad entera", "Tell him the whole truth"), "-18 HP",
-          tr("Le dices que será rey, y le dices lo que hará siendo rey. Se marcha sabiéndolo todo.", "You tell him he shall be king, and what he will do as king. He leaves knowing all of it.")},
-         {tr("Callar lo que has visto", "Keep what you saw to yourself"), tr("-10 Fe", "-10 Faith"),
-          tr("Le das la respuesta corta y le dejas ir. Lo que viene, vendrá igual.", "You give him the short answer and let him go. What is coming will come regardless.")}},
-        Portrait::GENERAL_SIRIO, Npc::GENERAL_SIRIO
+    // La despedida de Naaman (5:15-19): la tentacion que aqui se rechaza — o no — es
+    // exactamente la que pierde a Guiezi, el jefe de este capitulo.
+    case Ev::TIERRA_DE_ISRAEL: return {
+        tr("Naamán, limpio", "Naaman, made clean"),
+        {tr("«He aquí, ahora conozco que no hay Dios en toda la tierra, sino en Israel». Vuelve del Jordán con piel de niño.", "«Behold, now I know that there is no God in all the earth, but in Israel». He comes back from the Jordan with the skin of a child."),
+         tr("Te ofrece plata, oro y vestidos; y pide una carga de tierra de Israel, la de dos mulas, para no orar ya sobre otro suelo.", "He offers silver, gold and raiment; and asks two mules' burden of the earth of Israel, to pray on no other ground."),
+         tr("«En esto perdone Jehová a tu siervo: cuando mi señor entre en el templo de Rimón, apoyado en mi mano».", "«In this thing the Lord pardon thy servant: when my master goeth into the house of Rimmon, leaning on my hand».")},
+        {"2 Reyes 5:15-19", nullptr},
+        {{tr("«Ve en paz»", "«Go in peace»"), nullptr,
+          tr("Se lo dices como a un hombre nuevo. Carga su tierra y vuelve a Damasco sin quemar incienso a otro dios.", "You say it as to a new man. He loads his earth and returns to Damascus to burn incense to no other god.")},
+         {tr("Aceptar su presente", "Take his present"), tr("-20 Fe", "-20 Faith"),
+          tr("«Vive Jehová, que no lo tomaré» — y lo tomas. La plata pesa en el zurrón, y algo se apaga camino de casa.", "«As the Lord liveth, I will receive none» — and you receive it. The silver weighs in the sack, and something goes out on the way home.")}},
+        Portrait::NAAMAN, Npc::NAAMAN
     };
 
     // =========================================================================
-    // Cap. 10 - El Ejercito Celestial (2 Reyes 6:8 - 7:20)
+    // Cap. 10 - El Ejercito Celestial (2 Reyes 6:8 - 9:13)
     // =========================================================================
+    // Dotan y el sitio de Samaria, y al final lo que el libro cuenta justo despues
+    // y desemboca en el epilogo: Hazael (2 R 8) y la uncion de Jehu (2 R 9).
     case Ev::CRIADO_ELISEO: return {
         tr("El criado de Eliseo", "Elisha's servant"),
         {tr("«¡Ah, señor mío! ¿Qué haremos?».", "«Alas, my master! How shall we do?»."),
@@ -580,6 +627,34 @@ inline EventDef get_event_def(int id) {
          {tr("Dejar que dude", "Let him doubt"), tr("-8 Fe", "-8 Faith"),
           tr("No discutes con él. La harina bajará de precio, se ría quien se ría.", "You do not argue. The price of meal will fall, laugh who may.")}},
         Portrait::PRINCIPE_SAMARIA, Npc::PRINCIPE_SAMARIA
+    };
+    // Como "Siete años despues" en el cap. 8, este relato mira mas alla del jefe: roto el
+    // cerco, el libro sigue en Damasco (2 R 8:7-15).
+    case Ev::HAZAEL_BENADAD: return {
+        tr("Hazael de Damasco", "Hazael of Damascus"),
+        {tr("Roto el cerco, Ben-adad enfermó en Damasco, y manda a preguntarte si sanará. Cuarenta camellos de presente.", "The siege broken, Ben-hadad fell sick in Damascus, and sends to ask if he shall recover. Forty camels' burden of presents."),
+         tr("Le sostienes la mirada al mensajero hasta que se avergüenza, y entonces lloras.", "You fix your eyes on the messenger until he is ashamed, and then you weep."),
+         tr("«¿Por qué llora mi señor?». Lloras por lo que ese hombre va a hacerle a Israel.", "«Why weepeth my lord?». You weep for what that man will do to Israel.")},
+        {"2 Reyes 8:7-15", nullptr},
+        {{tr("Decirle la verdad entera", "Tell him the whole truth"), "-18 HP",
+          tr("Le dices que será rey, y le dices lo que hará siendo rey. Se marcha sabiéndolo todo.", "You tell him he shall be king, and what he will do as king. He leaves knowing all of it.")},
+         {tr("Callar lo que has visto", "Keep what you saw to yourself"), tr("-10 Fe", "-10 Faith"),
+          tr("Le das la respuesta corta y le dejas ir. Lo que viene, vendrá igual.", "You give him the short answer and let him go. What is coming will come regardless.")}},
+        Portrait::GENERAL_SIRIO, Npc::GENERAL_SIRIO
+    };
+    // El ultimo relato del juego: la redoma que enciende el epilogo (Jehu sale hacia
+    // Jezreel en su primera escena).
+    case Ev::UNCION_JEHU: return {
+        tr("La redoma de aceite", "The box of oil"),
+        {tr("Queda una unción de las tres que se mandaron en Horeb: Jehú, hijo de Nimsi, acampa en Ramot de Galaad.", "One anointing remains of the three commanded at Horeb: Jehu, the son of Nimshi, is encamped at Ramoth-gilead."),
+         tr("«Ciñe tus lomos, toma esta redoma. Hazle levantar de entre sus hermanos, unge, abre la puerta y huye: no esperes».", "«Gird up thy loins, take this box of oil. Make him arise from among his brethren, anoint him, open the door and flee: tarry not»."),
+         tr("El muchacho te mira. Lo que se derrame en ese cuarto no se podrá recoger.", "The young man looks at you. What is poured out in that chamber cannot be gathered up again.")},
+        {"2 Reyes 9:1-13", nullptr},
+        {{tr("Enviarle con la redoma", "Send him with the box"), tr("-15 Fe", "-15 Faith"),
+          tr("Corrió, ungió y huyó, como se le dijo. «¿Por qué vino a ti ese loco?» — y luego las trompetas: «Jehú es rey».", "He ran, anointed, and fled, as he was told. «Wherefore came this mad fellow to thee?» — and then the trumpets: «Jehu is king».")},
+         {tr("Guardar el aceite un día más", "Keep the oil one more day"), "-15 HP",
+          tr("Cargas con lo que sabes un día entero, y pesa como pocas cargas. Lo dicho en Horeb no caduca: mañana correrá igual.", "You carry what you know a whole day, and few burdens weigh like it. What was said at Horeb does not expire: tomorrow it runs all the same.")}},
+        Portrait::HIJO_PROFETAS, Npc::HIJO_PROFETAS
     };
 
     // =========================================================================
@@ -679,7 +754,6 @@ inline EventDef get_event_def(int id) {
          {nullptr, nullptr, nullptr}},
         Portrait::ELISEO
     };
-
     default: return {
         "", {nullptr, nullptr, nullptr}, {"", nullptr},
         {{nullptr, nullptr, nullptr}, {nullptr, nullptr, nullptr}}

@@ -385,13 +385,11 @@ static void build_interior(Room& room, int chapter) {
 void Room::generate(RoomType room_type, int chap, int difficulty, int event, bool with_doorway) {
     event_id = event;
     has_doorway = false;
-    if (room_type == RoomType::Interior) {
-        type = room_type;
-        chapter = chap;
-        cleared = true;      // no hay nada que limpiar: un interior no sella salidas
-        build_interior(*this, chap);
-        return;
-    }
+    // Los reseteos van ANTES de la rama del interior: generate() corre sobre una Room
+    // REUTILIZADA (current_room_data), y sin ellos el interior heredaba el estado de la sala
+    // anfitriona — rezar en el altar de fuera dejaba `altar_used` puesto y el altar de dentro
+    // (el premio del interior) nacia ya usado. Lo mismo con el cofre, el encuentro y, peor,
+    // `enemy_spawns`: la lista de la anfitriona dentro de una sala de una pantalla.
     type = room_type;
     chapter = chap;
     cleared = false;
@@ -400,7 +398,14 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     exit_open = false;
     altar_used = false;
     chest_opened = false;
+    event_used = false;   // sin esto, una sala Event generada justo despues de resolver otro
+                          // encuentro nacia ya "resuelta" y su relato no se abria nunca
     enemy_spawns.clear();
+    if (room_type == RoomType::Interior) {
+        cleared = true;      // no hay nada que limpiar: un interior no sella salidas
+        build_interior(*this, chap);
+        return;
+    }
 
     const BiomeStyle biome = get_biome_style(chapter);
 
@@ -629,8 +634,10 @@ bool Room::tile_hides_loot(int tx, int ty) const {
 }
 
 int Room::open_secrets(Vec2 center, f32 radius, u32 kinds, std::vector<Vec2>& out_loot) {
-    const int cx = static_cast<int>(center.x) / TS;
-    const int cy = static_cast<int>(center.y) / TS;
+    // floor(), no division entera: un centro con coordenada negativa truncaria hacia 0 y la
+    // caja de busqueda se desplazaria un tile (misma convencion que is_walkable_world).
+    const int cx = static_cast<int>(std::floor(center.x / TS));
+    const int cy = static_cast<int>(std::floor(center.y / TS));
     const int reach = static_cast<int>(radius) / TS + 1;
     int opened = 0;
     for (int y = cy - reach; y <= cy + reach; y++) {
@@ -1159,6 +1166,63 @@ void Room::render_exit_barriers(Renderer& renderer, f32 time) const {
 // =============================================================================
 // FloorMap::generate — 2D grid layout
 // =============================================================================
+// El reparto de salas es CONFIGURACION, no sorteo (mandato del usuario, 2026-08-27):
+// "ya no valen valores aleatorios para la historia y esos aspectos del gameplay".
+// Una cadena por capitulo, un caracter por celda de la rejilla, fila de ARRIBA primero
+// (la fila 0 es la del jefe; la ultima, la de inicio). Leyenda:
+//   S inicio   B jefe   N combate   T tesoro   A altar   L elite
+//   1..6 = sala Event con el relato k-esimo del pozo del capitulo (orden de `namespace Ev`)
+// TODOS los relatos del pozo estan colocados: en una partida se ven los 3-6 del capitulo,
+// no un subconjunto sorteado. El precio es una sala de Tesoro y una de Altar menos en las
+// rejillas 4x3 (no caben 12 tipos en 12 celdas) y alguna de combate menos donde el pozo
+// llega a 5-6 (caps 7 y 10); las 4x4 conservan 2+2.
+static const char* const CHAPTER_LAYOUT[10] = {
+    // Cap 1 — El Arroyo Querit (4x3, 3 relatos)
+    "TNB1"
+    "2LNA"
+    "N3SL",
+    // Cap 2 — La Viuda de Sarepta (4x3, 3 relatos)
+    "N1BT"
+    "LAN2"
+    "3NSL",
+    // Cap 3 — El Monte Carmelo (4x3, 4 relatos)
+    "1NB2"
+    "LATL"
+    "3NS4",
+    // Cap 4 — La Cueva de Horeb (4x3, 4 relatos)
+    "2LBN"
+    "1TA3"
+    "N4SL",
+    // Cap 5 — El Llamado (4x4, 3 relatos)
+    "NTB1"
+    "LNAN"
+    "2NLT"
+    "NAS3",
+    // Cap 6 — Las Aguas de Jerico (4x3, 4 relatos)
+    "1NBL"
+    "TA42"
+    "N3SL",
+    // Cap 7 — El Aceite de la Viuda (4x3, 5 relatos)
+    "N2B1"
+    "LAT3"
+    "45SL",
+    // Cap 8 — El Hijo Sunamita (4x3, 4 relatos)
+    "1LB2"
+    "TNAN"
+    "L3S4",
+    // Cap 9 — Naaman el Sirio (4x3, 3 relatos: Hazael y Jehu se mudaron al cap. 10,
+    // que es donde el libro los pone; la celda liberada recupera el Tesoro perdido)
+    "N1BT"
+    "2LTA"
+    "LNS3",
+    // Cap 10 — El Ejercito Celestial (4x4, 6 relatos: el sitio entero mas Hazael y
+    // la uncion de Jehu, que desembocan en el epilogo)
+    "LNB1"
+    "5AT2"
+    "3L6A"
+    "T4SN",
+};
+
 void FloorMap::generate(int chapter) {
     auto def = get_chapter_def(chapter);
     int gw = def.grid_w;
@@ -1191,51 +1255,44 @@ void FloorMap::generate(int chapter) {
         }
     }
 
-    // Place Start at bottom-center, Boss at top-center
-    int start_idx = (gh - 1) * gw + gw / 2;
-    int boss_idx  = 0 * gw + gw / 2;  // row 0, center column
+    // Reparto FIJO desde la tabla CHAPTER_LAYOUT (ver arriba): ni la posicion del inicio,
+    // ni la del jefe, ni que sala es tesoro/altar/elite, ni que relato cuenta cada sala
+    // Event salen ya de ningun sorteo. `randi_range` no se toca en toda esta funcion.
+    int start_idx = (gh - 1) * gw + gw / 2;   // respaldo si la tabla no trae 'S'/'B'
+    int boss_idx  = 0 * gw + gw / 2;
 
+    const EventPool pool = get_chapter_events(chapter);
+    int assigned = 0;
+    const char* layout = (chapter >= 1 && chapter <= 10) ? CHAPTER_LAYOUT[chapter - 1] : nullptr;
+    if (layout && static_cast<int>(SDL_strlen(layout)) != room_count) {
+        SDL_Log("FloorMap: layout del capitulo %d mide %d celdas y la rejilla %d — se ignora",
+                chapter, static_cast<int>(SDL_strlen(layout)), room_count);
+        layout = nullptr;
+    }
+    if (layout) {
+        for (int i = 0; i < room_count; i++) {
+            switch (layout[i]) {
+                case 'S': rooms[i].type = RoomType::Start;    start_idx = i; break;
+                case 'B': rooms[i].type = RoomType::Boss;     boss_idx  = i; break;
+                case 'T': rooms[i].type = RoomType::Treasure; break;
+                case 'A': rooms[i].type = RoomType::Altar;    break;
+                case 'L': rooms[i].type = RoomType::Elite;    break;
+                case '1': case '2': case '3': case '4': case '5': case '6': {
+                    int k = layout[i] - '1';
+                    if (k < pool.count) {
+                        rooms[i].type = RoomType::Event;
+                        rooms[i].event_id = pool.first + k;
+                        assigned++;
+                    }
+                    break;
+                }
+                default: break;   // 'N' (y cualquier cosa rara) = sala de combate normal
+            }
+        }
+    }
     rooms[start_idx].type = RoomType::Start;
     rooms[boss_idx].type  = RoomType::Boss;
     boss_room = boss_idx;
-
-    // Reparto de tipos entre las salas que no son ni la de inicio ni la del jefe. Escala con
-    // el tamano de la rejilla: el reparto de una 3x3 (un tesoro, un altar, un encuentro y una
-    // elite) dejaba OCHO salas de relleno en una 4x3, y explorar dejaba de pagar.
-    std::vector<int> candidates;
-    for (int i = 0; i < room_count; i++)
-        if (i != start_idx && i != boss_idx) candidates.push_back(i);
-
-    // Bolsa BARAJADA del pozo del capitulo: cada sala Event se lleva un id distinto. Sin
-    // barajar, dos partidas del mismo capitulo contarian siempre las mismas dos escenas y el
-    // pozo no serviria para nada.
-    const EventPool pool = get_chapter_events(chapter);
-    int bag[8];
-    const int bag_n = std::min(pool.count, 8);
-    for (int i = 0; i < bag_n; i++) bag[i] = pool.first + i;
-    for (int i = bag_n - 1; i > 0; i--) std::swap(bag[i], bag[randi_range(0, i)]);
-    int assigned = 0;
-
-    auto take = [&](RoomType t, int n) {
-        for (int k = 0; k < n && !candidates.empty(); k++) {
-            int a = randi_range(0, static_cast<i32>(candidates.size()) - 1);
-            rooms[candidates[a]].type = t;
-            if (t == RoomType::Event && assigned < bag_n)
-                rooms[candidates[a]].event_id = bag[assigned++];
-            candidates.erase(candidates.begin() + a);
-        }
-    };
-
-    const int extra = room_count >= 12 ? 1 : 0;
-    // El encuentro va PRIMERO: el relato pesa mas que una sala extra de combate. Y son 2-3,
-    // nunca mas escenas de las que tenga el capitulo: dos salas con el mismo encuentro
-    // contarian la misma cosa dos veces, que es justo por lo que antes habia una sola.
-    take(RoomType::Event, std::min(pool.count, room_count >= 16 ? 3 : 2));
-    take(RoomType::Treasure, 1 + extra);
-    take(RoomType::Altar,    1 + extra);
-    take(RoomType::Elite,    1 + extra);
-    // Lo que queda son salas normales, y varias caen FUERA del camino al jefe: eso es lo que
-    // convierte explorar en una decision y no en un pasillo.
 
     // Un INTERIOR por capitulo (GDD2.0 fase 3), colgado de una sala exterior cualquiera que
     // no sea la de inicio ni la del jefe. Su nodo va DETRAS de la rejilla: asi `room_at(gx,gy)`

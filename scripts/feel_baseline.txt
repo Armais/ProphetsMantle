@@ -10,7 +10,9 @@
 #            4 Soldado Sirio, 5 General Sirio, 6 Idolatra de Rimon, 7 Agua Corrupta
 #
 # Reglas de la medida, las tres importantes:
-#  - `seed` ANTES de empezar la partida: las dos pasadas juegan el mismo mapa.
+#  - SIN `seed` desde los mapas fijos (2026-08-27): el mundo ya es constante
+#    (Config::CHAPTER_SEEDS) y la sonda mide el mapa REAL del juego. Dos pasadas
+#    seguidas tienen que dar lineas FEEL identicas bit a bit igual que antes.
 #  - Cada tramo arranca con `killall`: sin el, el bot arrastra supervivientes del tramo
 #    anterior y el TTK sale mezclado (fue el primer error de esta sonda).
 #  - El profeta NO va en god hasta el ultimo tramo: encajar golpes es la mitad de la medida.
@@ -26,7 +28,6 @@
 
 defaults
 metareset
-seed 20260825
 
 # --- Arranque: menu -> prologo -> carta cap 1 -> juego ---
 wait 1.0

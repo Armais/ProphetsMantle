@@ -1,0 +1,204 @@
+# ============================================================================
+# intros_check.txt - Intros cinematicas por capitulo (los 10 capitulos)
+# Correr: MANTLE.exe --script scripts/intros_check.txt
+#
+# Gates del log (exit 0 NO es un gate):
+#   1. "Intro de capitulo 2 suprimida (autoplay)" — la entrada natural bajo
+#      autoplay cae a la carta de texto: los guiones existentes no ven cambio.
+#   2. "Cinematica de capitulo N" x2 para N = 1..10 (pasada ES + pasada EN).
+#   3. Cero "Cinematic: falta la capa" — los 30 PNG de las diez estampas existen.
+#   4. Cero "TEXT TRUNCATED" — versiculo, narracion y objetivo caben, ES y EN.
+#   5. "Unloaded texture" tras salir de cada intro — las capas no acumulan VRAM.
+#
+# `chintro <n>` es el UNICO camino a la intro bajo autoplay, y la deja PARADA
+# (como `cine`): plano B con `press confirm`, salir con `press cancel`.
+# ============================================================================
+
+wait 0.6
+
+# --- 1) Nueva partida bajo autoplay: flujo de texto INTACTO (prologo + carta)
+press confirm
+wait 1.0
+shot in01_fallback_prologo
+wait 0.1
+wait 3.5
+
+# --- 2) La entrada natural (advance) bajo autoplay se suprime -> carta
+advance
+wait 1.0
+shot in02_fallback_carta_cap2
+wait 0.1
+wait 3.0
+
+# --- 3) ES: la intro del cap 1, parada: plano A (rotulo + versiculo) y plano B
+lang 0
+chintro 1
+wait 2.6
+shot in03_cap01_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in04_cap01_planoB
+wait 0.1
+press cancel
+wait 0.8
+
+# --- 4) ES: las intros de los caps 2-5, dos planos cada una
+chintro 2
+wait 2.6
+shot in05_cap02_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in06_cap02_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 3
+wait 2.6
+shot in07_cap03_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in08_cap03_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 4
+wait 2.6
+shot in09_cap04_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in10_cap04_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 5
+wait 2.6
+shot in11_cap05_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in12_cap05_planoB
+wait 0.1
+press cancel
+wait 0.8
+
+# --- 5) ES: las intros del Acto II (caps 6-10; el 6 abre acto: rotulo azul)
+chintro 6
+wait 2.6
+shot in13_cap06_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in14_cap06_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 7
+wait 2.6
+shot in15_cap07_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in16_cap07_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 8
+wait 2.6
+shot in17_cap08_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in18_cap08_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 9
+wait 2.6
+shot in19_cap09_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in20_cap09_planoB
+wait 0.1
+press cancel
+wait 0.8
+chintro 10
+wait 2.6
+shot in21_cap10_planoA
+wait 0.1
+press confirm
+wait 2.2
+shot in22_cap10_planoB
+wait 0.1
+press cancel
+wait 0.8
+
+# --- 6) EN: pasada rapida por los dos planos de cada intro (dispara wrap_text)
+lang 1
+chintro 1
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 2
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 3
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 4
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 5
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 6
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 7
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 8
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 9
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+chintro 10
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.6
+lang 0
+say intros_check done
+quit

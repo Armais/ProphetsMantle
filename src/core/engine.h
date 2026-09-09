@@ -48,6 +48,17 @@ enum class GameScene : u8 {
     Victory
 };
 
+// Que anuncia start_chapter al abrir un capitulo. `Cinematic` es la intro animada de la
+// PRIMERA entrada natural (nueva partida, pasar de capitulo, Ascension); el reintento y
+// el Continuar usan `Card` — repetir la intro en cada muerte cansaria. Es un enum class
+// a proposito: un bool no convierte, asi que cada llamante se revisa al compilar.
+enum class ChapterAnnounce : u8 { None, Card, Cinematic };
+
+// A donde va GameScene::Intro al terminar: el prologo vuelve al menu, la intro de
+// capitulo entra a jugar (el mundo ya esta cargado detras, como con la carta) y la
+// cinematica del Ascenso reparte la herencia (finish_ascension abre el capitulo 6).
+enum class CineThen : u8 { MainMenu, Play, FinishAscension };
+
 // Pending "choose 1 of 3" offer (GDD core loop step 4)
 struct ItemChoice {
     u32 ids[3]  = {UINT32_MAX, UINT32_MAX, UINT32_MAX};
@@ -192,6 +203,19 @@ struct Engine {
     f32 world_flash = 0.0f;      // Fogonazo blanco de milagro (Player::flash_request)
     u32 chapter_seed = 0;        // RNG seed the current chapter map was generated with (saved)
     u32 pending_seed = 0;        // != 0: use this seed for the next start_chapter (loading a save)
+    // Mundo fijo (2026-08-27): la semilla normal es Config::CHAPTER_SEEDS[cap-1]. El comando
+    // `seed` del autoplay deja aqui un override PEGAJOSO (vale para todos los capitulos de la
+    // sesion): existe solo como compatibilidad de guiones, el juego real no lo toca nunca.
+    u32 forced_seed = 0;
+    // Contador de re-siembras del rand() global tras capture_room_states (que lo deja con la
+    // semilla de la ultima sala regenerada). Efimero por sesion, no va al guardado: la
+    // reproducibilidad de los guiones viene de que la SECUENCIA de guardados es determinista.
+    u32 rng_epoch = 0;
+    // Estado de sala guardado (v9): continue_run pone el primero justo antes de start_chapter,
+    // y este lo consume en el segundo, que es el que load_room consulta al generar cada sala.
+    // Un capitulo nuevo o un reintento lo apagan solos: arrancan con las salas frescas.
+    bool restore_room_state = false;
+    bool apply_saved_rooms  = false;
     CombatEvents combat_events;
     int  run_kills = 0;
     int  run_hits_taken = 0;   // Golpes encajados en la partida (sonda de tacto `feel`)
@@ -249,7 +273,7 @@ struct Engine {
     // Scene management
     void change_scene(GameScene new_scene);
     void start_new_run();
-    void start_chapter(int chapter, bool announce = true);
+    void start_chapter(int chapter, ChapterAnnounce announce = ChapterAnnounce::Card);
     void advance_chapter();
     void retry_chapter();      // Game over -> same chapter again
     void trigger_ascension();  // Elias -> Eliseo transition
@@ -264,6 +288,13 @@ struct Engine {
     // el guion de autoplay se carga despues de init(), asi que dentro de init el flag
     // todavia es false y los guiones de scripts/ esperan el menu al arrancar.
     void start_intro();
+    // Intro cinematica del capitulo (mismas escenas GameScene::Intro que el prologo,
+    // pero al terminar entra a jugar). Solo la dispara la primera entrada natural.
+    void start_chapter_intro(int chapter);
+    // La cinematica del Ascenso (el carro de fuego): corre tras la cuarta parada, SIN
+    // mundo debajo (las paradas van sobre negro), y al terminar reparte la herencia.
+    void start_ascension_intro();
+    CineThen cine_then = CineThen::MainMenu;
 
     // Room loading
     void load_room(int room_index);
@@ -281,13 +312,15 @@ struct Engine {
     bool ascent_double  = true;   // pediste la doble porcion
     void ascent_next();           // siguiente parada, o el carro de fuego
 
-    // --- El epilogo "El Legado" (2 Reyes 9; 13:14-21) -----------------------------
-    // Mismo mecanismo que el Ascenso: tres escenas seguidas y luego la pagina de cierre.
-    // `joash_full` recuerda si el rey golpeo hasta el final, y con eso cambian las
-    // ultimas palabras del juego.
+    // --- El epilogo "El Legado" (2 Reyes 9; 13:14-21) -------------------------------
+    // Mismo mecanismo que el Ascenso: TRES escenas seguidas y luego la pagina de cierre.
+    // Cierra los dos arcos de los profetas y nada mas (decision del usuario, 2026-08-30:
+    // todo relato va anclado a Elias o Eliseo). `joash_full` recuerda si el rey golpeo
+    // hasta el final, y con eso cambian las ultimas palabras del juego.
     int  epilogue_step = -1;
     bool joash_full    = true;
     void epilogue_next();
+
     void spawn_room_enemies();
     void try_room_transition();  // Check if player crossed a room border
     void update_room_state();    // Clear detection, boss death, tile interactions
@@ -339,6 +372,10 @@ struct Engine {
     // Save / Settings
     void populate_save_data();
     void save_after_defeat();   // La derrota rebobina la partida al inicio del capitulo, no la borra
+    // Mapas fijos + estado de sala persistido (v9):
+    void generate_pristine_room(int room_index, Room& out);  // generacion PURA por (capitulo, sala)
+    void capture_room_states();                  // vuelca flags + celdas alteradas por sala a save.data
+    void apply_saved_room_state(int room_index, Room& r); // re-aplica lo guardado sobre la sala recien generada
     void continue_run();
     // Caducidad movil: recalcula si "Continuar" sigue siendo continuable o ya es una
     // partida abandonada, y cobra las ofrendas de esta ultima.

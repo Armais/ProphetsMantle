@@ -67,8 +67,8 @@ inline ChapterLore get_chapter_lore(int chapter) {
         };
         case 3: return {
             {"1 Reyes 18:21", tr("¿Hasta cuándo claudicaréis vosotros entre dos pensamientos?", "How long halt ye between two opinions?")},
-            {tr("Tres años sin lluvia. Israel entero sube al monte Carmelo.", "Three years without rain. All Israel goes up to Mount Carmel."),
-             tr("Cuatrocientos cincuenta profetas de Baal contra un solo hombre.", "Four hundred and fifty prophets of Baal against one man."),
+            {tr("Al tercer año, la palabra vino a Elías en Sarepta: «Ve, muéstrate a Acab, y yo haré llover sobre la tierra».", "In the third year the word came to Elijah in Zarephath: «Go, shew thyself unto Ahab, and I will send rain upon the earth»."),
+             tr("Israel entero sube al monte Carmelo: cuatrocientos cincuenta profetas de Baal contra un solo hombre.", "All Israel goes up to Mount Carmel: four hundred and fifty prophets of Baal against one man."),
              tr("Dos altares, dos bueyes, y ningún fuego encendido por mano humana.", "Two altars, two bullocks, and no fire kindled by human hand."),
              nullptr},
             tr("Que el pueblo vea de quién es el fuego.", "Let the people see whose the fire is."),
@@ -87,9 +87,9 @@ inline ChapterLore get_chapter_lore(int chapter) {
         };
         case 5: return {
             {"1 Reyes 19:19", tr("Y pasando Elías por delante de él, echó sobre él su manto.", "And Elijah passed by him, and cast his mantle upon him.")},
-            {tr("Eliseo araba con doce yuntas de bueyes cuando el manto cayó sobre sus hombros.", "Elisha was plowing with twelve yoke of oxen when the mantle fell on his shoulders."),
-             tr("Y Acab codició la viña de Nabot, y Jezabel hizo que lo apedrearan.", "And Ahab coveted Naboth's vineyard, and Jezebel had him stoned."),
-             tr("«¿Has matado, y también has despojado?»", "«Hast thou killed, and also taken possession?»"),
+            {tr("De Horeb bajó Elías con un encargo: ungir al que había de ser profeta en su lugar.", "From Horeb Elijah came down with a charge: to anoint the one who would be prophet in his room."),
+             tr("Halló a Eliseo arando con doce yuntas de bueyes, y al pasar le echó el manto encima.", "He found Elisha plowing with twelve yoke of oxen, and passing by he cast his mantle upon him."),
+             tr("Mientras, Acab codició la viña de Nabot, y Jezabel se la compró con sangre.", "Meanwhile Ahab coveted Naboth's vineyard, and Jezebel bought it for him with blood."),
              nullptr},
             tr("Enfrenta al rey y a la reina en el campo que robaron.", "Face the king and the queen in the field they stole."),
             tr("«Donde lamieron los perros la sangre de Nabot, lamerán también tu sangre».", "«Where the dogs licked the blood of Naboth shall dogs lick thy blood»."),
@@ -97,8 +97,8 @@ inline ChapterLore get_chapter_lore(int chapter) {
         };
         case 6: return {
             {"2 Reyes 2:21", tr("Yo sané estas aguas, y no habrá más en ellas muerte ni enfermedad.", "I have healed these waters; there shall not be from thence any more death or barrenness.")},
-            {tr("«La situación de esta ciudad es buena, pero las aguas son malas y la tierra estéril».", "«The situation of this city is pleasant, but the water is naught and the ground barren»."),
-             tr("Eliseo pidió una vasija nueva, y sal dentro de ella.", "Elisha asked for a new cruse, and salt in it."),
+            {tr("Con el manto de Elías al hombro, Eliseo volvió a cruzar el Jordán y subió a Jericó.", "With Elijah's mantle on his shoulder, Elisha crossed the Jordan again and went up to Jericho."),
+             tr("«La situación de esta ciudad es buena, pero las aguas son malas y la tierra estéril».", "«The situation of this city is pleasant, but the water is naught and the ground barren»."),
              tr("La corrupción brota del manantial y se extiende por las calles de Jericó.", "The corruption springs from the well and spreads through the streets of Jericho."),
              nullptr},
             tr("Sana el manantial de Jericó.", "Heal the spring of Jericho."),
@@ -137,7 +137,7 @@ inline ChapterLore get_chapter_lore(int chapter) {
         };
         case 10: return {
             {"2 Reyes 6:16", tr("No tengas miedo, porque más son los que están con nosotros que los que están con ellos.", "Fear not: for they that be with us are more than they that be with them.")},
-            {tr("El rey de Siria se enfureció: alguien revelaba cada uno de sus planes.", "The king of Syria was enraged: someone revealed every one of his plans."),
+            {tr("Ni la carne nueva de Naamán trajo la paz: Siria guerreaba contra Israel, y alguien revelaba cada uno de sus planes.", "Naaman's new flesh brought no peace: Syria warred against Israel, and someone revealed every one of his plans."),
              tr("«Eliseo declara al rey de Israel las palabras que tú hablas en tu cámara».", "«Elisha telleth the king of Israel the words that thou speakest in thy bedchamber»."),
              tr("Y de noche cercaron Dotán con gente, con carros y un gran ejército.", "And by night they compassed Dothan about with horses, chariots and a great host."),
              nullptr},

@@ -210,6 +210,9 @@ void Engine::load_sprites() {
     character_textures[static_cast<u32>(CharacterType::Elias)]  = load_sheet("sprites/elias.png");
     character_textures[static_cast<u32>(CharacterType::Eliseo)] = load_sheet("sprites/eliseo.png");
 
+    // ECSWorld::enemy_textures tiene 8 huecos fijos: un noveno EnemyType escribiria fuera
+    static_assert(static_cast<u32>(EnemyType::COUNT) <= 8,
+                  "amplia ECSWorld::enemy_textures antes de anadir un EnemyType");
     for (u32 t = 0; t < static_cast<u32>(EnemyType::COUNT); t++) {
         enemy_textures[t] = load_sheet(get_enemy_def(static_cast<EnemyType>(t)).sprite_path);
         world.enemy_textures[t] = enemy_textures[t];   // los jefes invocan sin pasar por el Engine
@@ -238,6 +241,12 @@ void Engine::load_sprites() {
     npc_texture = renderer.load_texture("sprites/npcs.png", /*smooth=*/true);
     if (npc_texture == TEXTURE_NONE)
         SDL_Log("PNJ ausentes (assets/sprites/npcs.png) - los encuentros iran con hoguera");
+
+    // Fondo del menu principal (Elias, Eliseo y el manto). Su ausencia no es un fallo:
+    // el titulo conserva su degradado de siempre.
+    menus.title_bg = renderer.load_texture("sprites/menu_bg.png", /*smooth=*/true);
+    if (menus.title_bg == TEXTURE_NONE)
+        SDL_Log("Fondo de menu ausente (assets/sprites/menu_bg.png) - titulo sin estampa");
 }
 
 // =============================================================================
@@ -358,7 +367,20 @@ void Engine::update(f32 dt) {
 
     switch (state.scene) {
         case GameScene::Intro:
-            if (cinematic.update(input, dt, renderer)) change_scene(GameScene::MainMenu);
+            if (cinematic.update(input, dt, renderer)) {
+                if (cine_then == CineThen::Play) {
+                    // Intro de capitulo: se ve una vez por partida, sus capas no vuelven
+                    cinematic.unload_art(renderer);
+                    change_scene(GameScene::Playing);
+                } else if (cine_then == CineThen::FinishAscension) {
+                    // Saltarla con ESC tambien reparte la herencia: la cinematica es
+                    // presentacion, nunca la puerta del Manto.
+                    cinematic.unload_art(renderer);
+                    finish_ascension();
+                } else {
+                    change_scene(GameScene::MainMenu);
+                }
+            }
             break;
 
         case GameScene::MainMenu:
@@ -464,7 +486,11 @@ void Engine::update(f32 dt) {
             }
 
             // Miracle feedback (kills by miracles, shake, messages)
-            for (Entity k : player.pending_kills) on_enemy_killed(world, faith, k, combat_events);
+            // El id se apunto el frame anterior: si entre medias la entidad murio y su slot
+            // se reciclo (un VFX, un secuaz recien invocado), on_enemy_killed dispararia
+            // conductas de muerte sobre un vivo. Solo se cobra lo que siga siendo hostil.
+            for (Entity k : player.pending_kills)
+                if (is_hostile(world, k)) on_enemy_killed(world, faith, k, combat_events);
             player.pending_kills.clear();
             if (player.shake_request > 0.0f) {
                 renderer.shake_camera(player.shake_request, Config::Feel::SHAKE_EXPLOSION.dur,
@@ -664,7 +690,8 @@ void Engine::update(f32 dt) {
                 progression.is_unlocked(5) && !portable_altar_used) {
                 portable_altar_used = true;
                 faith.on_pray();
-                if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
+                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
+                    world.healths[player.entity].heal(10.0f);
                 show_message(tr("Oras donde estás  +10 Fe", "You pray where you stand  +10 Faith"), 2.0f);
                 audio.play_sfx(SfxID::FaithGain);
             }
@@ -1049,7 +1076,6 @@ void Engine::start_new_run() {
     run_hits_taken = 0;
     feel_mark = FeelMark{};
     has_revive = false;
-    relic_revive_ready = true;   // el Reloj de Acaz perdona una muerte POR capitulo
     miracle_hint_shown = false;
     miracle_hint_timer = 5.0f;
 
@@ -1063,18 +1089,28 @@ void Engine::start_new_run() {
 
     apply_meta_upgrades();   // lo comprado en El Santuario entra antes de la primera sala
 
-    // El mundo queda listo detras: el prologo y la carta del capitulo 1 se leen primero
-    start_chapter(1, false);
-    story.begin();
-    story_prologue(story);
-    story_chapter_card(story, 1);
-    play_story(StoryThen::Play);
+    // El mundo queda listo detras y la intro cinematica del cap. 1 se ve primero. El
+    // prologo de TEXTO ya no se lee aqui: duplicaba al prologo CINEMATICO que el jugador
+    // acaba de ver al arrancar el juego. Bajo autoplay se conserva el flujo de texto
+    // integro (lore_check fotografia prologo + carta), igual que si falta la estampa.
+    if (!autoplay.active && cinematic_chapter_ready(1)) {
+        start_chapter(1, ChapterAnnounce::None);
+        start_chapter_intro(1);
+    } else {
+        start_chapter(1, ChapterAnnounce::None);
+        story.begin();
+        story_prologue(story);
+        story_chapter_card(story, 1);
+        play_story(StoryThen::Play);
+    }
 }
 
-void Engine::start_chapter(int chapter, bool announce) {
+void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
     state.current_chapter = chapter;
     boss_hp_scale = 1.0f;   // el encuentro de cada capitulo se gana de nuevo
     portable_altar_used = false;
+    relic_revive_ready = true;   // el Reloj de Acaz perdona una muerte POR capitulo — se
+                                 // re-arma aqui para cubrir tambien avanzar y Continuar
     player.map_revealed = false;   // "Ojos Abiertos" revela ESTE capitulo, no los siguientes
     player.reveal_timer = 0.0f;
     codex_see_chapter(save.data, chapter);
@@ -1092,19 +1128,49 @@ void Engine::start_chapter(int chapter, bool announce) {
         h.heal(h.max * 0.15f);
     }
 
-    // Seed the chapter map so a saved run can regenerate the exact same layout
-    chapter_seed = pending_seed ? pending_seed : static_cast<u32>(rand()) * 2654435761u + 1u;
+    // Mundo FIJO (2026-08-27): la semilla es una CONSTANTE por capitulo, no un sorteo por
+    // partida. `pending_seed` (Continuar una partida guardada con su semilla de entonces) y
+    // `forced_seed` (comando `seed` del autoplay) siguen mandando como override, en ese orden.
+    int seed_slot = std::min(std::max(chapter, 1), 10) - 1;
+    chapter_seed = pending_seed ? pending_seed
+                 : forced_seed  ? forced_seed
+                                : Config::CHAPTER_SEEDS[seed_slot];
     pending_seed = 0;
     srand(chapter_seed);
 
+    // Estado de sala guardado (v9): solo se re-aplica cuando este arranque ES un Continuar.
+    apply_saved_rooms = restore_room_state;
+    restore_room_state = false;
+
     floor_map.generate(chapter);
+
+    // Continuar (v9): las salas con estado guardado se pre-generan y restauran YA, no al
+    // pisarlas. El minimapa (y el mapa de TAB) leen room_cache[i].visited, asi que con la
+    // restauracion perezosa una partida continuada arrancaba con el mapa entero en blanco.
+    if (apply_saved_rooms) {
+        for (int i = 0; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
+            if (save.data.room_flags[i] == 0) continue;
+            generate_pristine_room(i, floor_map.room_cache[i]);
+            apply_saved_room_state(i, floor_map.room_cache[i]);
+            floor_map.room_generated[i] = true;
+        }
+    }
+
     entry_direction = Direction::None;  // Center spawn at chapter start
     boss_entity = ENTITY_NONE;
     load_room(floor_map.current_room);
 
-    // `announce`: la carta narrada del capitulo (versiculo + objetivo) antes de jugar.
-    // El mundo ya esta cargado detras, asi que al cerrarla se entra directo a la sala.
-    if (announce) {
+    // `announce`: que se lee antes de jugar (el mundo ya esta cargado detras).
+    // `Cinematic` = la intro animada de la primera entrada natural; bajo autoplay o sin
+    // estampa entregada cae a la carta de siempre, para que los guiones no vean cambio.
+    if (announce == ChapterAnnounce::Cinematic && !autoplay.active &&
+        cinematic_chapter_ready(chapter)) {
+        start_chapter_intro(chapter);
+    } else if (announce != ChapterAnnounce::None) {
+        if (announce == ChapterAnnounce::Cinematic) {
+            SDL_Log("Intro de capitulo %d suprimida (%s): carta de texto", chapter,
+                    autoplay.active ? "autoplay" : "sin estampa");
+        }
         story.begin();
         story_chapter_card(story, chapter);
         play_story(StoryThen::Play);
@@ -1138,9 +1204,9 @@ void Engine::advance_chapter() {
             SDL_Log("Victory: epilogue unlocked (faith %.0f)", faith.current);
             save.save();
             menus.victory_note = nullptr;
-            // El epilogo tambien se RECORRE: tres escenas con decision antes de la pagina de
-            // cierre, igual que el Ascenso. Cierran los dos arcos — la palabra de Elias sobre
-            // la vina de Nabot y el ultimo milagro de Eliseo, que ocurre ya muerto.
+            // El epilogo tambien se RECORRE: tres escenas con decision antes de la pagina
+            // de cierre, igual que el Ascenso. Cierra los dos arcos de los profetas:
+            // Jehu/Jezabel (la palabra de Elias), el arco de Joas y los huesos de Eliseo.
             epilogue_step = 0;
             joash_full = true;
             audio.play_music(MusicID::Victory);
@@ -1154,7 +1220,7 @@ void Engine::advance_chapter() {
         }
         return;
     }
-    start_chapter(next);
+    start_chapter(next, ChapterAnnounce::Cinematic);   // primera entrada natural: la intro
 }
 
 void Engine::retry_chapter() {
@@ -1173,7 +1239,6 @@ void Engine::retry_chapter() {
     for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) kept_miracles[s] = player.miracle_slots[s].miracle;
 
     has_revive = false;
-    relic_revive_ready = true;
     world.clear();
     world.tileset = tileset_texture;
     faith.init();
@@ -1198,7 +1263,9 @@ void Engine::retry_chapter() {
         if (kept_miracles[s] != MiracleID::COUNT) player.miracle_slots[s].equip(kept_miracles[s]);
 
     SDL_Log("Retry chapter %d: %d item(s) kept", chapter, static_cast<int>(kept_items.size()));
-    start_chapter(chapter);   // announce = true: la carta del capitulo lleva de vuelta a Playing
+    // Card, no Cinematic: el reintento no es una primera entrada, y repetir la intro en
+    // cada muerte cansaria. La carta lleva de vuelta a Playing.
+    start_chapter(chapter);
 }
 
 void Engine::trigger_ascension() {
@@ -1241,6 +1308,17 @@ void Engine::ascent_next() {
     ascent_step = -1;
     SDL_Log("Ascension: le seguiste %d de 3 veces, doble porcion=%s",
             ascent_follows, ascent_double ? "si" : "no");
+    // El carro de fuego (2 Reyes 2:11-14) se ve como CINEMATICA cuando se puede: son
+    // las mismas frases de get_ascension_lore sobre las estampas, asi que las paginas
+    // de texto no se leen despues (el precedente del prologo: no repetir lo recien
+    // visto). Bajo autoplay se suprime — los guiones cronometran el flujo de texto —
+    // y sin estampas entregadas el fallback es el texto de siempre.
+    if (!autoplay.active && cinematic_ascension_ready()) {
+        start_ascension_intro();
+        return;
+    }
+    SDL_Log("Cinematica del Ascenso suprimida (%s): paginas de texto",
+            autoplay.active ? "autoplay" : "sin estampa");
     story.begin();
     story_ascension(story);
     play_story(StoryThen::FinishAscension);
@@ -1282,6 +1360,10 @@ void Engine::finish_ascension() {
         legacy = m;
     }
     if (player.entity != ENTITY_NONE) world.destroy(player.entity);
+    // Si el cap. 5 se cerro en plena embestida del Carro, gap_crosser aun apunta al id de
+    // Elias — que create() va a reciclar AHORA MISMO para Eliseo, dejandole cruzar todos
+    // los precipicios del Acto II.
+    world.gap_crosser = ENTITY_NONE;
     player = Player{};
     player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
     player.staff_skin = save.data.skin_equipped;   // cosmetico: sobrevive a la Ascension
@@ -1328,7 +1410,8 @@ void Engine::finish_ascension() {
 
     if (player.entity != ENTITY_NONE) world.transforms[player.entity].position = pos;
 
-    start_chapter(Config::CHAPTERS_ACT_I + 1, true);   // la carta del cap. 6 abre el Acto II
+    // La intro del cap. 6 abre el Acto II (primera entrada natural de Eliseo)
+    start_chapter(Config::CHAPTERS_ACT_I + 1, ChapterAnnounce::Cinematic);
 }
 
 // =============================================================================
@@ -1357,18 +1440,53 @@ void Engine::finish_story() {
 // Las texturas se cargan la primera vez y quedan en la cache del Renderer.
 void Engine::start_intro() {
     cinematic_prologue(cinematic);
-    if (!cinematic.art_loaded) cinematic.load_art(renderer);
+    // load_art SIEMPRE: begin() resetea art_loaded porque reconstruye los CineScene con
+    // tex = TEXTURE_NONE. La cache por path del Renderer hace la recarga gratis.
+    cinematic.load_art(renderer);
     cinematic.active = true;
     cinematic.clock = 0.0f;
     // Los playtests con --script no pueden quedarse mirando 80 segundos de cine
     cinematic.auto_timer = autoplay.active ? 0.9f : 0.0f;
     cinematic.go_to(0, renderer);
+    cine_then = CineThen::MainMenu;
     change_scene(GameScene::Intro);
+}
+
+// Igual que start_intro pero con las dos escenas del capitulo y entrando a jugar al
+// terminar. Quien decide SI se ve es start_chapter (primera entrada natural, sin
+// autoplay, estampa entregada); esto solo la monta y la lanza.
+void Engine::start_chapter_intro(int chapter) {
+    cinematic_chapter(cinematic, chapter);
+    cinematic.load_art(renderer);
+    cinematic.active = true;
+    cinematic.clock = 0.0f;
+    cinematic.auto_timer = autoplay.active ? 0.9f : 0.0f;
+    cinematic.go_to(0, renderer);
+    cine_then = CineThen::Play;
+    change_scene(GameScene::Intro);
+    SDL_Log("Cinematica de capitulo %d", chapter);
+}
+
+// La cinematica del Ascenso. A diferencia de las intros de capitulo, debajo no hay
+// mundo cargado (las cuatro paradas van sobre negro), y al terminar no entra a jugar:
+// finish_ascension reparte la herencia y es quien abre el capitulo 6 con su intro.
+void Engine::start_ascension_intro() {
+    cinematic_ascension(cinematic);
+    cinematic.load_art(renderer);
+    cinematic.active = true;
+    cinematic.clock = 0.0f;
+    cinematic.auto_timer = autoplay.active ? 0.9f : 0.0f;
+    cinematic.go_to(0, renderer);
+    cine_then = CineThen::FinishAscension;
+    change_scene(GameScene::Intro);
+    SDL_Log("Cinematica del Ascenso");
 }
 
 void Engine::finish_story_action(StoryThen then) {
     switch (then) {
-        case StoryThen::Play:            change_scene(GameScene::Playing); break;
+        case StoryThen::Play:
+            change_scene(GameScene::Playing);
+            break;
         case StoryThen::AdvanceChapter:  advance_chapter();                break;
         case StoryThen::FinishAscension: finish_ascension();               break;
         case StoryThen::VictoryMenu:
@@ -1386,7 +1504,17 @@ void Engine::finish_story_action(StoryThen then) {
 void Engine::update_music() {
     MusicID want = MusicID::COUNT;
     switch (state.scene) {
-        case GameScene::Intro:      want = MusicID::Prologue; break;
+        case GameScene::Intro:
+            // El prologo tiene su tema; la intro de capitulo mantiene el ambiente del
+            // acto, por lo mismo que la carta (case Story): no cortar la musica cada
+            // vez que empieza un capitulo.
+            if      (cine_then == CineThen::MainMenu)        want = MusicID::Prologue;
+            // El Ascenso conserva su tema (sonando desde trigger_ascension): cortarlo
+            // justo cuando aparece el carro seria lo contrario de una cinematica.
+            else if (cine_then == CineThen::FinishAscension) want = MusicID::Ascension;
+            else want = (state.current_act == Act::Act_I) ? MusicID::Exploration
+                                                          : MusicID::EliseoCombat;
+            break;
         case GameScene::MainMenu:   want = MusicID::MainTheme; break;
         case GameScene::Playing:
         case GameScene::Paused:
@@ -1760,6 +1888,105 @@ void Engine::populate_save_data() {
         world.has(player.entity, Component::Health)) {
         save.data.hp = world.healths[player.entity].current;
     }
+
+    // v9: resumen por sala (despejada / cofre / secretos), re-aplicable al Continuar
+    capture_room_states();
+}
+
+// =============================================================================
+// Mapas fijos: generacion pura + estado de sala persistido (v9)
+// =============================================================================
+// LA definicion de "como se genera una sala": re-siembra rand() con una semilla derivada de
+// (chapter_seed, indice de sala) y genera. La usan load_room (primera visita) y
+// capture_room_states (copia pristina para el diff del guardado); si alguna vez divergen,
+// el guardado restauraria salas que no son las que se jugaron.
+void Engine::generate_pristine_room(int room_index, Room& out) {
+    const auto& node = floor_map.rooms[room_index];
+    out.door_north = (node.connections[0] >= 0);
+    out.door_south = (node.connections[1] >= 0);
+    out.door_east  = (node.connections[2] >= 0);
+    out.door_west  = (node.connections[3] >= 0);
+    int difficulty = (state.current_chapter - 1) % Config::CHAPTERS_ACT_I + 1;   // 1..5 per act
+    srand(chapter_seed ^ ((static_cast<u32>(room_index) + 1u) * 2654435761u));
+    out.generate(node.type, state.current_chapter, difficulty, node.event_id,
+                 node.interior_room >= 0);
+}
+
+// Vuelca a save.data el estado de cada sala ya generada: un byte de flags + UN BIT por celda
+// alterada desde la generacion. El diff se calcula REGENERANDO la sala en limpio — la
+// generacion es pura, asi que la copia pristina sale gratis y el diff caza CUALQUIER mecanica
+// que toque tiles sin llevar contabilidad aparte. No se guarda el tilemap: el terreno se
+// regenera identico y solo viajan las celdas que el jugador cambio.
+void Engine::capture_room_states() {
+    static_assert(FloorMap::MAX_ROOMS <= SAVE_MAX_ROOMS, "SaveData::room_flags se queda corto");
+    SDL_memset(save.data.room_flags, 0, sizeof(save.data.room_flags));
+    SDL_memset(save.data.room_open,  0, sizeof(save.data.room_open));
+    for (int i = 0; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
+        if (!floor_map.room_generated[i]) continue;
+        // La sala activa vive en current_room_data y su cache puede ir por detras
+        const Room& r = (i == floor_map.current_room) ? current_room_data
+                                                      : floor_map.room_cache[i];
+        u8 f = 0;
+        if (r.visited)      f |= 1u << 0;
+        if (r.cleared)      f |= 1u << 1;
+        if (r.altar_used)   f |= 1u << 2;
+        if (r.chest_opened) f |= 1u << 3;
+        if (r.event_used)   f |= 1u << 4;
+        if (r.exit_open)    f |= 1u << 5;
+        save.data.room_flags[i] = f;
+
+        static Room pristine;   // los tiles pesan ~1 KB por sala: mejor fuera de la pila
+        generate_pristine_room(i, pristine);
+        u8* bits = save.data.room_open[i];
+        for (int y = 0; y < r.tiles_h; y++)
+            for (int x = 0; x < r.tiles_w; x++)
+                if (r.tiles[y][x] != pristine.tiles[y][x]) {
+                    int cell = y * Config::ROOM_TILES_X + x;
+                    bits[cell >> 3] |= static_cast<u8>(1u << (cell & 7));
+                }
+    }
+    // generate_pristine_room deja el rand() global sembrado con la semilla de la ULTIMA sala
+    // regenerada — y esto corre en CADA guardado. Sin re-sembrar aqui, todo lo que consuma
+    // rand() despues (la tirada 1-de-5 de cartas de update_room_state, drops, deriva de IA)
+    // se volvia funcion constante de esa semilla: o todas las salas normales soltaban carta o
+    // ninguna. El contador da una semilla distinta por guardado pero determinista para los
+    // guiones (misma secuencia de guardados -> misma secuencia de semillas).
+    srand(chapter_seed ^ (++rng_epoch * 2654435761u) ^ 0x85EBCA6Bu);
+}
+
+// Re-aplica sobre la sala RECIEN generada lo que el guardado dice de ella. El tile final se
+// deriva del recien generado: todas las transformaciones de runtime van a Floor (matorral
+// quemado, tinaja rota, grieta abierta, charca seca) salvo cofre / encuentro / altar de Baal,
+// que van a Path (ecs.cpp y update_room_state). El arco de salida no viaja en el diff como
+// valor: lo replica place_exit(), que pinta exactamente las mismas celdas. Si una mecanica
+// nueva cambia tiles a OTRA cosa, tiene que anadirse aqui o el Continuar la perdera.
+void Engine::apply_saved_room_state(int room_index, Room& r) {
+    if (room_index < 0 || room_index >= SAVE_MAX_ROOMS) return;
+    // Sin nada guardado no se toca la sala: f == 0 implica "sin visitar" (y por tanto sin
+    // celdas alteradas), y escribir los flags a cero igualmente pisaba el `cleared = true`
+    // con el que nace un interior — tras Continuar, load_room soltaba dentro enemigos.
+    const u8 f = save.data.room_flags[room_index];
+    if (f == 0) return;
+    const u8* bits = save.data.room_open[room_index];
+    int reopened = 0;
+    for (int y = 0; y < r.tiles_h; y++) {
+        for (int x = 0; x < r.tiles_w; x++) {
+            int cell = y * Config::ROOM_TILES_X + x;
+            if (!(bits[cell >> 3] & (1u << (cell & 7)))) continue;
+            TileType t = r.tiles[y][x];
+            r.tiles[y][x] = (t == TileType::Chest || t == TileType::Event ||
+                             t == TileType::AltarBaal) ? TileType::Path : TileType::Floor;
+            reopened++;
+        }
+    }
+    r.visited      = (f >> 0) & 1;
+    r.cleared      = (f >> 1) & 1;
+    r.altar_used   = (f >> 2) & 1;
+    r.chest_opened = (f >> 3) & 1;
+    r.event_used   = (f >> 4) & 1;
+    if ((f >> 5) & 1) r.place_exit();
+    SDL_Log("Room %d: estado restaurado del guardado (flags %02x, %d celdas)",
+            room_index, f, reopened);
 }
 
 // Morir no borra la partida. El guardado se rebobina al principio del capitulo (profeta
@@ -1771,7 +1998,11 @@ void Engine::save_after_defeat() {
     populate_save_data();
     save.data.run_active   = true;
     save.data.current_room = -1;          // el capitulo se regenera: la sala guardada ya no existe
-    save.data.chapter_seed = 0;           // semilla nueva, como en retry_chapter()
+    save.data.chapter_seed = 0;           // se reintenta con la semilla fija del capitulo
+    // La derrota rebobina el capitulo ENTERO: el estado de sala no sobrevive (los enemigos
+    // vuelven), asi que el resumen v9 que populate_save_data acaba de volcar se borra.
+    SDL_memset(save.data.room_flags, 0, sizeof(save.data.room_flags));
+    SDL_memset(save.data.room_open,  0, sizeof(save.data.room_open));
     save.data.hp           = 9999.0f;     // continue_run() lo recorta al maximo del profeta
     // Fe de arranque + lo que aporten los objetos conservados: continue_run() reaplica los
     // items pero luego fija la fe a este valor, asi que el bonus tiene que venir ya sumado
@@ -1839,9 +2070,12 @@ void Engine::continue_run() {
     }
 
     // Same chapter layout as when the run was saved (the seed is stored), then jump straight
-    // to the saved room. Room contents are regenerated: cleared rooms have their enemies back.
+    // to the saved room. Con el estado de sala persistido (v9), las salas despejadas siguen
+    // despejadas y los secretos abiertos siguen abiertos: load_room re-aplica el resumen
+    // guardado sobre cada sala al regenerarla.
     pending_seed = save.data.chapter_seed;
-    start_chapter(state.current_chapter, false);
+    restore_room_state = true;
+    start_chapter(state.current_chapter, ChapterAnnounce::None);   // sin intro: no es una primera entrada
 
     // Loadout: re-applying the items restores max HP / damage / speed / cadence
     for (int i = 0; i < save.data.item_count; i++) {
@@ -1912,15 +2146,13 @@ void Engine::load_room(int room_index) {
         // Restore from cache
         current_room_data = floor_map.room_cache[room_index];
     } else {
-        // First visit: generate and cache
-        current_room_data.door_north = (node.connections[0] >= 0);
-        current_room_data.door_south = (node.connections[1] >= 0);
-        current_room_data.door_east  = (node.connections[2] >= 0);
-        current_room_data.door_west  = (node.connections[3] >= 0);
-
-        int difficulty = (state.current_chapter - 1) % Config::CHAPTERS_ACT_I + 1;   // 1..5 per act
-        current_room_data.generate(node.type, state.current_chapter, difficulty, node.event_id,
-                                   node.interior_room >= 0);
+        // First visit: generate and cache. La generacion es PURA por (capitulo, sala):
+        // generate_pristine_room re-siembra rand() con chapter_seed ^ sala justo antes de
+        // generar, que es lo que mata la deriva — el gameplay (sacudidas, drops, burbujas)
+        // drena el MISMO generador, y sin el re-sembrado la misma sala salia distinta segun
+        // cuando entraras y que hicieras antes (medido en la bateria del 2026-08-27).
+        generate_pristine_room(room_index, current_room_data);
+        if (apply_saved_rooms) apply_saved_room_state(room_index, current_room_data);   // Continuar (v9)
 
         floor_map.room_cache[room_index] = current_room_data;
         floor_map.room_generated[room_index] = true;
@@ -2179,8 +2411,10 @@ void Engine::update_room_state() {
     // Tile interactions at the player's feet
     if (player.entity == ENTITY_NONE || !world.has(player.entity, Component::Transform)) return;
     Vec2 feet = world.transforms[player.entity].position + Vec2{0, 6};
-    int tx = static_cast<int>(feet.x) / Config::TILE_SIZE;
-    int ty = static_cast<int>(feet.y) / Config::TILE_SIZE;
+    // floor(), no division entera: en (-16, 0) la division trunca a 0 y el pie contaria
+    // como columna/fila 0 (misma convencion que Room::is_walkable_world)
+    int tx = static_cast<int>(std::floor(feet.x / Config::TILE_SIZE));
+    int ty = static_cast<int>(std::floor(feet.y / Config::TILE_SIZE));
     if (tx < 0 || tx >= room.tiles_w || ty < 0 || ty >= room.tiles_h) return;
 
     // Chapter exit: stepping anywhere on the arch patch (3x3 around the Exit tile)
@@ -2312,8 +2546,8 @@ void Engine::update_dialogue(f32 dt) {
         dialogue.resolved = true;
         return;
     }
-    // El Ascenso encadena: al cerrar una parada se abre la siguiente. No toca la sala
-    // porque no esta pasando en ninguna.
+    // Las cadenas encadenan: al cerrar una parada se abre la siguiente. No tocan la sala
+    // porque no estan pasando en ninguna.
     if (ascent_step >= 0) { ascent_next(); return; }
     if (epilogue_step >= 0) { epilogue_next(); return; }
 
@@ -2321,8 +2555,8 @@ void Engine::update_dialogue(f32 dt) {
     current_room_data.event_used = true;
     Vec2 feet = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
                 ? world.transforms[player.entity].position + Vec2{0, 6} : Vec2{0, 0};
-    int tx = static_cast<int>(feet.x) / Config::TILE_SIZE;
-    int ty = static_cast<int>(feet.y) / Config::TILE_SIZE;
+    int tx = static_cast<int>(std::floor(feet.x / Config::TILE_SIZE));
+    int ty = static_cast<int>(std::floor(feet.y / Config::TILE_SIZE));
     if (tx >= 0 && tx < current_room_data.tiles_w && ty >= 0 && ty < current_room_data.tiles_h &&
         current_room_data.tiles[ty][tx] == TileType::Event)
         current_room_data.tiles[ty][tx] = TileType::Path;
@@ -2375,9 +2609,11 @@ void Engine::apply_event_choice(int event_id, int option) {
             if (option == 0) { heal_full(); faith.modify(5.0f); }
             else             { faith.modify(12.0f); }
             break;
-        case Ev::NI_ROCIO_NI_LLUVIA:
-            if (option == 0) { add_max_hp(-10.0f); faith.modify(20.0f); }
-            else             { faith.modify(-8.0f); add_damage(4.0f); }
+        case Ev::RASTREADOR_DE_ACAB:
+            // Esconderse ES la orden (1 R 17:3); salir a por el rastreador la desobedece,
+            // aunque te quedes su lanza.
+            if (option == 0) { faith.modify(18.0f); }
+            else             { hurt(10.0f); faith.modify(-8.0f); add_damage(5.0f); }
             break;
         case Ev::ARROYO_SECO:
             if (option == 0) { hurt(12.0f); faith.modify(18.0f); }
@@ -2451,19 +2687,24 @@ void Engine::apply_event_choice(int event_id, int option) {
             if (option == 0) { faith.modify(18.0f); add_max_hp(12.0f); }
             else             { faith.modify(-25.0f); add_damage(8.0f); }
             break;
-
         // --- Cap. 6: Las Aguas de Jerico ------------------------------------
         case Ev::AGUAS_JERICO:
             if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
             else             { hurt(10.0f); faith.modify(15.0f); }
             break;
-        case Ev::MANTO_JORDAN:
-            if (option == 0) { faith.modify(-15.0f); add_damage(7.0f); heal_full(); }
-            else             { hurt(12.0f); faith.modify(5.0f); }
+        case Ev::CINCUENTA_BUSCAN:
+            // Ceder a la busqueda es indulgencia con la duda (-Fe), pero son tres dias de
+            // descanso en Jerico; mantener la palabra la afirma.
+            if (option == 0) { faith.modify(-10.0f); heal_full(); }
+            else             { faith.modify(15.0f); }
             break;
         case Ev::MUCHACHOS_BETEL:
             if (option == 0) { faith.modify(15.0f); }
             else             { faith.modify(-20.0f); add_damage(8.0f); }
+            break;
+        case Ev::HIEL_DE_JERICO:
+            if (option == 0) { faith.modify(-10.0f); add_max_hp(8.0f); }
+            else             { hurt(8.0f); faith.modify(6.0f); }
             break;
 
         // --- Cap. 7: El Aceite de la Viuda ----------------------------------
@@ -2483,6 +2724,12 @@ void Engine::apply_event_choice(int event_id, int option) {
             // El objeto 21 ES este pasaje (2 Reyes 4:43). Repartir los panes te los da.
             if (option == 0) { faith.modify(-12.0f); grant(21); }
             else             { faith.modify(-8.0f); add_max_hp(10.0f); }
+            break;
+        case Ev::REY_DE_MOAB:
+            // Como los sirios de Dotan: la eleccion piadosa cobra en el ARMA, no en la fe
+            // — levantas un sitio que tenias ganado (2 Reyes 3:27).
+            if (option == 0) { add_damage(-3.0f); faith.modify(15.0f); }
+            else             { faith.modify(-20.0f); add_damage(4.0f); }
             break;
 
         // --- Cap. 8: El Hijo Sunamita ---------------------------------------
@@ -2512,9 +2759,11 @@ void Engine::apply_event_choice(int event_id, int option) {
             if (option == 0) { add_max_hp(-15.0f); faith.modify(22.0f); }
             else             { faith.modify(-15.0f); boss_hp_scale = 0.7f; }
             break;
-        case Ev::HAZAEL_BENADAD:
-            if (option == 0) { hurt(18.0f); faith.modify(20.0f); }
-            else             { faith.modify(-10.0f); add_damage(6.0f); }
+        case Ev::TIERRA_DE_ISRAEL:
+            // Aceptar el presente es la tentacion de Guiezi — el jefe del capitulo —
+            // puesta en tu mano: pagas en fe lo que ganas en plata.
+            if (option == 0) { faith.modify(20.0f); }
+            else             { faith.modify(-20.0f); heal_full(); add_damage(4.0f); }
             break;
 
         // --- Cap. 10: El Ejercito Celestial ---------------------------------
@@ -2540,6 +2789,15 @@ void Engine::apply_event_choice(int event_id, int option) {
         case Ev::PRINCIPE_SAMARIA:
             if (option == 0) { hurt(10.0f); faith.modify(18.0f); }
             else             { faith.modify(-8.0f); add_damage(4.0f); }
+            break;
+        case Ev::HAZAEL_BENADAD:
+            if (option == 0) { hurt(18.0f); faith.modify(20.0f); }
+            else             { faith.modify(-10.0f); add_damage(6.0f); }
+            break;
+        case Ev::UNCION_JEHU:
+            // La ultima uncion de Horeb en marcha: Jehu "conduce con furia" (2 Reyes 9:20).
+            if (option == 0) { faith.modify(-15.0f); add_damage(4.0f); }
+            else             { hurt(15.0f); faith.modify(10.0f); }
             break;
 
         // --- El Ascenso: las decisiones no se aplican aqui, se APUNTAN ------
@@ -2593,6 +2851,10 @@ void Engine::open_item_choice(const char* title) {
     change_scene(GameScene::Choice);
 }
 
+// Tecla de cada slot de milagro: la usan la carta de eleccion Y el aviso de equipado, para
+// que no puedan volver a divergir (el aviso mandaba al slot 2 a la tecla [E]).
+static const char* SLOT_KEYS[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
+
 // Miracles are offered at prayer altars: three the prophet does not carry yet. Eliseo can
 // also be offered Elias' miracles (inherited, cast at 70% power — see Player::cast_miracle).
 void Engine::open_miracle_choice(const char* title) {
@@ -2622,7 +2884,6 @@ void Engine::open_miracle_choice(const char* title) {
         choice.ids[choice.count] = pool[k];
         pool.erase(pool.begin() + k);
         const MiracleSlot& slot = player.miracle_slots[target];
-        static const char* SLOT_KEYS[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
         choice.extras[choice.count] = slot.is_empty()
             ? std::string(tr("SLOT ", "SLOT ")) + SLOT_KEYS[std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, target))] + tr(" LIBRE", " FREE")
             : std::string(tr("SUSTITUYE A ", "REPLACES ")) + get_miracle_def(slot.miracle).name;
@@ -2668,7 +2929,8 @@ void Engine::update_item_choice(f32 dt) {
             codex_see_miracle(save.data, id);
             MiracleDef d = get_miracle_def(id);
             SDL_Log("Miracle equipped in slot %d: %s (tier %d, %.0f faith)", target, d.name, d.tier, d.faith_cost);
-            snprintf(buf, sizeof(buf), tr("%s equipado en [%s]", "%s equipped on [%s]"), d.name, target == 0 ? "Q" : "E");
+            snprintf(buf, sizeof(buf), tr("%s equipado en [%s]", "%s equipped on [%s]"), d.name,
+                     SLOT_KEYS[std::max(0, std::min(Config::MAX_MIRACLE_SLOTS - 1, target))]);
             show_message(buf, 3.0f);
             audio.play_sfx(SfxID::MenuConfirm, 0.9f);
         } else {
@@ -2863,6 +3125,8 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "chapter") { ss >> c.num; }
         else if (c.op == "event")   { ss >> c.num >> c.num2; }   // capitulo + indice en su pozo
         else if (c.op == "cine")  { ss >> c.num; }              // estampa del prologo (0..7)
+        else if (c.op == "chintro") { ss >> c.num; }            // intro cinematica del capitulo n
+        else if (c.op == "asccine") { ss >> c.num; }            // cinematica del Ascenso (escena n)
         else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
         else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
         else if (c.op == "learn") { ss >> c.num >> c.num2; }    // id de milagro + slot
@@ -2983,11 +3247,48 @@ void Engine::update_autoplay(f32 dt) {
                 continue;
             }
             if (c.op == "bot")  { ap.bot_timer = c.num; ap.timer = c.num; break; }
-            if (c.op == "seed") { srand(static_cast<unsigned>(c.num)); continue; }
+            // Con el mundo fijo, `seed` es un override de COMPATIBILIDAD: fija la semilla de
+            // todos los capitulos de la sesion (pisa Config::CHAPTER_SEEDS) y re-siembra el
+            // generador. Un guion que quiera el mapa REAL del juego simplemente no lo usa.
+            if (c.op == "seed") { forced_seed = static_cast<u32>(c.num); srand(static_cast<unsigned>(c.num)); continue; }
             if (c.op == "chapter") {   // jump to a chapter (debug: biome / boss checks)
                 if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
                     int ch = std::max(1, std::min(static_cast<int>(c.num), Config::CHAPTERS_ACT_I + Config::CHAPTERS_ACT_II));
-                    start_chapter(ch, true);
+                    start_chapter(ch, ChapterAnnounce::Card);   // nunca la intro: los guiones no cambian
+                }
+                continue;
+            }
+            // Fuerza la intro cinematica de un capitulo y la deja PARADA (como `cine`),
+            // para fotografiarla. Es el unico camino bajo autoplay: las entradas
+            // naturales la suprimen para no comerse los comandos de los guiones.
+            // Se sale con `press cancel` (ESC la salta y cae en Playing).
+            if (c.op == "chintro") {
+                if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    int ch = std::max(1, std::min(static_cast<int>(c.num), Config::CHAPTERS_ACT_I + Config::CHAPTERS_ACT_II));
+                    if (!cinematic_chapter_ready(ch))
+                        SDL_Log("chintro %d: sin estampa (se vera cielo y texto)", ch);
+                    start_chapter(ch, ChapterAnnounce::None);
+                    start_chapter_intro(ch);
+                    cinematic.auto_timer = 0.0f;   // quieta hasta el siguiente comando
+                }
+                continue;
+            }
+            // Fuerza la cinematica del Ascenso en la escena n (0..5) y la deja PARADA,
+            // como chintro. SOLO mira: cine_then = Play, asi que salirse de ella no
+            // reparte ninguna herencia — el camino real es `ascend` y las 4 paradas.
+            if (c.op == "asccine") {
+                if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    if (!cinematic_ascension_ready())
+                        SDL_Log("asccine: sin estampas (se vera cielo y texto)");
+                    cinematic_ascension(cinematic);
+                    cinematic.load_art(renderer);
+                    cinematic.active = true;
+                    cinematic.clock = 0.0f;
+                    cinematic.auto_timer = 0.0f;   // quieta hasta el siguiente comando
+                    cinematic.go_to(static_cast<int>(c.num), renderer);
+                    cine_then = CineThen::Play;
+                    change_scene(GameScene::Intro);
+                    SDL_Log("Cinematica del Ascenso (asccine, escena %d)", cinematic.scene);
                 }
                 continue;
             }
@@ -3126,6 +3427,18 @@ void Engine::update_autoplay(f32 dt) {
                         d.music_volume, d.sfx_volume, d.aim_assist, d.sensitivity, d.language,
                         d.settings_flags, d.items_unlocked, d.skins_unlocked, d.skin_equipped,
                         d.entitlements);
+                // v9: estado de sala. `salas` lista indice:flags de las que guardan algo;
+                // `celdas` = total de celdas alteradas. Es el gate de guardado_check.
+                {
+                    char salas[160]; int off = 0, celdas = 0;
+                    for (int i = 0; i < SAVE_MAX_ROOMS; i++) {
+                        if (d.room_flags[i] && off < static_cast<int>(sizeof(salas)) - 8)
+                            off += snprintf(salas + off, sizeof(salas) - off, " %d:%02x", i, d.room_flags[i]);
+                        for (int b = 0; b < SAVE_ROOM_BYTES; b++)
+                            for (u8 v = d.room_open[i][b]; v; v >>= 1) celdas += v & 1;
+                    }
+                    SDL_Log("SAVEDUMP salas%s celdas_abiertas=%d", off ? salas : " -", celdas);
+                }
                 continue;
             }
             // Depuracion: volver a bloquear el epilogo para poder probar las dos ramas

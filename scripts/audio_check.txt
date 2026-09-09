@@ -65,12 +65,11 @@ shot A3_audio_milagros
 wait 0.1
 
 # --- Jefe (MusicID::BossTheme) + grito de jefe ---
-# `goto` entra directo en la sala del jefe: esta en el indice gw/2, y OJO — gw depende
-# del capitulo (`get_chapter_def`). El cap. 1 es 3x3, asi que es la sala 1; el cap. 3 es
-# 4x3 y seria la 2. Caminar hasta alli dependia de que el mapa dejara el paso libre.
+# `goto boss` entra directo en la sala del jefe. El indice fijo (`goto 1`) murio cuando
+# la rejilla paso de 3x3 a 4x3: caia en una Elite y el grito de jefe no sonaba nunca.
 chapter 1
 wait 2.5
-goto 1
+goto boss
 wait 3.0
 shot A4_audio_jefe
 wait 0.1
@@ -97,17 +96,23 @@ wait 0.3
 press m1
 wait 3.0
 
-# --- Ascension (MusicID::Ascension) ---
+# --- Ascension (MusicID::Ascension). El Ascenso se RECORRE (cuatro paradas que en
+#     autoplay se deciden solas, ~19 s): la captura cae en la primera parada y las
+#     esperas cubren la cadena ENTERA — con las cortas de antes, la seccion de voz de
+#     Eliseo se la comia el dialogo y "Voice: esfuerzo (Eliseo)" no salia en el log. ---
 chapter 5
 wait 2.0
 ascend
 wait 3.0
 shot A5_audio_ascension
 wait 0.1
+wait 16.5
 press confirm
-wait 2.0
+wait 3.0
 press confirm
-wait 4.0
+wait 3.0
+press confirm
+wait 3.0
 
 # --- Voz: Eliseo. Las tomas son OTRAS (mas altas y abiertas), no las de Elias con un
 #     filtro: es lo que un jugador distingue a la primera.

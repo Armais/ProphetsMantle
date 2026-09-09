@@ -62,9 +62,10 @@ La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compil
 |---|---|---|
 | 12 hojas de personaje | `assets/sprites/*.png` | `tools/blender/mantle_sprites/` (Blender 4.1) |
 | Tileset de terreno | `assets/sprites/tiles.png` | `tools/blender/mantle_sprites/tiles.py` |
-| 8 estampas del prólogo (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
+| 8 estampas del prólogo + 10 intros de capítulo + 4 estampas del Ascenso (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
 | 22 retratos y viñetas | `assets/sprites/portraits.png` | `tools/blender/mantle_sprites/portraits.py` |
 | Hoja de efectos | `assets/sprites/vfx.png` | `tools/blender/mantle_sprites/vfx.py` |
+| Fondo del menú principal | `assets/sprites/menu_bg.png` | `tools/blender/mantle_sprites/menu.py` |
 | Logo, marca e icono | `assets/branding/` | `tools/blender/mantle_sprites/logo.py` + `tools/branding/make_icon.py` |
 
 Modelado y animación procedurales en Python sobre Blender; no se importa ningún modelo,

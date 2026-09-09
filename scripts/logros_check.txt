@@ -6,10 +6,20 @@
 # Leer: las lineas "Achievement unlocked: <nombre> (<como>)  [n/18]" del log.
 #       Al final tienen que ser 18/18.
 #
-# Notas de las que depende que esto funcione:
-#  - El altar de Baal de la sala inicial esta SIEMPRE en el tile (14,3) = mundo (232,56).
-#    Se dispara desde justo debajo, porque el tiro va en la ULTIMA DIRECCION DE MOVIMIENTO.
-#  - La sala del jefe es el indice `gw/2` (fila 0, columna central): en un 3x3, la 1.
+# Notas de las que depende que esto funcione (actualizadas 2026-08-27, tras la reforma
+# del mundo: salas de 2x2 pantallas y rejilla 4x3):
+#  - El altar de Baal de la sala inicial esta SIEMPRE en el tile (24,9) = mundo (392,152):
+#    lo coloca el codigo a offset fijo del centro, no la semilla. Se dispara desde debajo,
+#    porque el tiro va en la ULTIMA DIRECCION DE MOVIMIENTO.
+#  - La sala del jefe se alcanza con `goto boss` (el indice fijo dejo de valer cuando
+#    la rejilla paso de 3x3 a 4x3).
+#  - Desde los mapas fijos (2026-08-27) el reparto de salas es CONFIGURACION
+#    (CHAPTER_LAYOUT, rooms.cpp) y NO depende de la semilla. Cap 1: 0 Tesoro, 1/6/8
+#    Normal, 2 Boss, 3/4/9 Encuentro, 5/11 Elite, 7 Altar, 10 Inicio. "Sin un Rasguno"
+#    y "Bajo la Retama" necesitan salas de COMBATE virgenes. La semilla del guion solo
+#    decide el TERRENO y cuantos enemigos trae cada sala; el bloque de Retama regenera el
+#    capitulo con SU propia semilla (404, elegida sondeando composiciones) y la devuelve
+#    despues — ver el comentario de ese bloque.
 #  - Una sala ya despejada NO vuelve a disparar su logro (`!room.cleared`), asi que cada
 #    logro de sala necesita una sala VIRGEN.
 #  - Los milagros se prueban de UNO EN UNO en el slot 0: encadenarlos en dos slots hacia
@@ -38,8 +48,8 @@ god
 # "El Fuego Responde": derribar el altar de Baal de la sala inicial
 # =========================================================================
 say ---- altar de Baal ----
-walk 232 92
-wait 3.0
+walk 392 188
+wait 0.5
 hold up 0.4
 hold attack 2.5
 wait 1.0
@@ -108,6 +118,51 @@ press m1
 wait 1.5
 
 # =========================================================================
+# "El Leon del Camino" y "Sin un Rasguno": sala de COMBATE virgen (la 8 es
+# Normal por configuracion). `killall` NADA MAS ENTRAR, sin esperas: la sala trae
+# sus propios enemigos y en dos segundos te alcanzan — aunque en god la vida no
+# baje, el golpe cuenta como recibido y "Sin un Rasguno" no salta nunca.
+# =========================================================================
+say ---- leon y sala limpia sin dano ----
+goto 8
+wait 0.4
+killall
+wait 2.0
+spawn 3 2
+wait 0.4
+killall
+wait 2.0
+
+# =========================================================================
+# "Bajo la Retama": sala de COMBATE virgen, con la fe apagada.
+# Ojo: tiene que ser Normal/Elite/Boss — en una sala de tipo Altar o Tesoro
+# `is_combat_room` es falso y el bloque de "sala despejada" no corre siquiera.
+# Y va ANTES de dar las Tablas de la Ley: su suelo de fe (25) reclampa la fe en
+# cuanto los +1 por baja llaman a modify(), y la sala se despejaria con fe 25+.
+# LA CUENTA: el check (< 10) corre el mismo frame en que cae el ultimo enemigo,
+# DESPUES de la fe de las bajas (+1 por cabeza, +3 el profeta de Baal) y del +2
+# de "sala sin dano". Se regenera el capitulo con una semilla elegida a proposito
+# (la 404 deja la sala 1 en 6 enemigos y CERO profetas): 0 + 6 + 2 = 8 < 10, con
+# killall NADA MAS ENTRAR — asi nadie llega a pegarse al profeta y ningun orbe
+# de fe cae a sus pies (esperar a recibir un golpe fue el intento anterior, y
+# fallaba porque los soldados morian ENCIMA y su orbe de +4 se recogia solo en
+# el mismo instante).
+# =========================================================================
+say ---- sala limpia con la fe apagada ----
+seed 404
+chapter 1
+wait 3.0
+press confirm
+wait 2.5
+faith 0
+wait 0.2
+goto 1
+wait 0.4
+killall
+wait 2.0
+seed 20260825
+
+# =========================================================================
 # "Reliquia" (Tablas de la Ley, id 12) y "El Arca" (ocho objetos)
 # =========================================================================
 say ---- reliquia y ocho objetos ----
@@ -122,34 +177,6 @@ give 5
 give 6
 give 7
 wait 1.0
-
-# =========================================================================
-# "El Leon del Camino" y "Sin un Rasguno": sala de COMBATE virgen (la 4 es
-# Normal en esta semilla). `killall` NADA MAS ENTRAR, sin esperas: la sala trae
-# sus propios enemigos y en dos segundos te alcanzan — aunque en god la vida no
-# baje, el golpe cuenta como recibido y "Sin un Rasguno" no salta nunca.
-# =========================================================================
-say ---- leon y sala limpia sin dano ----
-goto 4
-wait 0.4
-killall
-wait 2.0
-spawn 3 2
-wait 0.4
-killall
-wait 2.0
-
-# =========================================================================
-# "Bajo la Retama": otra sala de COMBATE virgen, con la fe apagada.
-# Ojo: tiene que ser Normal/Elite/Boss — en una sala de tipo Altar o Tesoro
-# `is_combat_room` es falso y el bloque de "sala despejada" no corre siquiera.
-# =========================================================================
-say ---- sala limpia con la fe apagada ----
-goto 6
-faith 1
-wait 0.4
-killall
-wait 2.0
 
 # =========================================================================
 # "Cien Caidos": 100 bajas acumuladas. `killall` YA cuenta (combat_events se
@@ -200,26 +227,33 @@ killall
 wait 1.0
 
 # =========================================================================
-# "Ante el Rey": el jefe del capitulo (sala indice 1 en una rejilla 3x3)
+# "Ante el Rey": el jefe del capitulo (`goto boss`: el indice depende de la rejilla)
 # =========================================================================
 say ---- jefe de capitulo ----
-goto 1
+goto boss
 wait 2.5
 killall
 wait 2.5
 
 # =========================================================================
-# "El Carro de Fuego" (Ascension), "El Manto del Profeta" y "Triple Porcion"
+# "El Carro de Fuego" (Ascension), "El Manto del Profeta" y "Triple Porcion".
+# El Ascenso se RECORRE (cuatro paradas que se deciden solas en autoplay, ~19 s):
+# mismos tiempos que ascension_check.txt. Con las esperas cortas de antes, todos
+# los comandos siguientes se los comia la cadena de dialogo.
 # =========================================================================
 say ---- ascension, manto y tercer slot ----
 chapter 5
-wait 2.5
-ascend
 wait 3.0
 press confirm
-wait 2.0
+wait 2.5
+ascend
+wait 19.5
 press confirm
-wait 4.0
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
 learn 5 0
 learn 8 1
 learn 0 2
@@ -227,15 +261,19 @@ wait 0.5
 stats tras_ascension
 
 # =========================================================================
-# "El Ejercito Celestial" (victoria) y "Doble Porcion" (con la fe alta)
+# "El Ejercito Celestial" (victoria) y "Doble Porcion" (con la fe alta).
+# Con la fe en Profeta Ungido el epilogo se RECORRE solo tras `advance`
+# (TRES escenas + pagina, ~18 s) antes de la pantalla de victoria.
 # =========================================================================
 say ---- victoria con la fe en Profeta Ungido ----
 chapter 10
 wait 3.0
+press confirm
+wait 2.5
 faith 100
 wait 0.5
 advance
-wait 4.0
+wait 22.0
 
 # =========================================================================
 # El Codice, pestana de LOGROS (la quinta). Desde la victoria: ENTER devuelve al

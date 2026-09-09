@@ -40,8 +40,19 @@ void MenuSystem::render_title(Renderer& renderer) {
         renderer.draw_rect({0, H * i / BANDS, W, H / BANDS + 0.5f},
                            {static_cast<u8>(58 * k), static_cast<u8>(30 * k), static_cast<u8>(34 * k), 255});
     }
+    // La estampa (Elias, Eliseo y el manto, misma composicion que el icono) va sobre el
+    // degradado y DEBAJO de la vineta, que es lo que la integra con el fondo.
+    if (title_bg != TEXTURE_NONE)
+        renderer.draw_sprite_rect(title_bg, {0, 0, 1280, 720}, {0, 0, W, H}, {255, 255, 255, 255});
+
     if (renderer.vignette_tex != TEXTURE_NONE)
         renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 150});
+
+    // Velo elipsoidal suave tras la columna del menu: los bustos flanquean los lados,
+    // pero el manto cruza por detras de las ultimas filas y sin esto el texto pelea con
+    // el orillo de oro. shadow_tex es justo un degradado blando, no hace falta mas.
+    if (title_bg != TEXTURE_NONE && renderer.shadow_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {36, 44, 248, 144}, {8, 6, 14, 165});
 
     // Title at 3x with a drop shadow
     const f32 title_w = renderer.measure_text("MANTLE", 3.0f);

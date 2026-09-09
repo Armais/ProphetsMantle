@@ -131,5 +131,6 @@ inline f32 randf_range(f32 min, f32 max) {
 }
 
 inline i32 randi_range(i32 min, i32 max) {
+    if (max <= min) return min;   // con max < min el % seria modulo cero (UB)
     return min + (rand() % (max - min + 1));
 }

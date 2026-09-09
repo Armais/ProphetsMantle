@@ -67,6 +67,12 @@ struct CineScene {
 
     u8  fx    = CineFx_None;
     f32 fx_at = 0.0f;
+
+    // Rotulo bajo CineFx_Title. Vacio = el titulo del juego (prologo); con texto, el
+    // rotulo del capitulo ("CAPÍTULO 3" / "El Monte Carmelo") en el color de su acto.
+    std::string title;
+    std::string subtitle;
+    Color       title_color = {247, 226, 168, 255};
 };
 
 struct CinematicSystem {
@@ -93,6 +99,7 @@ struct CinematicSystem {
     void begin();
     void add(const CineScene& s);
     void load_art(Renderer& r);                  // Carga las texturas de todas las capas
+    void unload_art(Renderer& r);                // Libera las texturas (intros de capitulo)
     void layout(const Renderer& r);              // Envuelve el texto de la escena actual
     void go_to(int index, const Renderer& r);
     bool update(Input& in, f32 dt, const Renderer& r);   // true = terminada
@@ -103,3 +110,17 @@ struct CinematicSystem {
 
 // Monta las 8 escenas del prologo desde las tablas de game/lore.h
 void cinematic_prologue(CinematicSystem& c);
+
+// Intro de capitulo: DOS escenas sobre la MISMA estampa (versiculo + narracion + objetivo
+// de get_chapter_lore). El arte se entrega por fases: sin estampa todavia
+// (cinematic_chapter_ready false), el Engine cae a la carta de texto de siempre.
+void cinematic_chapter(CinematicSystem& c, int chapter);
+bool cinematic_chapter_ready(int chapter);
+
+// El Ascenso (2 Reyes 2:8-14): SEIS escenas sobre CUATRO estampas — el Jordan abierto,
+// el carro de fuego, el torbellino y el manto caido. El texto sale integro de
+// get_ascension_lore (las mismas tres paginas que leia StorySystem); cuando la
+// cinematica se ve, esas paginas NO se leen despues (precedente del prologo: no se
+// repite lo recien visto). Sin estampas entregadas, el Engine cae al texto de siempre.
+void cinematic_ascension(CinematicSystem& c);
+bool cinematic_ascension_ready();

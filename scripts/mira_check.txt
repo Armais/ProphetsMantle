@@ -6,14 +6,28 @@
 # eso aqui se dispara UNA sola vez con el profeta mirando a un sitio fijo y el enemigo
 # puesto a un angulo conocido.
 #
-# La posicion y el rumbo se fijan con `walk` (que ES bloqueante hasta llegar) y NO con
-# `hold up`: cada `hold` desplazaba al profeta un poco mas y al tercer caso la geometria
-# ya no era la misma. Esa fue la primera version de este guion y daba resultados
-# distintos en cada vuelta.
+# Desde los MAPAS FIJOS (2026-08-27) este guion va SIN `seed`: se pinnea contra el mapa
+# REAL del juego (Config::CHAPTER_SEEDS[0]), que es siempre el mismo. Si un dia cambia esa
+# semilla o Room::generate, hay que re-derivar el puesto de tiro del volcado ASCII de la
+# sala inicial (con la leccion de siempre: el carril tiene que estar libre de Tree/Rock,
+# lo unico que para un proyectil).
+#
+# Dos lecciones que costaron TRES versiones de este guion (2026-08-27):
+#
+# 1. LA GEOMETRIA SE FIJA EN EL INSTANTE DEL DISPARO, no en el del spawn. Entre `spawn` y
+#    `press attack` no puede haber NINGUNA espera: el soldado ANDA hacia el profeta (~14
+#    unidades en 0,2 s) y el angulo deriva alrededor del borde del cono de 22 grados.
+#
+# 2. El rumbo se fija con un `hold` de 0,06 s, no con la llegada del `walk`: el steering
+#    del walk deja un last_move_dir con ~3 grados de deriva, que se comia el margen de
+#    1,6 grados del caso "dentro" (20,4 contra el cono de 22).
 #
 # `spawn <tipo> 1` deja al enemigo SIEMPRE en (-20, -54) respecto al jugador:
-#   * llegando desde ABAJO (rumbo = arriba)     -> 20,3 grados: DENTRO del cono de 22
-#   * llegando desde la IZQUIERDA (rumbo = dcha) -> 110 grados:  FUERA del cono
+#   * mirando ARRIBA  -> 20,4 grados: DENTRO del cono de 22
+#   * mirando DERECHA -> 110 grados:  FUERA del cono
+# El puesto de tiro es (536,312) [tile 33,19]; el enemigo cae en (516,258) [tile 32,16] y
+# entre medias solo hay suelo, hierba y matorral (columna 32-33, filas 16-19 del volcado).
+# Se llega bajando por la columna 33, que esta limpia desde la senda (fila 11).
 #
 # Que hay que ver en el LOG (la cifra que importa es "dano hecho"):
 #   A_OFF_dentro     0     sin ayuda el tiro se va recto y falla
@@ -36,11 +50,10 @@ faith 50
 aimmode 0
 killall
 wait 0.5
-walk 160 130
-walk 160 100
-wait 0.4
+walk 536 200
+walk 536 312
+hold up 0.06
 spawn 0 1
-wait 0.2
 feel marca
 press attack
 wait 0.7
@@ -50,11 +63,10 @@ feel A_OFF_dentro
 aimmode 1
 killall
 wait 0.5
-walk 160 130
-walk 160 100
-wait 0.4
+walk 536 200
+walk 536 312
+hold up 0.06
 spawn 0 1
-wait 0.2
 feel marca
 press attack
 wait 0.7
@@ -64,11 +76,10 @@ feel B_ASIST_dentro
 aimmode 2
 killall
 wait 0.5
-walk 160 130
-walk 160 100
-wait 0.4
+walk 536 200
+walk 536 312
+hold up 0.06
 spawn 0 1
-wait 0.2
 feel marca
 press attack
 wait 0.7
@@ -78,11 +89,10 @@ feel C_ON_dentro
 aimmode 1
 killall
 wait 0.5
-walk 120 100
-walk 160 100
-wait 0.4
+walk 496 312
+walk 536 312
+hold right 0.06
 spawn 0 1
-wait 0.2
 feel marca
 press attack
 wait 0.7
@@ -92,11 +102,10 @@ feel D_ASIST_fuera
 aimmode 2
 killall
 wait 0.5
-walk 120 100
-walk 160 100
-wait 0.4
+walk 496 312
+walk 536 312
+hold right 0.06
 spawn 0 1
-wait 0.2
 feel marca
 press attack
 wait 0.7

@@ -25,7 +25,18 @@
 // nadie pierde su partida por esto. v1 y v2 se rechazan.
 // v8: `codex_events`, la mascara de relatos vistos. Es un u64 y no un u32 porque el pozo
 //     ya son 35 encuentros y el epilogo anadira mas; con 32 bits habria que renumerar.
-constexpr u32 SAVE_VERSION = 8;
+//     (2026-08-30: con el libro entero de Reyes son 60 ids de 64 — el techo esta cerca,
+//     otro crecimiento pide una segunda mascara y subir a v10.)
+// v9: estado de sala persistido (mapas fijos, 2026-08-27): al Continuar, lo despejado sigue
+//     despejado y el secreto abierto sigue abierto. Un byte de flags por sala + UN BIT por
+//     celda alterada desde la generacion — el terreno NO viaja: se regenera identico porque
+//     la generacion es pura por (capitulo, sala) y la semilla es constante.
+constexpr u32 SAVE_VERSION = 9;
+
+// v9: dimensiones del resumen por sala. 25 = FloorMap::MAX_ROOMS (engine.cpp lo vigila con
+// un static_assert); 110 bytes = los 40x22 tiles de una sala exterior, a bit por celda.
+constexpr int SAVE_MAX_ROOMS  = 25;
+constexpr int SAVE_ROOM_BYTES = (Config::ROOM_TILES_X * Config::ROOM_TILES_Y + 7) / 8;
 
 // Bits de SaveData::unlocks (contenido que se gana y NO se pierde al morir)
 constexpr u32 UNLOCK_EPILOGUE      = 1u << 0;   // "El Legado": ganar con la fe en Profeta Ungido
@@ -112,6 +123,15 @@ struct SaveData {
     // Bit por id de `namespace Ev`. Es meta y sobrevive a delete_save: el Codice cuenta
     // lo que el PROFETA ha visto en todas sus partidas, no en la ultima.
     u64 codex_events     = 0;
+
+    // --- v9: estado de sala del capitulo en curso (datos de PARTIDA) -------------
+    // Lo escribe Engine::capture_room_states en cada guardado y lo re-aplica
+    // Engine::apply_saved_room_state al Continuar, sala a sala segun se regeneran.
+    // Flags (bit): 0 visited, 1 cleared, 2 altar_used, 3 chest_opened, 4 event_used,
+    // 5 exit_open. room_open = celdas alteradas desde la generacion (fila a fila,
+    // stride Config::ROOM_TILES_X).
+    u8 room_flags[SAVE_MAX_ROOMS] = {};
+    u8 room_open[SAVE_MAX_ROOMS][SAVE_ROOM_BYTES] = {};
 };
 
 struct SaveSystem {

@@ -167,6 +167,11 @@ struct Renderer {
     // Texture management. smooth = linear filtering (sprites); false = nearest (tile atlas:
     // cells abut each other and linear sampling would bleed across cell edges)
     u32 load_texture(const char* path, bool smooth = true);
+    // Libera una textura cargada (intros de capitulo: se ven una vez por partida y
+    // dejarlas en la cache acumula VRAM en movil). El id queda como hueco estable en
+    // `textures` (puntero a nullptr: los draws ya lo toleran); recargar el path crea
+    // una entrada nueva. Path desconocido = no-op.
+    void unload_texture(const char* path);
     u32 create_radial_texture(const char* name, int w, int h, f32 inner_a, f32 outer_a, f32 power);
     TextureEntry* get_texture(u32 id);
 

@@ -7,6 +7,7 @@
 #include "render/renderer.h"
 #include "render/sprites.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 void ECSWorld::init() {
@@ -23,6 +24,14 @@ void ECSWorld::clear() {
     loot_drops.clear();
     offerings_found = 0;
     hitstop = 0.0f;
+    // Estado global de mundo: sin esto, una "Palabra de Sequia" lanzada justo antes de salir
+    // al menu seguia ralentizando a los enemigos de la partida siguiente.
+    time = 0.0f;
+    altars_smashed = 0;
+    shake_request = 0.0f;
+    dmg_dealt = 0.0f;
+    dmg_taken = 0.0f;
+    enemy_slow_timer = 0.0f;
     for (u32 i = 0; i < MAX_ENTITIES; i++) {
         masks[i].reset();
     }
@@ -66,6 +75,9 @@ Entity ECSWorld::create() {
 
 void ECSWorld::destroy(Entity e) {
     if (e == ENTITY_NONE || e >= MAX_ENTITIES) return;
+    // Una doble destruccion meteria el id DOS veces en la free list y create() se lo daria
+    // a dos entidades vivas a la vez (un enemigo heredando el sprite de un proyectil).
+    if (!masks[e].any()) return;
     masks[e].reset();
     free_list.push_back(e);
     if (e == player) player = ENTITY_NONE;
@@ -76,14 +88,17 @@ bool ECSWorld::is_alive(Entity e) const {
 }
 
 bool ECSWorld::has(Entity e, Component c) const {
+    if (e >= MAX_ENTITIES) return false;   // cubre tambien ENTITY_NONE (0xFFFFFFFF)
     return masks[e].test(static_cast<u32>(c));
 }
 
 void ECSWorld::add(Entity e, Component c) {
+    if (e >= MAX_ENTITIES) return;
     masks[e].set(static_cast<u32>(c));
 }
 
 void ECSWorld::remove(Entity e, Component c) {
+    if (e >= MAX_ENTITIES) return;
     masks[e].reset(static_cast<u32>(c));
 }
 
@@ -108,7 +123,9 @@ static void unstick(ECSWorld& w, u32 e, Vec2 foot) {
     if (!w.active_room) return;
     auto& t = w.transforms[e];
     Vec2 feet = t.position + foot;
-    if (w.active_room->is_walkable_world(feet)) return;
+    // Mismo test que el movimiento: para el gap_crosser el hueco NO es "dentro de un
+    // solido", o la red saca al profeta del precipicio en el primer frame del Carro.
+    if (walkable_at(w, feet, e)) return;
     // Only in-room feet: the player legitimately steps off-grid when crossing an opening
     if (feet.x < 0.0f || feet.y < 0.0f ||
         feet.x >= w.active_room->world_w() ||
@@ -308,19 +325,27 @@ static void system_projectiles(ECSWorld& w, f32 dt) {
         t.position += proj.direction * proj.speed * dt;
         t.rotation = std::atan2(proj.direction.y, proj.direction.x) * 57.2957795f;
 
-        // Destroy if exceeded max range or out of room bounds
+        // Destroy if exceeded max range or out of room bounds. Los limites son los de la
+        // SALA, no los de la pantalla: con las salas de 2x2 pantallas, el 320x180 de antes
+        // mataba en el primer frame cualquier tiro disparado fuera del cuarto superior
+        // izquierdo (bug cazado por mira_check el 2026-08-27).
+        f32 bound_w = w.active_room ? w.active_room->world_w() : static_cast<f32>(Config::GAME_WIDTH);
+        f32 bound_h = w.active_room ? w.active_room->world_h() : static_cast<f32>(Config::GAME_HEIGHT);
         f32 dist_sq = (t.position - proj.origin).length_sq();
         if (dist_sq > proj.max_range * proj.max_range ||
-            t.position.x < -16 || t.position.x > Config::GAME_WIDTH + 16 ||
-            t.position.y < -16 || t.position.y > Config::GAME_HEIGHT + 16) {
+            t.position.x < -16 || t.position.x > bound_w + 16 ||
+            t.position.y < -16 || t.position.y > bound_h + 16) {
             w.destroy(static_cast<Entity>(e));
             continue;
         }
 
         // Solid tiles stop projectiles; player shots smash Baal altars
         if (w.active_room) {
-            int tx = static_cast<int>(t.position.x) / Config::TILE_SIZE;
-            int ty = static_cast<int>(t.position.y) / Config::TILE_SIZE;
+            // floor(), no division entera: para x en (-16, 0) la division trunca a 0 y el
+            // tiro se evaluaria contra la columna 0 en vez de contra "fuera de la sala"
+            // (misma convencion que Room::is_walkable_world).
+            int tx = static_cast<int>(std::floor(t.position.x / Config::TILE_SIZE));
+            int ty = static_cast<int>(std::floor(t.position.y / Config::TILE_SIZE));
             if (tx >= 0 && tx < w.active_room->tiles_w && ty >= 0 && ty < w.active_room->tiles_h) {
                 if (proj.friendly && w.active_room->tiles[ty][tx] == TileType::AltarBaal) {
                     w.active_room->tiles[ty][tx] = TileType::Path;
@@ -335,7 +360,11 @@ static void system_projectiles(ECSWorld& w, f32 dt) {
                 if (proj.friendly) {
                     const TileType tt = w.active_room->tiles[ty][tx];
                     if (tt == TileType::Jar || tt == TileType::Bush || tt == TileType::TallGrass) {
-                        w.active_room->open_secrets(t.position, 6.0f,
+                        // Se abre EL TILE IMPACTADO: open_secrets mide contra el CENTRO del
+                        // tile, y con la posicion del proyectil (que acaba de cruzar el borde)
+                        // un radio corto fallaba ~la mitad de las veces — el tiro se destruia
+                        // igual y la tinaja quedaba intacta.
+                        w.active_room->open_secrets(w.active_room->tile_to_world(tx, ty), 2.0f,
                                                     tt == TileType::Jar ? SECRET_JAR : SECRET_BUSH,
                                                     w.loot_drops);
                         if (tt == TileType::Jar) {

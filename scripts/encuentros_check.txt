@@ -1,4 +1,6 @@
-# Verificacion del POZO de encuentros (GDD2.0 fase 2): los 35 relatos, en los dos idiomas.
+# Verificacion del POZO de encuentros (GDD2.0 fase 2): los 39 relatos de capitulo, en
+# los dos idiomas. Todos anclados a Elias o Eliseo (decision del usuario, 2026-08-30) y
+# en el ORDEN de 1-2 Reyes (pasada de coherencia, 2026-08-31).
 # Uso:  MANTLE.exe --script scripts/encuentros_check.txt
 #
 # EL GATE NO SON LAS CAPTURAS, es el LOG, y son dos lineas:
@@ -7,8 +9,9 @@
 #      ese es el unico fallo de texto que no se ve venir: la caja de dialogo con retrato
 #      pierde ~35 unidades de ancho y el ingles no siempre es mas corto. Antes habia que
 #      comparar setenta capturas a ojo; ahora el motor lo dice.
-#   2. "event C.I (id N de M) -> ..." -> tienen que salir los 35, con su locutor, su retrato
+#   2. "event C.I (id N de M) -> ..." -> tienen que salir los 39, con su locutor, su retrato
 #      y su PNJ. Si un capitulo dice "de 3" y el pozo tenia 4, `get_chapter_events` miente.
+#      Pozos (2026-08-31, orden de 1-2 Reyes): 3/3/4/4/3/4/5/4/3/6.
 #
 # Las capturas (una por encuentro, en el momento de la decision: cuerpo + dos opciones) son
 # para mirar la composicion, no para detectar el truncado.
@@ -135,7 +138,7 @@ wait 2.8
 shot es_c05_2_dec
 wait 2.4
 
-# ---- Cap 6: Jerico (3) ----
+# ---- Cap 6: Jerico (4) ----
 chapter 6
 wait 1.0
 press confirm
@@ -152,8 +155,12 @@ event 6 2
 wait 2.8
 shot es_c06_2_dec
 wait 2.4
+event 6 3
+wait 2.8
+shot es_c06_3_dec
+wait 2.4
 
-# ---- Cap 7: El Aceite (4) ----
+# ---- Cap 7: El Aceite (5) ----
 chapter 7
 wait 1.0
 press confirm
@@ -173,6 +180,10 @@ wait 2.4
 event 7 3
 wait 2.8
 shot es_c07_3_dec
+wait 2.4
+event 7 4
+wait 2.8
+shot es_c07_4_dec
 wait 2.4
 
 # ---- Cap 8: Sunamita (4) ----
@@ -197,7 +208,7 @@ wait 2.8
 shot es_c08_3_dec
 wait 2.4
 
-# ---- Cap 9: Naaman (3) ----
+# ---- Cap 9: Naaman (3; Hazael y Jehu viven ahora en el cap 10) ----
 chapter 9
 wait 1.0
 press confirm
@@ -215,7 +226,7 @@ wait 2.8
 shot es_c09_2_dec
 wait 2.4
 
-# ---- Cap 10: El Ejercito Celestial (4) ----
+# ---- Cap 10: El Ejercito Celestial (6: el sitio + Hazael + la uncion de Jehu) ----
 chapter 10
 wait 1.0
 press confirm
@@ -235,6 +246,14 @@ wait 2.4
 event 10 3
 wait 2.8
 shot es_c10_3_dec
+wait 2.4
+event 10 4
+wait 2.8
+shot es_c10_4_dec
+wait 2.4
+event 10 5
+wait 2.8
+shot es_c10_5_dec
 wait 2.4
 
 say ================ INGLES ================
@@ -316,6 +335,8 @@ event 6 1
 wait 5.2
 event 6 2
 wait 5.2
+event 6 3
+wait 5.2
 
 chapter 7
 wait 1.0
@@ -328,6 +349,8 @@ wait 5.2
 event 7 2
 wait 5.2
 event 7 3
+wait 5.2
+event 7 4
 wait 5.2
 
 chapter 8
@@ -366,7 +389,11 @@ event 10 2
 wait 5.2
 event 10 3
 wait 5.2
+event 10 4
+wait 5.2
+event 10 5
+wait 5.2
 
 lang 0
-say ---- fin: en el log no puede haber ni una linea de truncado, y si 70 aperturas ----
+say ---- fin: en el log no puede haber ni una linea de truncado, y si 78 aperturas ----
 quit

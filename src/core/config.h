@@ -220,6 +220,18 @@ constexpr int ROOM_H_UNITS        = ROOM_TILES_Y * TILE_SIZE; // 352
 // Sube con el area: doce enemigos repartidos en cuatro pantallas es un descampado.
 constexpr int MAX_ENEMIES_PER_ROOM = 18;
 
+// Mundo FIJO (mandato del usuario, 2026-08-27): la semilla de cada capitulo es una
+// CONSTANTE, no un sorteo por partida. El terreno y la colocacion de enemigos salen
+// siempre iguales — entre partidas, al Continuar y entre lanzamientos (modelo ALTTP).
+// La generacion sigue siendo procedural en runtime, pero como funcion pura de
+// (capitulo, sala): Engine::load_room re-siembra rand() con CHAPTER_SEEDS ^ sala antes
+// de cada Room::generate. Cambiar un valor aqui REDIBUJA ese capitulo para todo el
+// mundo (y pudre las coordenadas clavadas en scripts/): son diseno, no azar.
+constexpr u32 CHAPTER_SEEDS[10] = {
+    736051u, 421907u, 918273u, 250781u, 664529u,
+    133087u, 579341u, 806429u, 347881u, 990151u,
+};
+
 // =============================================================================
 // Run / Session
 // =============================================================================

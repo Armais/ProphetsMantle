@@ -194,7 +194,10 @@ namespace Portrait {
     constexpr int ENEBRO_ANGEL      = 31;   // cap 4
     constexpr int TRES_UNCIONES     = 32;   // cap 4
     constexpr int SIETE_MIL         = 33;   // cap 4
-    constexpr int MANTO_JORDAN      = 34;   // cap 6
+    // Sin uso desde la pasada de coherencia (2026-08-31): el cruce del Jordan lo cuenta la
+    // cinematica del Ascenso y su encuentro de cap 6 se sustituyo por los cincuenta de
+    // Jerico (2 R 2:16-18). La celda sigue dibujada en la hoja; no reordenar.
+    constexpr int MANTO_JORDAN      = 34;   // vineta libre
 
     inline Rect src(int index) {
         return {static_cast<f32>((index % COLS) * CELL),

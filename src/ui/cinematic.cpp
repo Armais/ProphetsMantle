@@ -49,6 +49,10 @@ void CinematicSystem::begin() {
     clock = 0.0f;
     wrap_count = 0;
     active = false;
+    // Cada begin() reconstruye los CineScene con tex = TEXTURE_NONE, asi que el arte
+    // anterior deja de valer: sin este reset, la SEGUNDA cinematica de una sesion
+    // (repetir el prologo desde el menu, o cada intro de capitulo) salia sin capas.
+    art_loaded = false;
 }
 
 void CinematicSystem::add(const CineScene& s) {
@@ -70,6 +74,23 @@ void CinematicSystem::load_art(Renderer& r) {
         }
     }
     art_loaded = true;
+}
+
+void CinematicSystem::unload_art(Renderer& r) {
+    // Las intros de capitulo se ven una vez por partida: dejar sus capas en la cache
+    // acumularia ~14 MB de VRAM por capitulo a lo largo de una run completa (y el juego
+    // sale a movil). El prologo NO se descarga: la opcion "Prologo" del menu lo reusa.
+    for (int i = 0; i < scene_count; i++) {
+        CineScene& s = scenes[i];
+        if (!s.art) continue;
+        for (int l = 0; l < s.layer_count; l++) {
+            char path[128];
+            std::snprintf(path, sizeof(path), "%s_L%d.png", s.art, l);
+            r.unload_texture(path);   // tolera paths ya descargados (dos escenas, un arte)
+            s.layers[l].tex = TEXTURE_NONE;
+        }
+    }
+    art_loaded = false;
 }
 
 // =============================================================================
@@ -224,17 +245,27 @@ void CinematicSystem::render(Renderer& r) const {
     r.draw_sprite_rect(r.vignette_tex, {0.0f, 0.0f, 160.0f, 90.0f},
                        {-8.0f, -8.0f, W + 16.0f, H + 16.0f}, {0, 0, 0, 150});
 
-    // --- titulo (escena 8)
+    // --- titulo. Con `title` vacio es el del juego (escena 8 del prologo); con texto,
+    // el rotulo del capitulo en el acento de su acto.
     if (s.fx & CineFx_Title) {
         // Arriba del todo: el profeta ocupa el centro del encuadre y el titulo le caia
         // justo sobre la cara.
         const f32 g = smoothstep((t - s.fx_at) / 1.4f);
         const f32 y = 14.0f - (1.0f - g) * 5.0f;
-        r.draw_text_centered("MANTLE", y, with_alpha(Color{247, 226, 168, 255}, g), 3.4f);
-        if (t > s.fx_at + 0.9f) {
-            const f32 g2 = smoothstep((t - s.fx_at - 0.9f) / 1.2f);
-            r.draw_text_centered(tr("El Manto del Profeta", "The Prophet's Mantle"), y + 33.0f,
-                                 with_alpha(Color{226, 206, 178, 255}, g2 * 0.95f), 1.0f);
+        if (!s.title.empty()) {
+            r.draw_text_centered(s.title.c_str(), y, with_alpha(s.title_color, g), 2.0f);
+            if (!s.subtitle.empty() && t > s.fx_at + 0.9f) {
+                const f32 g2 = smoothstep((t - s.fx_at - 0.9f) / 1.2f);
+                r.draw_text_centered(s.subtitle.c_str(), y + 19.0f,
+                                     with_alpha(Color{226, 206, 178, 255}, g2 * 0.95f), 0.9f);
+            }
+        } else {
+            r.draw_text_centered("MANTLE", y, with_alpha(Color{247, 226, 168, 255}, g), 3.4f);
+            if (t > s.fx_at + 0.9f) {
+                const f32 g2 = smoothstep((t - s.fx_at - 0.9f) / 1.2f);
+                r.draw_text_centered(tr("El Manto del Profeta", "The Prophet's Mantle"), y + 33.0f,
+                                     with_alpha(Color{226, 206, 178, 255}, g2 * 0.95f), 1.0f);
+            }
         }
     }
 
@@ -351,6 +382,259 @@ void cinematic_prologue(CinematicSystem& c) {
         s.line_at[1] = 1.0f + (u.duration - 3.2f) * 0.30f;
         s.line_at[2] = 1.0f + (u.duration - 3.2f) * 0.58f;
 
+        c.add(s);
+    }
+}
+
+// =============================================================================
+// Intros de capitulo
+// =============================================================================
+// UNA estampa por capitulo y DOS escenas sobre ella: la primera (rotulo + versiculo +
+// dos lineas) panea hacia un lado; la segunda (la linea final + el objetivo) deshace el
+// paneo con algo mas de zoom. Las texturas se cachean por path, asi que la segunda
+// escena sale gratis. `art = nullptr` = estampa aun no entregada: el Engine cae a la
+// carta de texto de siempre (cinematic_chapter_ready).
+namespace {
+
+struct ChapterCine {
+    const char* art;
+    Color sky_top, sky_bottom;
+    f32   par_far, par_near;
+    f32   pan;              // Escena A: -pan -> +pan; escena B: +pan -> -0.4*pan
+    u8    fx_a, fx_b;       // El rotulo (CineFx_Title) se anade solo en la escena A
+    f32   fx_at_b;          // Cuando entra el efecto de la escena B (Shaft del cap. 4)
+};
+
+const ChapterCine CHAPTER_CINE[10] = {
+    // 1. EL ARROYO QUERIT — amanecer ocre sobre el canon
+    {"sprites/cine/11_cap01_querit", {84, 74, 96, 255}, {186, 150, 108, 255},
+     0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
+    // 2. LA VIUDA DE SAREPTA — atardecer violeta sobre el mar fenicio
+    {"sprites/cine/12_cap02_sarepta", {64, 38, 72, 255}, {178, 122, 106, 255},
+     0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
+    // 3. EL MONTE CARMELO — mediodia quemado; las pavesas del altar en la escena B
+    {"sprites/cine/13_cap03_carmelo", {148, 138, 122, 255}, {214, 178, 128, 255},
+     0.30f, 1.50f, 11.0f, CineFx_None, CineFx_Embers, 0.0f},
+    // 4. LA CUEVA DE HOREB — noche azul cerrada; el silbo apacible es un haz de luz
+    {"sprites/cine/14_cap04_horeb", {10, 12, 30, 255}, {46, 52, 86, 255},
+     0.28f, 1.50f, 8.0f, CineFx_None, CineFx_Shaft, 2.0f},
+    // 5. EL LLAMADO — dorado de dia sobre los campos de labor
+    {"sprites/cine/15_cap05_llamado", {96, 90, 120, 255}, {212, 168, 100, 255},
+     0.30f, 1.50f, 11.0f, CineFx_None, CineFx_None, 0.0f},
+    // 6. LAS AGUAS DE JERICO — verdoso enfermo
+    {"sprites/cine/16_cap06_jerico", {40, 52, 44, 255}, {124, 142, 104, 255},
+     0.32f, 1.45f, 10.0f, CineFx_None, CineFx_None, 0.0f},
+    // 7. EL ACEITE DE LA VIUDA — alba gris sobre la aldea pobre
+    {"sprites/cine/17_cap07_aceite", {70, 72, 84, 255}, {160, 158, 150, 255},
+     0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
+    // 8. EL HIJO SUNAMITA — interior del aposento, luz de candil
+    {"sprites/cine/18_cap08_sunamita", {24, 20, 18, 255}, {56, 46, 38, 255},
+     0.35f, 1.40f, 4.0f, CineFx_Torches, CineFx_Torches, 0.0f},
+    // 9. NAAMAN EL SIRIO — dia claro sobre el Jordan
+    {"sprites/cine/19_cap09_naaman", {90, 120, 160, 255}, {192, 205, 198, 255},
+     0.30f, 1.50f, 11.0f, CineFx_None, CineFx_None, 0.0f},
+    // 10. EL EJERCITO CELESTIAL — noche de asedio; los carros de fuego son brasa y luz
+    {"sprites/cine/20_cap10_dotan", {16, 14, 36, 255}, {90, 54, 42, 255},
+     0.32f, 1.45f, 9.0f, CineFx_Torches, static_cast<u8>(CineFx_Embers | CineFx_Shaft), 1.6f},
+};
+
+}  // namespace
+
+bool cinematic_chapter_ready(int chapter) {
+    if (chapter < 1 || chapter > 10) return false;
+    return CHAPTER_CINE[chapter - 1].art != nullptr;
+}
+
+void cinematic_chapter(CinematicSystem& c, int chapter) {
+    c.begin();
+    if (chapter < 1 || chapter > 10) return;
+    const ChapterCine& u = CHAPTER_CINE[chapter - 1];
+    const ChapterDef   def  = get_chapter_def(chapter);
+    const ChapterLore  lore = get_chapter_lore(chapter);
+
+    char title[32];
+    std::snprintf(title, sizeof(title), tr("CAPÍTULO %d", "CHAPTER %d"), chapter);
+    // Mismo rotulo que story_chapter_card: los capitulos que abren acto llevan el acto
+    // (son los dos unicos saltos de protagonista), y el Acto II va en azul.
+    std::string subtitle = def.name;
+    if (chapter == 1) {
+        subtitle = std::string(tr("ACTO I  ·  ", "ACT I  ·  ")) + def.name;
+    } else if (chapter == Config::CHAPTERS_ACT_I + 1) {
+        subtitle = std::string(tr("ACTO II  ·  ", "ACT II  ·  ")) + def.name;
+    }
+    const Color accent = (chapter > Config::CHAPTERS_ACT_I) ? Color{150, 205, 225, 255}
+                                                            : Color{247, 226, 168, 255};
+
+    CineScene s;
+    s.art = u.art;
+    s.layer_count = CINE_LAYERS;
+    s.layers[0].parallax = u.par_far;
+    s.layers[1].parallax = 1.0f;
+    s.layers[2].parallax = u.par_near;
+    s.sky_top    = u.sky_top;
+    s.sky_bottom = u.sky_bottom;
+
+    // Escena A: rotulo + versiculo + las dos primeras lineas. La referencia del pasaje
+    // (lore.verse.ref) NO se pinta: regla del proyecto.
+    s.duration  = 10.5f;
+    s.pan_from  = -u.pan;
+    s.pan_to    = u.pan;
+    s.zoom_from = 1.00f;
+    s.zoom_to   = 1.06f;
+    s.fx    = static_cast<u8>(u.fx_a | CineFx_Title);
+    s.fx_at = 0.6f;
+    s.title       = title;
+    s.subtitle    = subtitle;
+    s.title_color = accent;
+    s.lines[0] = lore.verse.text;
+    s.lines[1] = lore.lines[0];
+    s.lines[2] = lore.lines[1];
+    s.line_at[0] = 1.0f;
+    s.line_at[1] = 1.0f + (s.duration - 3.2f) * 0.30f;
+    s.line_at[2] = 1.0f + (s.duration - 3.2f) * 0.58f;
+    c.add(s);
+
+    // Escena B: la misma estampa deshaciendo el paneo; la narracion final y el objetivo.
+    CineScene b;
+    b.art = u.art;
+    b.layer_count = CINE_LAYERS;
+    b.layers[0].parallax = u.par_far;
+    b.layers[1].parallax = 1.0f;
+    b.layers[2].parallax = u.par_near;
+    b.sky_top    = u.sky_top;
+    b.sky_bottom = u.sky_bottom;
+    b.duration  = 9.0f;
+    b.pan_from  = u.pan;
+    b.pan_to    = -u.pan * 0.4f;
+    b.zoom_from = 1.04f;
+    b.zoom_to   = 1.10f;
+    b.fx    = u.fx_b;
+    b.fx_at = u.fx_at_b;
+    // Compactar: layout() corta en el primer null, y el objetivo va SIEMPRE el ultimo
+    int k = 0;
+    for (int i = 2; i < 4 && k < 2; i++) {
+        if (lore.lines[i]) b.lines[k++] = lore.lines[i];
+    }
+    b.lines[k] = lore.objective;
+    b.line_at[0] = 1.0f;
+    b.line_at[1] = 1.0f + (b.duration - 3.2f) * 0.30f;
+    b.line_at[2] = 1.0f + (b.duration - 3.2f) * 0.58f;
+    c.add(b);
+}
+
+// =============================================================================
+// El Ascenso (2 Reyes 2:8-14)
+// =============================================================================
+// La escena que da nombre al juego, asi que es la mas trabajada: seis escenas sobre
+// cuatro estampas (Jordan abierto A/B, carro de fuego, torbellino, manto caido A/B).
+// El texto es EXACTAMENTE el de get_ascension_lore mas la linea de la herencia: no se
+// escribio una palabra nueva, igual que en las intros de capitulo.
+namespace {
+
+// nullptr = estampa no entregada (mismo interruptor que CHAPTER_CINE)
+const char* ASC_ART[4] = {
+    "sprites/cine/21_asc01_jordan",
+    "sprites/cine/22_asc02_carro",
+    "sprites/cine/23_asc03_torbellino",
+    "sprites/cine/24_asc04_manto",
+};
+
+// Una escena del Ascenso con los valores comunes ya puestos
+CineScene asc_scene(int panel, f32 duration, f32 pan_from, f32 pan_to,
+                    f32 zoom_from, f32 zoom_to, Color sky_top, Color sky_bottom) {
+    CineScene s;
+    s.art = ASC_ART[panel];
+    s.layer_count = CINE_LAYERS;
+    s.layers[0].parallax = 0.30f;
+    s.layers[1].parallax = 1.0f;
+    s.layers[2].parallax = 1.50f;
+    s.duration  = duration;
+    s.pan_from  = pan_from;
+    s.pan_to    = pan_to;
+    s.zoom_from = zoom_from;
+    s.zoom_to   = zoom_to;
+    s.sky_top    = sky_top;
+    s.sky_bottom = sky_bottom;
+    s.line_at[0] = 1.0f;
+    s.line_at[1] = 1.0f + (duration - 3.2f) * 0.30f;
+    s.line_at[2] = 1.0f + (duration - 3.2f) * 0.58f;
+    return s;
+}
+
+}  // namespace
+
+bool cinematic_ascension_ready() {
+    for (int i = 0; i < 4; i++)
+        if (!ASC_ART[i]) return false;
+    return true;
+}
+
+void cinematic_ascension(CinematicSystem& c) {
+    c.begin();
+    const ChapterLore jordan = get_ascension_lore(0);   // el cruce y la doble porcion
+    const ChapterLore carro  = get_ascension_lore(1);   // el carro y el torbellino
+    const ChapterLore manto  = get_ascension_lore(2);   // el manto caido
+    const Color accent = {245, 220, 160, 255};          // el dorado de story_ascension
+
+    // 1. EL JORDAN ABIERTO (A) — rotulo + el cruce en seco + la peticion
+    {
+        CineScene s = asc_scene(0, 11.0f, -10.0f, 10.0f, 1.00f, 1.06f,
+                                {84, 80, 118, 255}, {210, 170, 116, 255});
+        s.fx    = CineFx_Title;
+        s.fx_at = 0.6f;
+        s.title       = tr("EL ASCENSO", "THE ASCENT");
+        s.subtitle    = tr("El torbellino del Jordán", "The whirlwind of the Jordan");
+        s.title_color = accent;
+        s.lines[0] = jordan.lines[0];        // cruzaron el Jordan en seco
+        s.lines[1] = jordan.verse.text;      // «Pide lo que quieras...»
+        s.lines[2] = jordan.lines[1];        // «...una doble porcion de tu espiritu»
+        c.add(s);
+    }
+    // 2. EL JORDAN ABIERTO (B) — el silencio antes del carro: una sola frase, mas cerca
+    {
+        CineScene s = asc_scene(0, 7.5f, 10.0f, -4.0f, 1.05f, 1.12f,
+                                {84, 80, 118, 255}, {210, 170, 116, 255});
+        s.lines[0] = jordan.lines[2];        // «Cosa dificil has pedido...»
+        c.add(s);
+    }
+    // 3. EL CARRO DE FUEGO — el cielo arde; el fogonazo entra CON el versiculo
+    {
+        CineScene s = asc_scene(1, 11.5f, 4.0f, -4.0f, 1.00f, 1.12f,
+                                {70, 18, 20, 255}, {235, 140, 52, 255});
+        s.fx    = static_cast<u8>(CineFx_Flash | CineFx_Shake | CineFx_Embers);
+        s.lines[0] = carro.lines[0];         // «...he aqui un carro de fuego.»
+        s.lines[1] = carro.verse.text;       // «Un carro de fuego con caballos de fuego...»
+        s.fx_at = s.line_at[1];
+        c.add(s);
+    }
+    // 4. EL TORBELLINO — Elias sube; el haz de luz baja sobre el remolino
+    {
+        CineScene s = asc_scene(2, 11.0f, -6.0f, 6.0f, 1.02f, 1.08f,
+                                {30, 20, 48, 255}, {190, 96, 44, 255});
+        s.fx    = static_cast<u8>(CineFx_Shaft | CineFx_Embers);
+        s.fx_at = 1.2f;
+        s.lines[0] = carro.lines[1];         // «¡Padre mio, padre mio...!»
+        s.lines[1] = carro.lines[2];         // «Y nunca mas le vio.»
+        c.add(s);
+    }
+    // 5. EL MANTO CAIDO (A) — Eliseo lo alza y vuelve al Jordan
+    {
+        CineScene s = asc_scene(3, 10.5f, -9.0f, 9.0f, 1.00f, 1.06f,
+                                {70, 70, 96, 255}, {188, 168, 140, 255});
+        s.lines[0] = manto.lines[0];         // alzo el manto que se le habia caido
+        s.lines[1] = manto.verse.text;       // «¿Donde esta Jehova, el Dios de Elias?»
+        s.lines[2] = manto.lines[1];         // golpeo las aguas, y se apartaron
+        c.add(s);
+    }
+    // 6. EL MANTO CAIDO (B) — el cierre y lo que hereda el jugador
+    {
+        CineScene s = asc_scene(3, 9.0f, 9.0f, -3.5f, 1.04f, 1.12f,
+                                {70, 70, 96, 255}, {188, 168, 140, 255});
+        s.lines[0] = manto.lines[2];         // «El manto no era suyo. Le fue prestado.»
+        // La misma linea que ponia el pie de story_ascension: es la unica informacion
+        // de partida de toda la cinematica, y por eso va la ultima.
+        s.lines[1] = tr("Heredas la mitad de su fe, su manto y dos milagros.",
+                        "You inherit half his faith, his mantle and two miracles.");
         c.add(s);
     }
 }

@@ -55,7 +55,9 @@ inline void codex_see_enemy(SaveData& s, EnemyType t)   { s.codex_enemies  |= (1
 inline void codex_see_item(SaveData& s, u32 item_id)    { if (item_id < 32) s.codex_items |= (1u << item_id); }
 inline void codex_see_miracle(SaveData& s, MiracleID m) { s.codex_miracles |= (1u << static_cast<u32>(m)); }
 inline void codex_see_chapter(SaveData& s, int chapter) { if (chapter >= 1 && chapter <= 32) s.codex_chapters |= (1u << (chapter - 1)); }
-// Relatos: un bit por id de `namespace Ev`. u64 porque el pozo ya son 35.
+// Relatos: un bit por id de `namespace Ev`. u64 porque el pozo entero (capitulos +
+// Ascenso + epilogo) ya son 45 ids de un techo de 64: si vuelve a crecer mas alla
+// de 64 hace falta una segunda mascara (guardado v10).
 inline void codex_see_event(SaveData& s, int id)        { if (id >= 0 && id < 64) s.codex_events |= (1ull << id); }
 
 inline bool codex_knows_enemy(const SaveData& s, EnemyType t)   { return (s.codex_enemies  >> static_cast<u32>(t)) & 1u; }

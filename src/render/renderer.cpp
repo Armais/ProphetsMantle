@@ -248,6 +248,19 @@ u32 Renderer::load_texture(const char* path, bool smooth) {
     return id;
 }
 
+void Renderer::unload_texture(const char* path) {
+    if (!path) return;
+    auto it = texture_map.find(path);
+    if (it == texture_map.end()) return;
+    TextureEntry& entry = textures[it->second];
+    if (entry.texture) {
+        SDL_DestroyTexture(entry.texture);
+        entry.texture = nullptr;   // el id sigue siendo valido: los draws lo saltan
+    }
+    SDL_Log("Unloaded texture [%d]: %s", it->second, path);
+    texture_map.erase(it);
+}
+
 TextureEntry* Renderer::get_texture(u32 id) {
     if (id < textures.size()) return &textures[id];
     return nullptr;

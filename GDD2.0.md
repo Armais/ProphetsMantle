@@ -63,15 +63,25 @@ Y uno nuevo, que es la lección de ALTTP:
 
 ---
 
-## 2. Auditoría bíblica: todo Elías y Eliseo en Reyes
+## 2. Auditoría bíblica: la historia de Elías y Eliseo
 
-Requisito del usuario: el flujo narrativo tiene que recoger **todo lo referente a Elías y Eliseo
-en el libro de Reyes**. Hoy falta más de la mitad.
+**Regla vigente (mandato del usuario, 2026-08-30): TODOS los relatos del juego van anclados a
+Elías o a Eliseo.** El juego cuenta 1 Reyes 17 - 2 Reyes 13 — la historia de los dos profetas —
+y nada más. Hubo un intento intermedio de cubrir el libro ENTERO de Reyes (la cadena "El Reino
+Partido" con David y Salomón antes del capítulo 1, y un epílogo de 9 escenas hasta la caída de
+Jerusalén): el usuario lo rechazó el mismo día (*"este juego va sobre la historia de Elías y
+Eliseo, no de David ni de Salomón"*) y se REVIRTIÓ entero. Un relato entra si Elías o Eliseo
+están en la escena, o si la escena cumple una palabra suya (el criterio del epílogo).
 
-**Estructura: se mantienen los 10 capítulos.** Lo que falta no entra como capítulos nuevos, sino
-como **más encuentros por capítulo** (hoy 1, objetivo 3-4) y salas de relato. El generador coloca
-2-3 salas `Event` por mapa de un pozo de encuentros propio del capítulo, así que dos partidas del
-mismo capítulo no cuentan lo mismo — y quien no explora se pierde relato.
+| Bloque del libro | Vehículo |
+|---|---|
+| 1 R 17 - 2 R 9 (Elías y Eliseo) | los **pozos de encuentros** de los 10 capítulos (39 relatos, en orden del libro) + prólogo cinemático + el Ascenso + las intros |
+| 2 R 9; 13:14-21 (los arcos se cierran) | el epílogo **"El Legado"**: Jehú/Jezabel (la palabra de Elías), el arco de Joás y los huesos de Eliseo |
+| Piezas sueltas (2 R 13:17; 20:7; 20:11; 4:43) | ya eran **objetos**: Arco de Joás, Higos de Ezequías, Reloj de Acaz, Panes de Cebada |
+
+El generador coloca TODAS las salas `Event` del pozo (3-5 por capítulo, ver §3.4): la historia
+es configuración, no sorteo. El contexto del reino partido (Salomón, los becerros) cabe en UNA
+línea del prólogo cinemático — contexto, no protagonismo.
 
 **Regla que no se rompe:** nada contradice 1-2 Reyes. Precedente cerrado: el "Leproso
 Enloquecido" del v1.0 se eliminó porque en 2 Reyes 5 Eliseo *sana* al leproso y en 7:3-10 los
@@ -86,10 +96,21 @@ Leyenda: ✅ hecho · 🆕 falta por escribir.
 ✅ El reino partido · Acab · Jezabel y Baal · la persecución · Dios habla a Elías · «ni rocío ni
 lluvia» · los cuervos · título.
 
+#### "El Reino Partido" — ELIMINADA (2026-08-30)
+Existió una cadena de 7 paradas (1 R 1-16: David, Salomón, Siquem, la casa de Omri) antes del
+primer paso del capítulo 1. **El usuario la rechazó el mismo día en que se estrenó** — el juego
+va de Elías y Eliseo, no de David ni de Salomón — y se quitó entera: ids `PRE_*`, maquinaria
+`prechain_*` del Engine, comando `reino` y guion `reyes_check.txt`. Si algún día vuelve la
+tentación de contar la pre-historia, el sitio es el prólogo cinemático (que ya dice «después de
+Salomón, el reino se partió en dos» en una línea), no una cadena de paradas con opciones.
+
 #### Cap. 1 — El Arroyo Querit (1 Reyes 17:1-7)
 - ✅ Los cuervos de Querit (17:6)
-- ✅ **«Ni rocío ni lluvia sino por mi palabra»** — el anuncio ante Acab (17:1). Hoy solo existe
-  como estampa del prólogo; merece encuentro jugable, porque es la decisión que abre todo.
+- ✅ **El rastreador de Acab** (18:10, pasada de coherencia 2026-08-31): un explorador del rey
+  baja al cañón siguiendo el agua — la sequía que juraste es lo que lo trae a tu arroyo.
+  Sustituye a la audiencia «ni rocío ni lluvia» (17:1), que ya es la estampa 6 del prólogo:
+  Querit viene DESPUÉS de esa conversación en palacio, y rejugarla aquí rompía el orden del
+  libro. El anuncio sigue contado donde toca: en el prólogo.
 - ✅ **El arroyo que se seca** (17:7). Decisión: quedarse donde Dios te mandó, o moverte.
 
 #### Cap. 2 — La Viuda de Sarepta (1 Reyes 17:8-24)
@@ -115,12 +136,15 @@ lluvia» · los cuervos · título.
   después; sin ella, Hazael y Jehú aparecen de la nada en el Acto II.
 - ✅ **Los siete mil que no doblaron la rodilla** (19:18).
 
-#### Cap. 5 — El Llamado (1 Reyes 19:19-21, 21, 22; 2 Reyes 1)
+#### Cap. 5 — El Llamado (1 Reyes 19:19-21, 20, 21, 22; 2 Reyes 1)
 - ✅ Eliseo hijo de Safat, arando con doce yuntas (19:20)
 - ✅ **La viña de Nabot** (21) como encuentro, no solo como jefe.
 - ✅ **Ocozías y el fuego sobre los capitanes** (2 Reyes 1). Dos cincuentenas consumidas y un
   tercer capitán que se arrodilla y suplica: **la decisión del jugador es si perdona al tercero**.
   Episodio icónico de Elías que hoy no está en ninguna parte.
+- ❌ **Eliminados (2026-08-30)**: "El profeta vendado" (1 R 20:35-43) y "Micaías" (1 R 22).
+  Elías no está en ninguna de las dos escenas — el juego ponía al JUGADOR en el papel de otros
+  profetas — y por el mandato de que todo relato vaya anclado a Elías o Eliseo, fuera los dos.
 
 #### Transición — El Ascenso (2 Reyes 2:1-14)
 - ✅ Existe como pantalla de herencia.
@@ -129,12 +153,16 @@ lluvia» · los cuervos · título.
   la petición de la doble porción y el carro de fuego. Hoy son cinco líneas de texto; es el
   momento más importante del juego.
 
-#### Cap. 6 — Las Aguas de Jericó (2 Reyes 2:13-25)
+#### Cap. 6 — Las Aguas de Jericó (1 Reyes 16:34; 2 Reyes 2:13-25)
 - ✅ Los hombres de Jericó y la sal (2:19-22)
-- ✅ **Eliseo recoge el manto y parte el Jordán** (2:14) — «¿Dónde está Jehová, el Dios de
-  Elías?». Primer acto del heredero.
+- ✅ **Los cincuenta que quieren buscar a Elías** (2:15-18, pasada de coherencia 2026-08-31):
+  «quizá lo ha echado el Espíritu en algún monte». Sustituye al encuentro del cruce del Jordán
+  (2:13-14), que ya lo cuenta la cinemática del Ascenso — rejugarlo en Jericó era contar dos
+  veces la misma escena.
 - ✅ **Los muchachos de Betel** (2:23-25). Se trata como **encuentro de juicio, sin combate**:
   la burla al profeta y lo que se sigue de ella. No hay enemigos infantiles.
+- ✅ **Hiel de Jericó** (1 R 16:34, 2026-08-30): la ciudad reedificada al precio de dos hijos,
+  sobre el juramento de Josué. Es el POR QUÉ de las aguas malas que la sal va a sanar.
 
 #### Cap. 7 — El Aceite de la Viuda (2 Reyes 3; 4:1-7, 38-44)
 - ✅ La mujer del profeta muerto y el acreedor (4:1)
@@ -143,6 +171,9 @@ lluvia» · los cuervos · título.
 - ✅ **«Muerte hay en la olla»** y el puñado de harina (4:38-41).
 - ✅ **Los veinte panes de cebada para cien hombres** (4:42-44). Existe como objeto; falta como
   episodio.
+- ✅ **El rey de Moab sobre el muro** (2 R 3:26-27, 2026-08-30): el sacrificio del primogénito y
+  el sitio que se levanta. Contado con sobriedad («lo que hace allí no debe hacerse»); la
+  elección piadosa cobra en el ARMA, como los sirios de Dotán — levantas un sitio ganado.
 
 #### Cap. 8 — El Hijo Sunamita (2 Reyes 4:8-37; 6:1-7; 8:1-6)
 - ✅ La sunamita y el aposento de paredes (4:9-10)
@@ -152,15 +183,19 @@ lluvia» · los cuervos · título.
   doméstico: justo el contrapunto que le falta al Acto II.
 - ✅ **La sunamita recupera sus tierras** (8:1-6), siete años después y por la palabra de Guiezi.
 
-#### Cap. 9 — Naamán el Sirio (2 Reyes 5; 8:7-15)
+#### Cap. 9 — Naamán el Sirio (2 Reyes 5)
 - ✅ Naamán a la puerta, ofendido porque no salen a recibirle (5:11)
 - ✅ **La muchacha israelita cautiva** que dice a su señora dónde está el profeta (5:2-3). Toda la
   historia arranca en una niña esclava.
+- ✅ **Naamán, limpio** (5:15-19, pasada de coherencia 2026-08-31): la carga de tierra de dos
+  mulas y el perdón de Rimón — y el presente que Eliseo rechaza, que es EXACTAMENTE la
+  tentación que pierde a Guiezi, el jefe del capítulo.
 - ✅ Guiezi y la lepra (5:20-27) — existe como jefe del capítulo.
-- ✅ **Hazael y Ben-adad** (8:7-15): «¿Por qué llora mi señor?». Eliseo llora por lo que ese
-  hombre va a hacer, y aun así lo unge.
+- Hazael y la redoma de Jehú vivían aquí y **se mudaron al cap. 10** (2026-08-31): en el libro
+  van DESPUÉS del sitio de Samaria, y ver a Ben-adad en su lecho de muerte un capítulo antes de
+  pelear contra él mentía sobre el orden.
 
-#### Cap. 10 — El Ejército Celestial (2 Reyes 6:8 - 7:20)
+#### Cap. 10 — El Ejército Celestial (2 Reyes 6:8 - 9:13)
 - ✅ El criado de Eliseo y los carros de fuego (6:15-17)
 - ✅ **Los sirios ciegos en Dotán**: los lleva a Samaria, y en vez de matarlos les pone mesa y los
   despide (6:18-23). El acto más contraintuitivo del profeta.
@@ -168,28 +203,46 @@ lluvia» · los cuervos · título.
   profecía de la harina barata mañana a esta hora, y los cuatro que deciden entrar al campamento.
 - ✅ **El príncipe que no comió de la harina** (7:2, 7:17): «lo verás con tus ojos, mas no comerás
   de ello».
+- ✅ **Hazael y Ben-adad** (8:7-15, aquí desde 2026-08-31): roto el cerco, «¿por qué llora mi
+  señor?». Eliseo llora por lo que ese hombre va a hacer. Como «Siete años después» en el
+  cap. 8, el relato mira más allá del jefe del capítulo.
+- ✅ **La redoma de aceite** (9:1-13, aquí desde 2026-08-31): Eliseo envía al hijo de los
+  profetas a ungir a Jehú — «unge, abre la puerta y huye». La última de las tres unciones de
+  Horeb, en marcha: es el último relato del juego y el epílogo lo cobra en su primera escena.
 
-#### Epílogo — El Legado (2 Reyes 9; 13:14-21)
-- ✅ Existe como pantalla desbloqueable con la fe en Profeta Ungido.
-- ✅ **Jehú y la muerte de Jezabel** (9), que cumple al pie de la letra la palabra de Elías sobre
-  la viña de Nabot. Es el cierre del arco del Acto I.
-- ✅ **El arco de Joás y las flechas de la victoria** (13:14-19). Existe como objeto; falta el
-  episodio: golpea la tierra, y golpeó tres veces y se detuvo.
-- ✅ **Los huesos de Eliseo** (13:20-21): un muerto echado en su sepulcro toca los huesos del
-  profeta y revive. El último milagro de Eliseo ocurre cuando ya está muerto — el final natural
-  del juego.
+#### Epílogo — El Legado (2 Reyes 9; 13:14-21), TRES escenas
+Sigue siendo desbloqueable (fe en Profeta Ungido al ganar el cap. 10) y sigue sin mover vida ni
+fe. Cierra los dos arcos de los profetas y NADA más (hubo una ampliación a 9 escenas hasta la
+caída de Jerusalén; revertida el 2026-08-30 por el mandato de anclar todo a Elías/Eliseo):
+- ✅ **Jehú y la muerte de Jezabel** (9): cumple la palabra de Elías sobre la viña de Nabot.
+- ✅ **El arco de Joás y las flechas de la victoria** (13:14-19): el lecho de muerte de Eliseo;
+  la decisión sigue cambiando las últimas palabras del juego (`joash_full`).
+- ✅ **Los huesos de Eliseo** (13:20-21): el último milagro del profeta, ya muerto.
 
-**Recuento:** **35 encuentros escritos y jugables** (2026-08-26). Falta el Ascenso (fase 5)
-y el epílogo (fase 6), que son secuencias y no encuentros de sala.
+**Recuento (2026-08-31):** **46 piezas jugables de relato** (`Ev::COUNT`): 39 encuentros de
+capítulo (pozos 3/3/4/4/3/4/5/4/3/6) + 4 paradas del Ascenso + 3 escenas del epílogo — más el
+prólogo cinemático, las 10 intros, la cinemática del Ascenso y los 4 objetos que son pasaje
+(Arco de Joás, Higos, Reloj de Acaz, Panes de Cebada). Con eso, TODO episodio de Elías y Eliseo
+en 1-2 Reyes tiene su pieza jugable o su objeto. Techo: 46 de los 64 bits del u64
+`codex_events` — crecer más allá de 64 pide una segunda máscara (guardado v10).
 
-**Lo que queda de arte**: nueve de los 35 son ESCENA y no persona, y llevan `Portrait::NONE`
-(estado soportado: la caja se dibuja igual). Les falta su viñeta, como las tres que ya existen.
+**Pasada de coherencia (2026-08-31):** la historia sigue el ORDEN de 1-2 Reyes de la intro en
+adelante: nada que el prólogo o un capítulo anterior ya contó se vuelve a jugar como presente
+(fuera la audiencia con Acab del cap. 1 y el cruce del Jordán del cap. 6), los relatos de
+2 R 8-9 viven tras el sitio de Samaria (cap. 10), y las intros de los caps. 3, 5, 6 y 10
+abren con la bisagra que las une al capítulo anterior («Ve, muéstrate a Acab» 18:1, el encargo
+de Horeb, el manto cruzando el Jordán, la guerra siria tras Naamán).
+
+**Lo que queda de arte**: los encuentros sin cara propia llevan `Portrait::NONE` (estado
+soportado: la caja se dibuja igual). El muro de Moab pide viñeta; las paradas de las cadenas
+van sobre negro y no la necesitan.
 
 ### Cómo se sirve todo eso
 
 - ✅ `EventDef` pasa de uno por capítulo a un **pozo por capítulo** (`namespace Ev` + 
-  `get_chapter_events`). El generador coloca 2-3 salas `Event` de una bolsa barajada, así que
-  **en una sola partida no se ven todos ni queriendo**.
+  `get_chapter_events`). Desde el mandato de mundo fijo (2026-08-27, ver §3.4), el generador
+  coloca **TODOS los relatos del pozo** (3-5 salas `Event` por capítulo, en salas fijadas por
+  configuración): la historia no se sortea — en cada partida se puede ver el pozo entero.
 - ✅ Cada encuentro visto queda en el Códice (`SaveData::codex_events`, guardado v8). La pestaña
   de Capítulos muestra **«Relatos N/M»**, que es el contador que hace visible lo que te estás
   perdiendo.
@@ -245,9 +298,34 @@ huérfanos.
 - Rejilla de **4x3** salas en la mayoría de capítulos, **4x4** en el 5 y el 10.
 - 12 salas de 2x2 pantallas = ~48 pantallas por capítulo, contra las 9 de hoy.
 - **No todas están en el camino al jefe.** Eso es lo que convierte explorar en una decisión.
-- Reparto de tipos por mapa: 2 Tesoro · 2 Altar · 2-3 Encuentro · 2 Elite · resto normales y
-  vacías. Hasta 18 enemigos por sala (contra 12): doce enemigos en cuatro pantallas es un
+- Reparto de tipos por mapa (FIJO por configuración desde 2026-08-27, ver §3.4): en 4x3,
+  TODOS los relatos del pozo (3-4) · 1 Tesoro · 1 Altar · 2 Elite · resto normales; en 4x4,
+  relatos completos · 2 Tesoro · 2 Altar · 2 Elite. Las 4x3 pierden un Tesoro y un Altar
+  respecto al plan original porque los relatos completos no caben de otra forma — y el relato
+  pesa más. Hasta 18 enemigos por sala (contra 12): doce enemigos en cuatro pantallas es un
   descampado.
+
+### 3.4 Mundo FIJO (mandato del usuario, 2026-08-27)
+
+> "Los mapas, la disposición de los enemigos, son fijas. No cada vez que juegues cambie.
+> Las salas no se pueden generar aleatoriamente en runtime."
+
+- **El terreno y la colocación de enemigos de cada sala son SIEMPRE los mismos**: entre
+  lanzamientos, al Continuar y entre partidas nuevas. Como en *A Link to the Past*: Hyrule
+  no se re-sortea, se aprende.
+- La generación procedural sigue corriendo en runtime, pero como **función pura de
+  (capítulo, sala)**: la semilla de cada capítulo es una constante (`Config::CHAPTER_SEEDS`)
+  y cada sala re-siembra el generador antes de generarse. Cambiar una semilla es una decisión
+  de diseño que redibuja ese capítulo para todo el mundo.
+- **La historia y el reparto de salas son configuración, no azar** (decisión del usuario al
+  ejecutar el plan): la tabla `CHAPTER_LAYOUT` (rooms.cpp) fija qué celda de la rejilla es
+  inicio, jefe, tesoro, altar, elite y qué relato cuenta cada sala Event. Todos los relatos
+  del pozo aparecen en todas las partidas.
+- **Al Continuar, lo que hiciste queda hecho** (guardado v9): las salas despejadas siguen
+  despejadas, el cofre abierto sigue abierto y el secreto abierto sigue abierto. La derrota
+  sí rebobina el capítulo entero, enemigos incluidos.
+- **Dónde queda la variedad de rejugada**: en las cartas de elección (objetos y milagros),
+  los drops, las decisiones de los encuentros y el orden en que explores — no en el mapa.
 
 ---
 

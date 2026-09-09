@@ -22,6 +22,10 @@ struct MenuSystem {
     int selected_option = 0;
     int option_count = 0;
 
+    // Fondo del titulo (Elias, Eliseo y el manto). Lo carga el Engine; TEXTURE_NONE = el
+    // titulo se queda con su degradado de siempre.
+    u32 title_bg = TEXTURE_NONE;
+
     // Continue / Settings state
     bool has_continue = false;
     // Caducidad movil (GDD 4.4): a las 48 h la partida deja de poder continuarse y la fila

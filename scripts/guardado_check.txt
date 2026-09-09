@@ -1,7 +1,7 @@
 # Verificacion del GUARDADO: que subir de version no pierde nada.
 # Uso:  MANTLE.exe --script scripts/guardado_check.txt
 #
-# El fichero va por la v8 (`codex_events`, la mascara de relatos del pozo de encuentros).
+# El fichero va por la v9 (estado de sala persistido: mapas fijos, 2026-08-27).
 # Cada version anade su lector de compatibilidad, asi que aqui se comprueba la ULTIMA
 # migracion que haya y que la meta llega entera al otro lado.
 #
@@ -48,14 +48,15 @@ shot 80_v7_partida
 wait 0.1
 
 # --- Victoria -> delete_save: la partida muere, la meta sobrevive ---
-# Con el epilogo desbloqueado (unlocks 3) primero se narra: de ahi las esperas largas.
+# Con el epilogo desbloqueado (unlocks 3) primero se RECORRE (TRES escenas + pagina,
+# ~18 s, decididas solas en autoplay): la espera larga es esa. delete_save NO salta al
+# llegar a la pantalla de victoria sino al CONFIRMAR en ella (Engine::update, Victory),
+# asi que el savedump final va detras de ese confirm — antes, run= seguia a 1 y el gate
+# de "tras borrar" media la pantalla equivocada.
 advance
-wait 3.0
-wait 9.0
+wait 22.0
 press confirm
 wait 2.0
-press confirm
-wait 1.5
 savedump
 shot 81_v7_tras_borrar
 wait 0.1

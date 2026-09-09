@@ -225,6 +225,96 @@ struct SaveDataV7 {
     u32 entitlements;
 };
 
+// v8 es la estructura actual SIN el estado de sala de v9 (`room_flags`/`room_open`, que se
+// anadieron al final: por eso este lector vuelve a ser una copia literal de la anterior).
+struct SaveDataV8 {
+    bool run_active;
+    int current_act;
+    int current_chapter;
+    int current_room;
+    f32 run_time;
+    int character_type;
+    f32 hp;
+    f32 faith;
+    u32 chapter_seed;
+    int item_count;
+    u32 item_ids[24];
+    u32 consumable_id;
+    u32 consumable_uses;
+    u32 miracle_ids[3];
+    int active_slots;
+    int total_runs;
+    int runs_completed;
+    int offerings;
+    u32 upgrades_bought;
+    u32 codex_enemies;
+    u32 codex_items;
+    u32 codex_miracles;
+    u32 codex_chapters;
+    u64 save_timestamp;
+    u32 unlocks;
+    u32 achievements;
+    u32 miracles_cast;
+    int total_kills;
+    f32 music_volume;
+    f32 sfx_volume;
+    int aim_assist;
+    int sensitivity;
+    int language;
+    u32 settings_flags;
+    u32 items_unlocked;
+    u32 skins_unlocked;
+    u32 skin_equipped;
+    u32 entitlements;
+    u64 codex_events;
+};
+
+void migrate_v8(const SaveDataV8& old, SaveData& out) {
+    // El estado de sala (`room_flags`/`room_open`) se queda a cero: una partida v8 no guardo
+    // que salas dejo despejadas, asi que su Continuar se comporta como siempre se comporto
+    // en v8 — el terreno identico (la semilla viaja) y los enemigos de vuelta.
+    out = SaveData{};
+    out.run_active      = old.run_active;
+    out.current_act     = old.current_act;
+    out.current_chapter = old.current_chapter;
+    out.current_room    = old.current_room;
+    out.run_time        = old.run_time;
+    out.character_type  = old.character_type;
+    out.hp              = old.hp;
+    out.faith           = old.faith;
+    out.chapter_seed    = old.chapter_seed;
+    out.item_count      = old.item_count;
+    for (int i = 0; i < 24; i++) out.item_ids[i] = old.item_ids[i];
+    out.consumable_id   = old.consumable_id;
+    out.consumable_uses = old.consumable_uses;
+    for (int i = 0; i < 3 && i < Config::MAX_MIRACLE_SLOTS; i++) out.miracle_ids[i] = old.miracle_ids[i];
+    out.active_slots    = old.active_slots;
+    out.total_runs      = old.total_runs;
+    out.runs_completed  = old.runs_completed;
+    out.offerings       = old.offerings;
+    out.upgrades_bought = old.upgrades_bought;
+    out.codex_enemies   = old.codex_enemies;
+    out.codex_items     = old.codex_items;
+    out.codex_miracles  = old.codex_miracles;
+    out.codex_chapters  = old.codex_chapters;
+    out.save_timestamp  = old.save_timestamp;
+    out.unlocks         = old.unlocks;
+    out.achievements    = old.achievements;
+    out.miracles_cast   = old.miracles_cast;
+    out.total_kills     = old.total_kills;
+    out.music_volume    = old.music_volume;
+    out.sfx_volume      = old.sfx_volume;
+    out.aim_assist      = old.aim_assist;
+    out.sensitivity     = old.sensitivity;
+    out.language        = old.language;
+    out.settings_flags  = old.settings_flags;
+    out.items_unlocked  = old.items_unlocked;
+    out.skins_unlocked  = old.skins_unlocked;
+    out.skin_equipped   = old.skin_equipped;
+    out.entitlements    = old.entitlements;
+    out.codex_events    = old.codex_events;
+}
+
 void migrate_v7(const SaveDataV7& old, SaveData& out) {
     // `codex_events` se queda a cero a proposito: quien viene de v7 vio los diez encuentros
     // que habia, pero el fichero no guarda CUALES, asi que inventarselo seria mentir en el
@@ -463,6 +553,15 @@ bool SaveSystem::load() {
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
+    if (version == 8) {
+        SaveDataV8 old{};
+        SDL_ReadIO(file, &old, sizeof(old));
+        SDL_CloseIO(file);
+        migrate_v8(old, data);
+        SDL_Log("Save file v8 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        save();   // se reescribe ya en el formato nuevo
+        return true;
+    }
     if (version != SAVE_VERSION) {
         SDL_CloseIO(file);
         SDL_Log("Save file version %u is not supported (expected %u) - ignoring it", version, SAVE_VERSION);
@@ -507,6 +606,9 @@ void SaveSystem::delete_save() {
     for (int i = 0; i < Config::MAX_MIRACLE_SLOTS; i++) data.miracle_ids[i] = fresh.miracle_ids[i];
     data.active_slots    = fresh.active_slots;
     data.save_timestamp  = fresh.save_timestamp;
+    // v9: el estado de sala es de la PARTIDA, muere con ella
+    std::memset(data.room_flags, 0, sizeof(data.room_flags));
+    std::memset(data.room_open,  0, sizeof(data.room_open));
     save();   // reescribe el fichero solo con la meta: el fichero ES el almacen de meta
     SDL_Log("Run ended (meta-progression kept: %d offerings)", data.offerings);
 }

@@ -1,0 +1,96 @@
+# ============================================================================
+# asccine_check.txt - La cinematica del Ascenso (2 Reyes 2:8-14)
+# Correr: MANTLE.exe --script scripts/asccine_check.txt
+#
+# Gates del log (exit 0 NO es un gate):
+#   1. "Cinematica del Ascenso (asccine, escena 0)" x2 (pasada ES y pasada EN).
+#      El log solo se imprime al ENTRAR con el comando; las seis escenas de cada
+#      pasada se recorren con confirm y su prueba son las capturas as01..as06.
+#   2. Cero "Cinematic: falta la capa" — los 12 PNG de las cuatro estampas existen.
+#   3. Cero "TEXT TRUNCATED" — las nueve frases del pasaje + la linea de la
+#      herencia caben en la franja, en ES y en EN.
+#   4. "Unloaded texture" tras salir de la cinematica — sus capas no quedan en VRAM.
+#   5. "Cinematica del Ascenso suprimida (autoplay): paginas de texto" — el flujo
+#      real bajo autoplay sigue siendo el texto de siempre: ascension_check y
+#      logros_check no ven cambio.
+#   6. "Ascension: le seguiste 3 de 3 veces, doble porcion=si" — la herencia
+#      queda como estaba (misma condicion que vigila ascension_check).
+#
+# `asccine [n]` es el UNICO camino a la cinematica bajo autoplay, y la deja
+# PARADA (como chintro): se avanza con `press confirm` y se sale con `press
+# cancel`. Solo mira: al salir NO se reparte ninguna herencia.
+# ============================================================================
+
+wait 0.6
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- 1) ES: las seis escenas sobre las cuatro estampas, paradas y con captura
+lang 0
+asccine 0
+wait 2.6
+shot as01_jordan_A
+wait 0.1
+press confirm
+wait 2.2
+shot as02_jordan_B
+wait 0.1
+press confirm
+wait 2.6
+shot as03_carro
+wait 0.1
+press confirm
+wait 2.6
+shot as04_torbellino
+wait 0.1
+press confirm
+wait 2.6
+shot as05_manto_A
+wait 0.1
+press confirm
+wait 2.2
+shot as06_manto_B
+wait 0.1
+press cancel
+wait 0.8
+
+# --- 2) EN: pasada rapida por las seis escenas (dispara wrap_text en ingles)
+lang 1
+asccine 0
+wait 1.2
+press confirm
+wait 1.2
+press confirm
+wait 1.2
+press confirm
+wait 1.2
+press confirm
+wait 1.2
+press confirm
+wait 1.2
+press cancel
+wait 0.8
+lang 0
+
+# --- 3) El flujo real bajo autoplay: las 4 paradas deciden solas, la cinematica
+#        se SUPRIME y las paginas de texto de siempre cierran la herencia
+ascend
+wait 1.0
+wait 4.4
+wait 4.4
+wait 4.4
+wait 5.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+stats tras_ascenso
+say asccine_check done
+quit
