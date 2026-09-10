@@ -130,6 +130,22 @@ void update_enemy_ai(ECSWorld& world, f32 dt);
 Entity spawn_disciple(ECSWorld& world, Vec2 position, u32 texture_id, f32 life_seconds,
                       f32 hp = 30.0f, f32 damage = 10.0f);
 
+// -----------------------------------------------------------------------------
+// Figuras inertes (escenas guionizadas: la audiencia con Acab)
+// -----------------------------------------------------------------------------
+// Una figura es alguien DE PIE en el mundo que ni pelea ni se mueve: Transform + Sprite +
+// Animation y nada mas. Sin Health, Collider ni EnemyAI, `is_hostile`, `is_ally` y
+// `count_living_enemies` la ignoran, y `load_room` la barre con todo lo demas. La fila de
+// la hoja se HORNEA en `src_rect` al crearla porque `system_animation` no corre en
+// GameScene::Dialogue, que es donde se la mira. Sombra y profundidad por pies las da
+// ECSWorld::collect_draws (`is_figure`).
+Entity spawn_figure(ECSWorld& world, Vec2 position, u32 texture_id, Direction facing);
+// La misma figura pero desde una celda de `assets/sprites/npcs.png` (namespace Npc): la
+// viuda, Guiezi, los hijos de los profetas... Una celda es un solo frame de 128 px con los
+// pies en la fila 112, igual que un frame de hoja de personaje, asi que se pinta y se ordena
+// exactamente como cualquier otra figura. No tiene direccion: mira siempre al frente.
+Entity spawn_npc_figure(ECSWorld& world, Vec2 position, u32 npc_texture, int cell);
+
 // =============================================================================
 // Muerte con conducta (Acto II)
 // =============================================================================

@@ -461,6 +461,11 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
         bool is_proj   = has(static_cast<Entity>(e), Component::Projectile);
         bool is_pickup = has(static_cast<Entity>(e), Component::Item) &&
                          items[e].type == ItemComponent::Type::Pickup;
+        // Figura inerte (spawn_figure: Acab y Jezabel en la audiencia): alguien de pie sin
+        // combate. Los VFX llevan Lifetime, asi que aqui solo entran las figuras.
+        bool is_figure = !is_player && !is_enemy && !is_proj && !is_pickup &&
+                         has(static_cast<Entity>(e), Component::Animation) &&
+                         !has(static_cast<Entity>(e), Component::Lifetime);
 
         Color tint = s.tint;
         if (has(static_cast<Entity>(e), Component::Health)) {
@@ -506,7 +511,7 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
 
         DrawCmd cmd;
         // Depth: characters sort by their feet (12px below centre at scale 1); flat things by centre
-        f32 feet = (is_player || is_enemy) ? 12.0f * t.scale.y : 0.0f;
+        f32 feet = (is_player || is_enemy || is_figure) ? 12.0f * t.scale.y : 0.0f;
         cmd.sort_y = t.position.y + feet;
         if (is_proj) cmd.sort_y += 8.0f;   // Projectiles fly above the ground line
         cmd.flip_x = s.flip_x;
@@ -536,7 +541,7 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
         out.push_back(cmd);
 
         // Soft shadow blob under characters (drawn first: very low sort key)
-        if ((is_player || is_enemy) && has_texture) {
+        if ((is_player || is_enemy || is_figure) && has_texture) {
             DrawCmd sh;
             sh.sort_y = -1000.0f;
             f32 sw = 16.0f * t.scale.x, shh = 6.0f * t.scale.y;

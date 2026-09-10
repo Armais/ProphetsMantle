@@ -6,7 +6,8 @@
 #   1. "Intro de capitulo 2 suprimida (autoplay)" — la entrada natural bajo
 #      autoplay cae a la carta de texto: los guiones existentes no ven cambio.
 #   2. "Cinematica de capitulo N" x2 para N = 1..10 (pasada ES + pasada EN).
-#   3. Cero "Cinematic: falta la capa" — los 30 PNG de las diez estampas existen.
+#   3. Cero "Cinematic: falta la capa" — los 33 PNG de las once estampas existen
+#      (diez planos A + el plano B propio del cap. 1, 31_cap01b_escondite).
 #   4. Cero "TEXT TRUNCATED" — versiculo, narracion y objetivo caben, ES y EN.
 #   5. "Unloaded texture" tras salir de cada intro — las capas no acumulan VRAM.
 #
@@ -30,7 +31,8 @@ shot in02_fallback_carta_cap2
 wait 0.1
 wait 3.0
 
-# --- 3) ES: la intro del cap 1, parada: plano A (rotulo + versiculo) y plano B
+# --- 3) ES: la intro del cap 1, parada: plano A (rotulo + versiculo, Elias
+#        bebiendo) y plano B (estampa PROPIA: el escondite, de pie bajo los cuervos)
 lang 0
 chintro 1
 wait 2.6

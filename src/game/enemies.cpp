@@ -502,6 +502,47 @@ Entity spawn_disciple(ECSWorld& world, Vec2 position, u32 texture_id, f32 life_s
     return e;
 }
 
+Entity spawn_figure(ECSWorld& world, Vec2 position, u32 texture_id, Direction facing) {
+    Entity e = world.create();
+    if (e == ENTITY_NONE) return e;
+
+    world.add(e, Component::Transform);
+    world.transforms[e].position = position;
+    world.transforms[e].facing   = facing;
+
+    const AnimID anim = facing_anim(AnimID::IdleDown, facing);
+    world.add(e, Component::Animation);
+    play_anim(world.animations[e], anim, true);
+
+    // Fila horneada: sin system_animation, el src_rect que se escribe aqui es el que se pinta.
+    world.add(e, Component::Sprite);
+    const f32 fs = static_cast<f32>(SHEET_FRAME_SIZE);
+    world.sprites[e].texture_id = texture_id;
+    world.sprites[e].src_rect   = {0.0f, static_cast<f32>(get_anim_def(anim).row) * fs, fs, fs};
+    world.sprites[e].z_order    = 5;
+    return e;
+}
+
+Entity spawn_npc_figure(ECSWorld& world, Vec2 position, u32 npc_texture, int cell) {
+    Entity e = world.create();
+    if (e == ENTITY_NONE) return e;
+
+    world.add(e, Component::Transform);
+    world.transforms[e].position = position;
+    world.transforms[e].facing   = Direction::Down;
+
+    // Animation solo para que collect_draws la trate como figura (sombra y orden por pies);
+    // system_animation no corre en Dialogue, asi que la celda horneada aqui es la que se ve.
+    world.add(e, Component::Animation);
+    play_anim(world.animations[e], AnimID::IdleDown, true);
+
+    world.add(e, Component::Sprite);
+    world.sprites[e].texture_id = npc_texture;
+    world.sprites[e].src_rect   = Npc::src(cell);
+    world.sprites[e].z_order    = 5;
+    return e;
+}
+
 // Persigue al hostil que elegiria el auto-apuntado; sin ninguno, escolta al profeta.
 // El golpe no se da aqui: lo resuelve la colision (game/combat.cpp).
 static void update_ally_ai(ECSWorld& world, Entity e, Vec2 player_pos, f32 dt) {

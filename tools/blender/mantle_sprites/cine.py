@@ -812,6 +812,21 @@ POSE_RAISE = {   # firme en el promontorio, el cayado erguido y el manto al vien
     'thigh.L': {'rot': [('X', 12.0)]}, 'thigh.R': {'rot': [('X', -14.0)]},
 }
 
+POSE_LOOKUP = {   # de pie en el fondo de la garganta, la cara al cielo, la mano a los cuervos
+    # Pose de pie (ningun muslo pasa de 45 grados: _drape_legs no toca la tunica). La cabeza
+    # se alza (X negativo en un hueso que apunta ARRIBA = hacia atras) y el pecho se abre; el
+    # brazo izquierdo va AL FRENTE (X negativo) y algo abierto (Y), asi que en tres cuartos
+    # no pasa por delante de la cara. El cayado sigue en la derecha sin pasar de la
+    # horizontal (POSE_RAISE): mas arriba vuelca el baculo; y el brazo va bien ABIERTO
+    # (Y -30), que con -12 el baculo cruzaba el pecho y la llama caia sobre la frente.
+    'head': {'rot': [('X', -22.0)]}, 'chest': {'rot': [('X', -8.0)]},
+    'upper_arm.L': {'rot': [('X', -70.0), ('Y', 25.0)]},
+    'forearm.L': {'rot': [('X', -22.0)]},
+    'upper_arm.R': {'rot': [('X', 4.0), ('Y', -30.0)]},
+    'forearm.R': {'rot': [('X', -8.0)]},
+    'thigh.L': {'rot': [('X', 8.0)]}, 'thigh.R': {'rot': [('X', -10.0)]},
+}
+
 POSE_DRINK = {   # de rodillas junto al agua, la mano hacia el arroyo
     'root': {'loc': (0.0, 0.0, -0.44)},
     'thigh.L': {'rot': [('X', -86.0)]}, 'shin.L': {'rot': [('X', 96.0)]},
@@ -1284,6 +1299,85 @@ def scene_cap01_querit():
     place(MID, tiles.build_palm, at=(7.2, 18.0, 0.0), scale=1.6, m=m)
 
     # --- near: el labio de la hondonada y los juncos del arroyo
+    y0 = near_y(bite=0.74)
+    x0, x1, zb, zt = frame_at(y0, SAFE_NEAR)
+    for i, x in enumerate((x0, x1)):
+        spire(NEAR, f'r{i}', x, y0, lift(zb, zt, 0.58 + 0.16 * i), (x1 - x0) * 0.09,
+              '#6b5a3c', lean=6.0 * (1 if i else -1))
+    for i, x in enumerate((x0 * 0.55, x1 * 0.55)):
+        tuft(NEAR, f'g{i}', x, y0 + 0.7, zb * 0.88, 7, '#4e6b34', h=(zt - zb) * 0.16,
+             spread=0.35, w=0.06, lean=10.0)
+
+
+def scene_cap01b_escondite():
+    """31. INTRO CAP. 1, PLANO B — el escondite: Elias DE PIE en el fondo de la garganta
+    mirando arriba a los cuervos que bajan con el pan por la franja de cielo; paredes
+    altas a los lados y, en el borde superior, dos soldados de Acab que pasan de largo
+    por la cresta sin verlo (1 Reyes 18:10: Acab lo busca por todos los reinos).
+
+    El plano A (11) y la estampa 7 del prologo ya ensenan a Elias bebiendo de rodillas:
+    el jugador veia la misma imagen tres veces seguidas. Aqui la camara esta DENTRO de la
+    garganta, baja y casi horizontal (elev 3 con lente 38: el cielo pide elev < 12), de
+    modo que el cuadro se divide en suelo de roca abajo, paredes a los lados y cielo
+    arriba. Ojo al colocar: el horizonte queda 3 grados POR ENCIMA del centro, asi que
+    algo a elevacion `a` desde la camara cae a `a + 3` grados del centro, y el borde
+    superior esta a 12. La cresta de la derecha va a 3,7 m y 25 m de la camara: es lo
+    mas alto que puede ir para que la cabeza de los soldados (a 5,6 m) siga dentro; y
+    todo lo que tenga que verse SIN paneo va a menos de 0,8 del semiancho del panel
+    (el motor ensena el 80% central): la primera pasada dejo a los soldados a 0,82.
+    """
+    new_scene()
+    m = tiles.mats()
+    setup_cine(target=(0.0, 5.0, 2.0), dist=10.0, elev=3.0, lens=38.0)
+    flat_layer(FAR)
+    # El suelo acaba a 28 m: por el vano del fondo tienen que verse las laderas lejanas
+    ground(MID, '#8a7450', far=28.0, near=-40.0, half_w=70.0)
+
+    # --- far (FLAT, siluetas): las laderas por las que sigue la garganta, y la sierra
+    ridge(FAR, 'h', [-16, -8, 0, 8, 16], 42.0, 7.5, '#7d6a4e', sz=0.65, jitter=0.3)
+    ridge(FAR, 'c', [-520, -260, 0, 250, 510], 600.0, 95.0, '#4e4560',
+          sz=0.36, jitter=0.5, skirt=0.02)
+
+    # --- mid: el arroyo baja desde el vano pegado al centro (a la derecha del profeta)
+    # y NO se mete bajo la loma de la derecha, cuyo pie esta en x=1
+    brook = [(-0.6, 27.0), (-0.3, 23.0), (0.0, 19.5), (0.9, 16.0), (1.6, 13.0),
+             (0.8, 10.0), (1.5, 7.5), (0.3, 4.0), (-0.8, 0.5)]
+    road_strip(MID, 'bank', brook, 2.2, 3.6, '#b6a074', z=0.03)
+    road_strip(MID, 'w', brook, 1.2, 2.2, '#3f7f96', z=0.06)
+    # La pared IZQUIERDA: dos riscos que se solapan y salen por el borde superior, con el
+    # de delante inclinado hacia DENTRO (lean positivo = la cima hacia +X), y un tercero
+    # al fondo que estrecha el vano. Mas cerca del centro que esto tapaban media estampa.
+    spire(MID, 'wl', -7.0, 9.0, 12.0, 3.0, '#7a643f', lean=7.0)
+    spire(MID, 'wl2', -4.8, 13.0, 10.0, 2.3, '#6f5a38', lean=4.0)
+    spire(MID, 'wl3', -4.6, 21.0, 9.0, 3.0, '#6b5636', lean=2.0)
+    # La pared DERECHA: la loma cuya cresta es el borde de la garganta. Una sola superficie
+    # (mound_field): la cupula principal ESTRECHA en Y (su cara a camara sale casi vertical
+    # y se lee como pared) centrada donde pisan los soldados, otra detras que le da fondo
+    # a la cresta y una mas alta que sube hacia el borde derecho del cuadro.
+    mound_field(MID, 'crest', [(6.8, 20.0, 4.2, 1.3, 0.75, 0.88, 0.0),
+                               (8.3, 23.0, 4.2, 1.6, 0.8, 0.80, 0.0),
+                               (13.8, 19.0, 4.6, 1.4, 0.8, 1.15, 0.0)], '#7a643f')
+    # Los dos soldados, de perfil (yaw 90 = andando hacia +X), sobre la cupula principal
+    # (a 1,2 m del centro la cupula aun esta al 97% de su altura, 3,7 m), en el cuarto
+    # superior derecho entre 0,45 y 0,68 del semiancho: el plano B acaba con zoom 1,10 y
+    # paneo -4, o sea que el motor solo ensena hasta 0,70 — a 0,75 el segundo soldado
+    # salia partido por el borde al final del plano — y el cielo del centro es de los
+    # cuervos (con el tercero a 0,44 el pajaro se le echaba encima al primer soldado).
+    for i, (x, z, yw) in enumerate(((5.6, 3.56, 84.0), (7.6, 3.62, 96.0))):
+        actor('soldado_acab', at=(x, 20.0, z), yaw=yw, pose=POSE_WALK, layer=MID)
+    # Elias en la orilla izquierda, en tres cuartos hacia camara y hacia los cuervos
+    # (yaw 25): a 60 salia de perfil y la llama del cayado le caia sobre la cara
+    actor('elias', at=(-1.6, 6.5, 0.0), yaw=25.0, pose=POSE_LOOKUP)
+    # Tres cuervos con el pan bajando en diagonal desde arriba a la derecha hacia el
+    # profeta (el modelo mira a -X: yaw 0 = vuela hacia la izquierda; pitch < 0 = pica).
+    # Los dos altos quedan por encima de la cresta y de la sierra: recortan contra cielo.
+    crow(MID, 'a', (0.5, 9.0, 2.9), yaw=18.0, pitch=-14.0, s=1.15, bread=True)
+    crow(MID, 'b', (1.4, 11.5, 3.6), yaw=8.0, pitch=-18.0, s=1.05, bread=True)
+    crow(MID, 'c', (3.0, 14.5, 4.3), yaw=-4.0, pitch=-22.0, s=0.95, bread=True)
+    for i, (x, y, s) in enumerate(((3.6, 7.6, 2.2), (-3.9, 9.4, 1.9), (4.6, 11.4, 2.6))):
+        place(MID, rock_cluster, at=(x, y, 0.0), scale=s, rot_z=i * 47.0, m=m)
+
+    # --- near: los riscos de los bordes y los juncos, calcado del bloque de la 11
     y0 = near_y(bite=0.74)
     x0, x1, zb, zt = frame_at(y0, SAFE_NEAR)
     for i, x in enumerate((x0, x1)):
@@ -2135,6 +2229,9 @@ PANELS = {
     22: ('asc02_carro', scene_asc02_carro),
     23: ('asc03_torbellino', scene_asc03_torbellino),
     24: ('asc04_manto', scene_asc04_manto),
+    # Planos B con estampa propia: PANELS[31..40] = plano B del capitulo idx-30 (CHAPTER_CINE
+    # `art_b` en ui/cinematic.cpp). Solo el cap. 1 lo lleva por ahora.
+    31: ('cap01b_escondite', scene_cap01b_escondite),
 }
 
 

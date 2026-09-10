@@ -1,0 +1,223 @@
+# ============================================================================
+# audiencia_check.txt - La audiencia con Acab (1 Reyes 17:1-4), apertura del cap. 1
+# Correr: MANTLE.exe --script scripts/audiencia_check.txt
+#
+# Siete cajas, 17 paginas por pasada (3+3+2+3+2+2+2): Elias reprende (16:30-33), Acab
+# lo desprecia, Jezabel lo amenaza (18:4), Elias sentencia (17:1), Acab se burla
+# (18:19), Jezabel promete la caceria (18:10) y cierra la palabra del Senor (17:2-4).
+#
+# Gates del log (exit 0 NO es un gate):
+#   1. "Audiencia con Acab suprimida (autoplay): flujo de texto" en la nueva partida
+#      del guion: bajo autoplay las entradas naturales NO la disparan (lore_check y
+#      los demas guiones no ven cambio).
+#   2. "Audiencia con Acab (1 Reyes 17:1-4)" x3: pasada ES completa, pasada EN
+#      completa y la pasada saltada con ESC.
+#   3. "Audiencia: parada 1/7" ... "Audiencia: parada 7/7" en las DOS pasadas completas.
+#   4. Orden en cada pasada completa: "Audiencia terminada (completa)" ->
+#      "Cinematica de capitulo 1" -> "Scene change: 0 -> 2" (la intro del rio va
+#      DESPUES del palacio, y de la intro se cae a Playing).
+#   5. "Audiencia terminada (saltada)" tras `press cancel`, con la misma cadena
+#      (intro del cap. 1 -> Playing): ESC salta las siete cajas, no una.
+#   6. Cero "TEXT TRUNCATED": las 15 paginas con retrato caben en 4 lineas a 244 u
+#      (techo ~115 caracteres; la sentencia de 17:1 es la mas larga), en ES y en EN;
+#      las dos paginas de 17:2-4 caben sin retrato. Es el gate que manda.
+#   7. Cero "WARNING: sprite sheet": acab.png y jezabel.png miden 896x1920.
+#   8. "Continuing run - Act 1, Chapter 1" SIN ninguna "Audiencia con Acab" despues:
+#      Continuar no la repite (criterio del sitio de llamada, sin bit en el guardado).
+#
+# Capturas au01..au35 (mirar CADA una): silleria del interior, Acab y Jezabel de pie
+# arriba mirando abajo, Elias abajo mirando arriba, SIN HUD, frase entera en <= 4
+# lineas, pie "[ENTER] continuar" y ninguna fila de opciones. Retrato y nombre por
+# caja: Elias en la 1 y la 4, Acab en la 2 y la 5, Jezabel en la 3 y la 6, ninguno
+# en la 7 ("La palabra del Senor"). ES: au01-au17; au18 es la intro del cap. 1 recien
+# lanzada por la audiencia (el orden); EN: au19-au35.
+#
+# `audiencia` (= `escena 0`, game/scenes.h) es el UNICO camino a la escena bajo autoplay,
+# y la deja PARADA (como chintro): se avanza con `press confirm` y se sale con `press
+# cancel`. Al cerrarse lanza la intro del cap. 1, que bajo autoplay avanza sola. Las
+# otras 19 escenas (aperturas 2-10 y dialogos de jefe) las recorre escenas_check.txt.
+# ============================================================================
+
+wait 0.6
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- 1) ES: las siete cajas, paradas y con captura en cada pagina
+lang 0
+audiencia
+wait 1.5
+shot au01_elias_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au02_elias_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au03_elias_c_es
+wait 0.1
+press confirm
+wait 1.0
+shot au04_acab_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au05_acab_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au06_acab_c_es
+wait 0.1
+press confirm
+wait 1.0
+shot au07_jezabel_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au08_jezabel_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au09_elias2_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au10_elias2_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au11_elias2_c_es
+wait 0.1
+press confirm
+wait 1.0
+shot au12_acab2_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au13_acab2_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au14_jezabel2_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au15_jezabel2_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au16_palabra_a_es
+wait 0.1
+press confirm
+wait 1.0
+shot au17_palabra_b_es
+wait 0.1
+press confirm
+wait 1.0
+shot au18_intro_tras_audiencia
+wait 0.1
+wait 3.5
+
+# --- 2) EN: misma pasada (dispara wrap_text en ingles)
+lang 1
+audiencia
+wait 1.5
+shot au19_elias_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au20_elias_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au21_elias_c_en
+wait 0.1
+press confirm
+wait 1.0
+shot au22_acab_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au23_acab_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au24_acab_c_en
+wait 0.1
+press confirm
+wait 1.0
+shot au25_jezabel_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au26_jezabel_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au27_elias2_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au28_elias2_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au29_elias2_c_en
+wait 0.1
+press confirm
+wait 1.0
+shot au30_acab2_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au31_acab2_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au32_jezabel2_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au33_jezabel2_b_en
+wait 0.1
+press confirm
+wait 1.0
+shot au34_palabra_a_en
+wait 0.1
+press confirm
+wait 1.0
+shot au35_palabra_b_en
+wait 0.1
+press confirm
+wait 1.0
+wait 3.5
+lang 0
+
+# --- 3) ESC en la primera caja salta la escena ENTERA
+audiencia
+wait 1.0
+press cancel
+wait 4.5
+
+# --- 4) Salir guardando y Continuar: la audiencia no vuelve
+press pause
+wait 0.6
+press down
+wait 0.2
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 1.5
+press down
+wait 0.3
+press confirm
+wait 3.0
+say audiencia_check done
+quit

@@ -47,10 +47,10 @@ inline ChapterLore get_chapter_lore(int chapter) {
     switch (chapter) {
         case 1: return {
             {"1 Reyes 17:4", tr("Beberás del arroyo; y yo he mandado a los cuervos que te sustenten allí.", "Thou shalt drink of the brook; and I have commanded the ravens to feed thee there.")},
-            {tr("Elías el tisbita dijo a Acab: «Vive Jehová, no habrá lluvia ni rocío en estos años, sino por mi palabra».", "Elijah the Tishbite said to Ahab: «As the Lord lives, there shall be neither dew nor rain these years, but according to my word»."),
-             tr("Y la palabra de Jehová vino a él: escóndete junto al arroyo de Querit.", "And the word of the Lord came to him: hide thyself by the brook Cherith."),
-             tr("Los hombres del rey ya buscan tu rastro por todo Israel.", "The king's men are already hunting your trail through all Israel."),
-             nullptr},
+            // 17:1-3 ya no se repiten aqui: los acaba de jugar la audiencia con Acab
+            // (scenes.h, Scene::AUDIENCIA) justo antes de esta intro.
+            {tr("Los hombres del rey ya buscan tu rastro por todo Israel.", "The king's men are already hunting your trail through all Israel."),
+             nullptr, nullptr, nullptr},
             tr("Sobrevive junto al arroyo. Los cuervos te sustentarán.", "Survive by the brook. The ravens will feed you."),
             tr("El capitán ha caído. Pero el arroyo se seca: no ha llovido sobre la tierra.", "The captain has fallen. But the brook dries up: no rain has fallen on the land."),
             tr("¡El rey te quiere vivo, profeta! ¡Vivo, o en pedazos!", "The king wants you alive, prophet! Alive, or in pieces!")
@@ -77,8 +77,9 @@ inline ChapterLore get_chapter_lore(int chapter) {
         };
         case 4: return {
             {"1 Reyes 19:12", tr("Y tras el fuego un silbo apacible y delicado.", "And after the fire a still small voice.")},
-            {tr("Jezabel juró: «Así me hagan los dioses si mañana no he puesto tu alma como la de uno de ellos».", "Jezebel swore: «So let the gods do to me if I make not thy life as the life of one of them»."),
-             tr("Elías huyó al desierto, se sentó bajo un enebro y pidió morirse.", "Elijah fled to the desert, sat under a juniper and asked to die."),
+            // El juramento de Jezabel (19:2) ya no se repite aqui: lo acaba de traer su
+            // mensajero en la apertura del capitulo (scenes.h, Scene::APERTURA_4).
+            {tr("Elías huyó al desierto, se sentó bajo un enebro y pidió morirse.", "Elijah fled to the desert, sat under a juniper and asked to die."),
              tr("Cuarenta días y cuarenta noches hasta Horeb, el monte de Dios.", "Forty days and forty nights to Horeb, the mount of God."),
              nullptr},
             tr("«¿Qué haces aquí, Elías?»", "«What doest thou here, Elijah?»"),

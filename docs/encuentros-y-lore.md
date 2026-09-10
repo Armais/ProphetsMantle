@@ -17,6 +17,59 @@ presente**. Esta seccion SUPERA los recuentos de la del 2026-08-30. Lo que cambi
   siguiendo el agua — la sequia jurada es lo que trae la caceria al arroyo, y desarmarlo
   anuncia al jefe (el Capitan de Acab). Reusa las celdas del oficial real (retrato 0 y
   `Npc::OFICIAL_REAL`): cero arte nuevo.
+  - **Vuelve como APERTURA guionizada (2026-09-09)**, no como relato del pozo: el palacio
+    montado con el motor del gameplay (interior de silleria, `spawn_figure` de Acab y
+    Jezabel, Elias delante, HUD apagado) y SIETE cajas en orden, todas SIN decision
+    (`options[0].label == nullptr` cierra la caja sola): Elias reprende (16:30-33), Acab lo
+    desprecia, Jezabel lo amenaza (18:4), Elias sentencia (17:1 tal cual el prologo), Acab
+    se burla (los 450 de 18:19), Jezabel promete la caceria (18:10) y cierra «La palabra
+    del Señor» (17:2-4, sin retrato). En 17:1 Acab no responde; que aqui responda, y
+    Jezabel con el, es decision del usuario (2026-09-09), y lo inventado se apoya en
+    16:30-33, 18:4, 18:10, 18:19 y 2 R 1:8. Va ANTES de Querit, en orden, y por eso no
+    rompe la regla; la intro del rio (lore.h) pierde sus dos primeras lineas (17:1 y
+    17:2-3). Solo en Nueva partida; ESC la salta entera; bajo autoplay se suprime y la
+    fuerza `audiencia` (`scripts/audiencia_check.txt`, 17 paginas por pasada). Desde el
+    2026-09-10 es la escena 0 del sistema general (ver la seccion siguiente).
+
+### Escenas guionizadas: aperturas de capitulo y dialogos de jefe (2026-09-10)
+
+Mandato del usuario: *"haz lo mismo que hay en el capitulo 1 [...] al comienzo de cada
+capitulo y a lo largo de todo el juego"* y *"antes de la pelea con cada jefe debe haber un
+dialogo"*. La audiencia se generalizo en **`game/scenes.h`** y ahora hay **20 escenas**:
+
+- **Que es una escena**: un `SceneDef` (escenario + cadena) y sus cajas (`get_scene_line`,
+  mismo `EventDef` que el pozo, sin opciones). Escenarios (`StageKind`): `Interior` (silleria
+  del bioma, una pantalla, ancla en (W/2, 4)), `Exterior` (sala `Normal` del bioma con un
+  claro de 15x8 tiles en el centro para que la decoracion no tape a nadie; el bioma puede ser
+  el de OTRO capitulo: Jezreel son los campos del cap. 5, la orilla del Jordan la ribera del
+  cap. 9, el desierto de Edom el del cap. 4) y `Live` (la arena tal cual esta, con el jefe
+  de pie). Figuras (`FigureKind`): las hojas de Acab y Jezabel, cualquier `EnemyType`
+  (soldados, profetas de Baal) y las celdas de `npcs.png` via **`spawn_npc_figure`** (la
+  viuda, Guiezi, los hijos de los profetas, el principe azul y plata como Josafat).
+- **Aperturas 2-10** (`Scene::opening_of`), antes de la intro cinematica, en el orden del
+  libro y sin repetir ni la intro ni el pozo: Sarepta 17:8-11 (termina en 17:11: el punado de
+  harina es el pozo) · Elias ante Acab 18:17-19, 24 · el mensajero de Jezabel 19:1-3 (la intro
+  del cap. 4 pierde el juramento) · camino de Jezreel 19:21 + 21:1-16 contado por Eliseo (la
+  unica forma de contar a Nabot con el profeta en escena; termina en 21:16, la palabra es el
+  pozo) · la orilla del Jordan 2:15 · los tres reyes en Edom 3:9-15 (termina en el tanedor) ·
+  el aposento de Sunem 4:12-16 · la carta de Ben-adad 5:5-8 · el rey avisado 6:9-13.
+- **Dialogos de jefe 1-10** (`Scene::boss_of`): al entrar en la arena, con el jefe ya
+  spawneado y el mundo congelado; el jefe habla primero, el profeta responde, la ultima caja
+  abre la pelea. Las `boss_line` de lore.h viven ahora dentro de estas cadenas. Con la cara
+  de cada uno: la Desesperacion habla con el retrato de ELIAS (es su propia voz), la Muerte
+  sin retrato, los que son un EnemyType con su celda del Bestiario, Guiezi con la de
+  CRIADO_ELISEO. **Una vez por partida y capitulo** (`Engine::boss_talk_seen`): morir y
+  reintentar no lo repite; Continuar en otra sesion si lo repite una vez. Se pide en
+  `load_room` (`pending_scene`) y arranca en el siguiente paso de Playing, no en mitad de la
+  transicion de sala.
+- **Reyes sin retrato**: Joram y Josafat llevan `Portrait::NONE` a proposito (la cara de Acab
+  para su hijo seria mentir); la hoja de Acab si vale como figura de rey.
+- **Ids y Codice**: las cajas NO son `Ev`: ~90 cajas obligatorias reventarian la mascara u64
+  de `codex_events`. Viajan en `DialogueState::event_id` desplazadas `Sc::LINE_BASE` (1000)
+  y las resuelve `get_dialogue_def`; `open_dialogue` solo marca el Codice para ids `< Ev::COUNT`.
+  La audiencia salio de `Ev` con el resto: **`Ev::COUNT` vuelve a 46 de 64**.
+- Autoplay: todas suprimidas (`Apertura del capitulo N suprimida (autoplay)`, `Dialogo del
+  jefe N suprimido (autoplay)`); `escena <id> [1]` las fuerza. Guion: `scripts/escenas_check.txt`.
 - **Cap. 6: fuera el cruce del Jordan** (2 R 2:13-14 lo cuenta la cinematica del Ascenso).
   En su lugar, `Ev::CINCUENTA_BUSCAN` (2 R 2:15-18): los cincuenta que insisten en buscar a
   Elias por montes y valles. La vineta `Portrait::MANTO_JORDAN` (celda 34) queda LIBRE pero
@@ -32,7 +85,8 @@ presente**. Esta seccion SUPERA los recuentos de la del 2026-08-30. Lo que cambi
   saca a Elias de Sarepta), cap 5 con el encargo de Horeb, cap 6 con el manto cruzando el
   Jordan (y ya no narra la sal ANTES de que el jugador decida echarla), cap 10 con la guerra
   siria tras la carne nueva de Naaman. Caps 2 y 4 ya empalmaban solos.
-- **Numeros vigentes**: pozos **3/3/4/4/3/4/5/4/3/6 = 39** relatos; `Ev::COUNT` **46 de 64**;
+- **Numeros vigentes**: pozos **3/3/4/4/3/4/5/4/3/6 = 39** relatos; `Ev::COUNT` **46 de 64**
+  (las cajas de escena de `scenes.h` van fuera de la mascara y el Codice no las cuenta);
   encuentros_check pide **78 aperturas**. `CHAPTER_LAYOUT` admite el digito **'6'**; el cap. 9
   volvio su '4' a 'T' (recupera el Tesoro perdido) y el cap. 10 pone '5' y '6' en dos 'N' —
   o sea que **el reparto de salas de los caps. 9 y 10 se redibujo** para todo el mundo, con la

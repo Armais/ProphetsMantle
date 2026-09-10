@@ -105,6 +105,16 @@ tentación de contar la pre-historia, el sitio es el prólogo cinemático (que y
 Salomón, el reino se partió en dos» en una línea), no una cadena de paradas con opciones.
 
 #### Cap. 1 — El Arroyo Querit (1 Reyes 17:1-7)
+- ✅ **La audiencia con Acab** (17:1-4, apertura guionizada, 2026-09-09): antes de la intro del
+  río, con el motor del gameplay — palacio (interior de sillería, cámara clavada), Acab y
+  Jezabel de pie al fondo, Elías delante — y siete cajas SIN decisión: Elías reprende, Acab lo
+  desprecia, Jezabel amenaza, la sentencia «ni rocío ni lluvia» (17:1), Acab se burla, Jezabel
+  promete la cacería y «La palabra del Señor» que lo manda a Querit (17:2-4). Va ANTES del
+  arroyo, en el orden del libro, así que la regla del 2026-08-31 se mantiene: el prólogo la
+  sigue narrando y la intro del río ya no repite 17:1-3. Solo en Nueva partida (ni Continuar
+  ni reintento), ESC la salta entera; cero arte nuevo (`acab.png`, `jezabel.png`, retratos).
+  Es la escena 0 de `game/scenes.h` (ver «Escenas guionizadas» más abajo).
+- ✅ **Diálogo con el Capitán de Acab** antes de la pelea (18:10; 2 R 1:9), escena de jefe.
 - ✅ Los cuervos de Querit (17:6)
 - ✅ **El rastreador de Acab** (18:10, pasada de coherencia 2026-08-31): un explorador del rey
   baja al cañón siguiendo el agua — la sequía que juraste es lo que lo trae a tu arroyo.
@@ -223,12 +233,27 @@ caída de Jerusalén; revertida el 2026-08-30 por el mandato de anclar todo a El
 capítulo (pozos 3/3/4/4/3/4/5/4/3/6) + 4 paradas del Ascenso + 3 escenas del epílogo — más el
 prólogo cinemático, las 10 intros, la cinemática del Ascenso y los 4 objetos que son pasaje
 (Arco de Joás, Higos, Reloj de Acaz, Panes de Cebada). Con eso, TODO episodio de Elías y Eliseo
-en 1-2 Reyes tiene su pieza jugable o su objeto. Techo: 46 de los 64 bits del u64
-`codex_events` — crecer más allá de 64 pide una segunda máscara (guardado v10).
+en 1-2 Reyes tiene su pieza jugable o su objeto — más las 20 escenas guionizadas de
+`scenes.h` (fuera del Códice). Techo: 46 de los 64 bits del u64 `codex_events` — crecer
+más allá de 64 pide una segunda máscara (guardado v10).
+
+**Escenas guionizadas (2026-09-10, `game/scenes.h`):** lo que la audiencia estrenó en el
+cap. 1 lo tiene ahora todo el juego, por mandato del usuario («lo mismo [...] al comienzo de
+cada capítulo y a lo largo de todo el juego»; «antes de la pelea con cada jefe debe haber un
+diálogo»). **20 escenas**: 10 aperturas (la audiencia + una por capítulo 2-10, ANTES de la
+intro cinemática: Sarepta 17:8-11, Elías ante Acab 18:17-19, el mensajero de Jezabel 19:1-3,
+camino de Jezreel 19:21/21:1-16, la orilla del Jordán 2 R 2:15, los tres reyes en Edom 3:9-15,
+el aposento de Sunem 4:12-16, la carta de Ben-adad 5:5-8, el rey avisado 6:9-13) y 10 diálogos
+de jefe (al entrar en la arena, con el jefe de pie: el jefe habla, el profeta responde, la
+última caja abre la pelea; una vez por partida y capítulo). Ninguna repite lo que cuenta la
+intro ni lo que juega el pozo; los reyes sin retrato (Joram, Josafat) van sin cara. Las ~90
+cajas viven fuera de `Ev` (no son relatos que se descubren) y no cuentan en el Códice:
+`Ev::COUNT` vuelve a 46 de 64. Guion: `scripts/escenas_check.txt`.
 
 **Pasada de coherencia (2026-08-31):** la historia sigue el ORDEN de 1-2 Reyes de la intro en
 adelante: nada que el prólogo o un capítulo anterior ya contó se vuelve a jugar como presente
-(fuera la audiencia con Acab del cap. 1 y el cruce del Jordán del cap. 6), los relatos de
+FUERA DE ORDEN (fuera la audiencia con Acab del POZO del cap. 1 — desde el 2026-09-09 vuelve
+como apertura guionizada, antes de Querit — y el cruce del Jordán del cap. 6), los relatos de
 2 R 8-9 viven tras el sitio de Samaria (cap. 10), y las intros de los caps. 3, 5, 6 y 10
 abren con la bisagra que las une al capítulo anterior («Ve, muéstrate a Acab» 18:1, el encargo
 de Horeb, el manto cruzando el Jordán, la guerra siria tras Naamán).

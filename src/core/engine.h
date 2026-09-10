@@ -103,7 +103,7 @@ struct GameState {
 // Autoplay script (debug): "--script file" drives the input for automated
 // playtests. Commands (one per line):
 //   wait <sec> | hold <action> <sec> | press <action> | aim <dx> <dy>
-//   shot <name> | goto <room_index> | god | quit | say <text>
+//   shot <name> | goto <room_index> | god | quit | say <text> | escena <id> [1]
 // Actions: up down left right attack dash m1 m2 confirm cancel pause map
 // =============================================================================
 struct AutoplayCmd {
@@ -191,6 +191,10 @@ struct Engine {
     u32 vfx_texture     = TEXTURE_NONE;   // assets/sprites/vfx.png (ver spawn_fx)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
     u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
+    // Hojas de Acab y Jezabel (896x1920, como las de los profetas): solo las usan las escenas
+    // guionizadas (start_scene), donde estan de pie en el escenario.
+    u32 acab_texture    = TEXTURE_NONE;
+    u32 jezabel_texture = TEXTURE_NONE;
 
     // Frame draw list (reused)
     std::vector<DrawCmd> draw_list;
@@ -320,6 +324,27 @@ struct Engine {
     int  epilogue_step = -1;
     bool joash_full    = true;
     void epilogue_next();
+
+    // --- Escenas guionizadas (game/scenes.h) --------------------------------------------
+    // La historia contada con el motor del gameplay: un escenario (sala del bioma, figuras
+    // de pie, el profeta delante, HUD apagado) y una cadena de cajas sin decision. Empezo
+    // como la audiencia con Acab (cap. 1, 2026-09-09) y desde el 2026-09-10 la tienen todos
+    // los capitulos (APERTURA antes de la intro cinematica) y todos los jefes (DIALOGO al
+    // entrar en la arena, con el jefe ya de pie). Sin bit en el guardado: el criterio es el
+    // sitio de llamada, como las intros. Bajo autoplay se suprimen y las fuerza el comando
+    // `escena <id> [1]` (parada como `chintro`, o avanzando sola con el 1). ESC salta la
+    // escena entera. Al cerrarse una apertura vuelve la sala real desde room_cache y arranca
+    // la intro del capitulo; al cerrarse un dialogo de jefe, a pelear.
+    int  scene_id      = -1;      // Scene::*; -1 fuera de toda escena
+    int  scene_step    = -1;      // caja abierta dentro de la cadena
+    bool scene_manual  = false;   // abierta por el comando: la caja no avanza sola
+    int  pending_scene = -1;      // dialogo de jefe pedido por load_room: arranca en el
+                                  // siguiente paso de Playing, no en mitad de la transicion
+    u32  boss_talk_seen = 0;      // bit por capitulo: el jefe habla una vez por partida
+    Entity scene_figures[3] = {ENTITY_NONE, ENTITY_NONE, ENTITY_NONE};   // se retiran al cerrar
+    void start_scene(int id);
+    void scene_next();
+    void finish_scene(bool skipped);
 
     void spawn_room_enemies();
     void try_room_transition();  // Check if player crossed a room border

@@ -389,15 +389,20 @@ void cinematic_prologue(CinematicSystem& c) {
 // =============================================================================
 // Intros de capitulo
 // =============================================================================
-// UNA estampa por capitulo y DOS escenas sobre ella: la primera (rotulo + versiculo +
-// dos lineas) panea hacia un lado; la segunda (la linea final + el objetivo) deshace el
-// paneo con algo mas de zoom. Las texturas se cachean por path, asi que la segunda
-// escena sale gratis. `art = nullptr` = estampa aun no entregada: el Engine cae a la
-// carta de texto de siempre (cinematic_chapter_ready).
+// DOS escenas por capitulo: la primera (rotulo + versiculo + dos lineas) panea hacia un
+// lado; la segunda (la linea final + el objetivo) deshace el paneo con algo mas de zoom.
+// Por defecto las dos van sobre la MISMA estampa (`art`; las texturas se cachean por
+// path, asi que la segunda escena sale gratis), pero el plano B puede llevar estampa
+// propia (`art_b`): el cap. 1 la lleva, porque su plano A repite la escena 7 del prologo
+// (Elias bebiendo en Querit) y el jugador veia la misma imagen tres veces seguidas. Con
+// `art_b` se cargan seis capas y load_art/unload_art las tratan una a una.
+// `art = nullptr` = estampa aun no entregada: el Engine cae a la carta de texto de
+// siempre (cinematic_chapter_ready).
 namespace {
 
 struct ChapterCine {
     const char* art;
+    const char* art_b;      // Estampa del plano B; nullptr = la misma que `art`
     Color sky_top, sky_bottom;
     f32   par_far, par_near;
     f32   pan;              // Escena A: -pan -> +pan; escena B: +pan -> -0.4*pan
@@ -407,34 +412,37 @@ struct ChapterCine {
 
 const ChapterCine CHAPTER_CINE[10] = {
     // 1. EL ARROYO QUERIT — amanecer ocre sobre el canon
-    {"sprites/cine/11_cap01_querit", {84, 74, 96, 255}, {186, 150, 108, 255},
+    // Plano B: el escondite — Elias de pie en el fondo de la garganta, los cuervos bajando
+    // por la franja de cielo y dos soldados de Acab pasando de largo por el borde.
+    {"sprites/cine/11_cap01_querit", "sprites/cine/31_cap01b_escondite",
+     {84, 74, 96, 255}, {186, 150, 108, 255},
      0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
     // 2. LA VIUDA DE SAREPTA — atardecer violeta sobre el mar fenicio
-    {"sprites/cine/12_cap02_sarepta", {64, 38, 72, 255}, {178, 122, 106, 255},
+    {"sprites/cine/12_cap02_sarepta", nullptr, {64, 38, 72, 255}, {178, 122, 106, 255},
      0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
     // 3. EL MONTE CARMELO — mediodia quemado; las pavesas del altar en la escena B
-    {"sprites/cine/13_cap03_carmelo", {148, 138, 122, 255}, {214, 178, 128, 255},
+    {"sprites/cine/13_cap03_carmelo", nullptr, {148, 138, 122, 255}, {214, 178, 128, 255},
      0.30f, 1.50f, 11.0f, CineFx_None, CineFx_Embers, 0.0f},
     // 4. LA CUEVA DE HOREB — noche azul cerrada; el silbo apacible es un haz de luz
-    {"sprites/cine/14_cap04_horeb", {10, 12, 30, 255}, {46, 52, 86, 255},
+    {"sprites/cine/14_cap04_horeb", nullptr, {10, 12, 30, 255}, {46, 52, 86, 255},
      0.28f, 1.50f, 8.0f, CineFx_None, CineFx_Shaft, 2.0f},
     // 5. EL LLAMADO — dorado de dia sobre los campos de labor
-    {"sprites/cine/15_cap05_llamado", {96, 90, 120, 255}, {212, 168, 100, 255},
+    {"sprites/cine/15_cap05_llamado", nullptr, {96, 90, 120, 255}, {212, 168, 100, 255},
      0.30f, 1.50f, 11.0f, CineFx_None, CineFx_None, 0.0f},
     // 6. LAS AGUAS DE JERICO — verdoso enfermo
-    {"sprites/cine/16_cap06_jerico", {40, 52, 44, 255}, {124, 142, 104, 255},
+    {"sprites/cine/16_cap06_jerico", nullptr, {40, 52, 44, 255}, {124, 142, 104, 255},
      0.32f, 1.45f, 10.0f, CineFx_None, CineFx_None, 0.0f},
     // 7. EL ACEITE DE LA VIUDA — alba gris sobre la aldea pobre
-    {"sprites/cine/17_cap07_aceite", {70, 72, 84, 255}, {160, 158, 150, 255},
+    {"sprites/cine/17_cap07_aceite", nullptr, {70, 72, 84, 255}, {160, 158, 150, 255},
      0.30f, 1.50f, 10.0f, CineFx_None, CineFx_None, 0.0f},
     // 8. EL HIJO SUNAMITA — interior del aposento, luz de candil
-    {"sprites/cine/18_cap08_sunamita", {24, 20, 18, 255}, {56, 46, 38, 255},
+    {"sprites/cine/18_cap08_sunamita", nullptr, {24, 20, 18, 255}, {56, 46, 38, 255},
      0.35f, 1.40f, 4.0f, CineFx_Torches, CineFx_Torches, 0.0f},
     // 9. NAAMAN EL SIRIO — dia claro sobre el Jordan
-    {"sprites/cine/19_cap09_naaman", {90, 120, 160, 255}, {192, 205, 198, 255},
+    {"sprites/cine/19_cap09_naaman", nullptr, {90, 120, 160, 255}, {192, 205, 198, 255},
      0.30f, 1.50f, 11.0f, CineFx_None, CineFx_None, 0.0f},
     // 10. EL EJERCITO CELESTIAL — noche de asedio; los carros de fuego son brasa y luz
-    {"sprites/cine/20_cap10_dotan", {16, 14, 36, 255}, {90, 54, 42, 255},
+    {"sprites/cine/20_cap10_dotan", nullptr, {16, 14, 36, 255}, {90, 54, 42, 255},
      0.32f, 1.45f, 9.0f, CineFx_Torches, static_cast<u8>(CineFx_Embers | CineFx_Shaft), 1.6f},
 };
 
@@ -494,9 +502,10 @@ void cinematic_chapter(CinematicSystem& c, int chapter) {
     s.line_at[2] = 1.0f + (s.duration - 3.2f) * 0.58f;
     c.add(s);
 
-    // Escena B: la misma estampa deshaciendo el paneo; la narracion final y el objetivo.
+    // Escena B: deshace el paneo (sobre su propia estampa si el capitulo la tiene); la
+    // narracion final y el objetivo.
     CineScene b;
-    b.art = u.art;
+    b.art = u.art_b ? u.art_b : u.art;
     b.layer_count = CINE_LAYERS;
     b.layers[0].parallax = u.par_far;
     b.layers[1].parallax = 1.0f;

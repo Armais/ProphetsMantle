@@ -9,11 +9,15 @@
 // relatos, y quien no explora se los pierde.
 //
 // El pozo sigue el ORDEN DE 1-2 REYES (pasada de coherencia, 2026-08-31): nada que el prologo
-// o un capitulo anterior ya conto se vuelve a jugar como presente. Por eso el cap. 1 no tiene
-// audiencia con Acab (1 R 17:1 es el prologo, y Querit viene despues), el cap. 6 no repite el
-// cruce del Jordan (lo cuenta la cinematica del Ascenso), y Hazael y la uncion de Jehu
-// (2 R 8-9) viven en el cap. 10 y no en el 9: en el libro van DESPUES del sitio de Samaria,
-// y ponerlos antes mataba a Ben-adad una sala antes de pelear contra el.
+// o un capitulo anterior ya conto se vuelve a jugar como presente FUERA DE ORDEN. Por eso el
+// pozo del cap. 1 no tiene audiencia con Acab (Querit viene despues): la audiencia es la
+// APERTURA guionizada del capitulo (game/scenes.h, `Scene::AUDIENCIA`, 2026-09-09), que se
+// juega ANTES del arroyo, en el orden del libro. Desde el 2026-09-10 TODOS los capitulos
+// abren asi (`Scene::opening_of`) y todos los jefes hablan antes de pelear (`Scene::boss_of`);
+// lo que esas escenas cuentan tampoco se repite aqui. El cap. 6 no repite el cruce del
+// Jordan (lo cuenta la cinematica del Ascenso), y Hazael y la uncion de Jehu (2 R 8-9)
+// viven en el cap. 10 y no en el 9: en el libro van DESPUES del sitio de Samaria, y
+// ponerlos antes mataba a Ben-adad una sala antes de pelear contra el.
 //
 // Aqui solo vive el TEXTO; el efecto de cada opcion lo aplica
 // Engine::apply_event_choice(id, opcion) usando los sistemas existentes (fe, vida, danio,
@@ -40,7 +44,9 @@ struct EventDef {
     const char* speaker;      // Quien habla ("La viuda de Sarepta")
     const char* lines[3];     // Lo que dice, terminado en nullptr
     Scripture   verse;        // Referencia del pasaje
-    EventOption options[2];   // options[1].label == nullptr -> una sola opcion
+    EventOption options[2];   // options[1].label == nullptr -> una sola opcion;
+                              // options[0].label == nullptr -> SIN decision: la caja cierra sola
+                              // (las cajas de escena de game/scenes.h)
     // Indice en `assets/sprites/portraits.png` (render/sprites.h). Portrait::NONE = sin
     // cara: la caja se dibuja exactamente igual que antes de que existiera este campo.
     // Va el ULTIMO y con valor por defecto a proposito: asi los encuentros que no lo
@@ -90,6 +96,8 @@ enum : int {
 
 // Las paradas de cada cadena, en orden. Las cadenas no se sortean: se recorren.
 // Ojo con el techo: `SaveData::codex_events` es un u64 y COUNT va por 46 de 64.
+// Las escenas guionizadas (game/scenes.h) NO viven aqui: son ~90 cajas obligatorias y
+// reventarian la mascara; viajan en DialogueState::event_id desplazadas Sc::LINE_BASE.
 // Si el pozo vuelve a crecer mas alla de 64 ids hace falta una segunda mascara (v10).
 constexpr int ASCENT_STOPS = 4;
 constexpr int EPILOGUE_STOPS = 3;

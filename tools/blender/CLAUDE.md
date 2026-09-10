@@ -23,7 +23,9 @@ tools/
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
                             top-down FLAT cells, DETAILS = transparent top-down decals, SMALL/PROPS/PROPS_TALL = 30 deg.
                             cine.py renders the 8 prologue panels AND the 10 chapter-intro
-                            panels, PANELS[11..20] = capitulo+10 (`cine.main(SPRITES_DIR, TMP_DIR, only=[n])`,
+                            panels, PANELS[11..20] = capitulo+10, mas PANELS[31..40] = plano B con
+                            estampa propia del capitulo idx-30 (solo el 31, `cap01b_escondite`, de
+                            momento; `ChapterCine::art_b`) (`cine.main(SPRITES_DIR, TMP_DIR, only=[n])`,
                             `cine.flatten(n, bg=<cielo de la escena>)` para verlas compuestas). Es el UNICO camino
                             con camara ANCHA y en PERSPECTIVA: las hojas y el tileset usan orto porque un sprite
                             tiene que casar con la rejilla, pero en orto no hay horizonte y los montes lejanos

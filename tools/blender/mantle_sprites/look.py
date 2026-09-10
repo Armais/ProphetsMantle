@@ -42,6 +42,7 @@ SKY = {
     19: ((90, 120, 160), (192, 205, 198)), 20: ((16, 14, 36), (90, 54, 42)),
     21: ((84, 80, 118), (210, 170, 116)), 22: ((70, 18, 20), (235, 140, 52)),
     23: ((30, 20, 48), (190, 96, 44)), 24: ((70, 70, 96), (188, 168, 140)),
+    31: ((84, 74, 96), (186, 150, 108)),   # plano B del cap. 1: mismo cielo que el 11
 }
 
 # Rigs de luz. sun/fill = (acimut, elevacion, potencia, color): acimut 0 = detras de la
@@ -95,6 +96,7 @@ LOOK = {
     22: dict(kind='fire', dress='rock'),
     23: dict(kind='fire', dress='rock'),
     24: dict(kind='dusk', dress='field', tuft='#7f9a4e'),
+    31: dict(kind='day', dress='rock'),   # el fondo de la garganta, no un campo
 }
 
 # Que material es que cosa, por subcadena del nombre (cine_<key>, <personaje>_<key>,

@@ -1,0 +1,248 @@
+# ============================================================================
+# escenas_check.txt - Las 20 escenas guionizadas (game/scenes.h): 10 aperturas de
+# capitulo (la 0 es la audiencia con Acab) y 10 dialogos con el jefe.
+# Correr: MANTLE.exe --script scripts/escenas_check.txt
+#
+# Tres pasadas: (1) ES, cada escena PARADA en su primera caja para fotografiar el
+# escenario y saltarla con ESC; (2) ES y (3) EN avanzando solas de principio a fin,
+# que es lo que dispara wrap_text con las ~155 paginas de cada idioma.
+#
+# Gates del log (exit 0 NO es un gate):
+#   1. "Apertura del capitulo N suprimida (autoplay)" >= 1 y "Dialogo del jefe N
+#      suprimido (autoplay)" >= 1: bajo autoplay las entradas naturales NO las disparan
+#      (los guiones existentes no ven cambio).
+#   2. Cada nombre de escena ("Audiencia con Acab (1 Reyes 17:1-4)", "Apertura del
+#      capitulo N: ...", "Dialogo con el jefe N: ...") x3: parada, ES completa, EN completa.
+#   3. "<tag> terminada (saltada)" x20 (pasada 1) y "<tag> terminada (completa)" x40
+#      (pasadas 2 y 3), con tag = Audiencia / Apertura N / Jefe N.
+#   4. Orden en cada apertura completa: "Apertura N terminada (completa)" ->
+#      "Cinematica de capitulo N" (la intro va DESPUES de la apertura). En cada jefe:
+#      "Jefe N terminada (completa)" y despues el juego SIGUE en la arena (la pelea).
+#   5. Cero "TEXT TRUNCATED": las ~155 paginas caben en 4 lineas a 244 u con retrato
+#      (techo ~115 caracteres), en ES y en EN. Es el gate que manda.
+#   6. Cero "WARNING: sprite sheet" y cero "Failed to load".
+#
+# Capturas es01..es20 (mirar CADA una): el escenario de cada escena con su primera
+# caja — figuras de pie (Acab, Jezabel, la viuda, los profetas de Baal, Guiezi...), el
+# profeta delante, SIN HUD, y en los jefes la arena con el jefe de pie al fondo.
+# ============================================================================
+
+wait 0.6
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+lang 0
+
+# --- 1) ES, paradas: una captura por escena y ESC
+escena 0
+wait 1.5
+shot es01_audiencia
+wait 0.1
+press cancel
+wait 4.0
+escena 1
+wait 1.5
+shot es02_ap2_sarepta
+wait 0.1
+press cancel
+wait 4.0
+escena 2
+wait 1.5
+shot es03_ap3_carmelo
+wait 0.1
+press cancel
+wait 4.0
+escena 3
+wait 1.5
+shot es04_ap4_mensajero
+wait 0.1
+press cancel
+wait 4.0
+escena 4
+wait 1.5
+shot es05_ap5_jezreel
+wait 0.1
+press cancel
+wait 4.0
+escena 5
+wait 1.5
+shot es06_ap6_jordan
+wait 0.1
+press cancel
+wait 4.0
+escena 6
+wait 1.5
+shot es07_ap7_tres_reyes
+wait 0.1
+press cancel
+wait 4.0
+escena 7
+wait 1.5
+shot es08_ap8_sunem
+wait 0.1
+press cancel
+wait 4.0
+escena 8
+wait 1.5
+shot es09_ap9_carta
+wait 0.1
+press cancel
+wait 4.0
+escena 9
+wait 1.5
+shot es10_ap10_rey_avisado
+wait 0.1
+press cancel
+wait 4.0
+escena 10
+wait 1.5
+shot es11_jefe1_capitan
+wait 0.1
+press cancel
+wait 1.0
+escena 11
+wait 1.5
+shot es12_jefe2_sacerdote
+wait 0.1
+press cancel
+wait 1.0
+escena 12
+wait 1.5
+shot es13_jefe3_profetas
+wait 0.1
+press cancel
+wait 1.0
+escena 13
+wait 1.5
+shot es14_jefe4_desesperacion
+wait 0.1
+press cancel
+wait 1.0
+escena 14
+wait 1.5
+shot es15_jefe5_acab_jezabel
+wait 0.1
+press cancel
+wait 1.0
+escena 15
+wait 1.5
+shot es16_jefe6_espiritu
+wait 0.1
+press cancel
+wait 1.0
+escena 16
+wait 1.5
+shot es17_jefe7_acreedor
+wait 0.1
+press cancel
+wait 1.0
+escena 17
+wait 1.5
+shot es18_jefe8_muerte
+wait 0.1
+press cancel
+wait 1.0
+escena 18
+wait 1.5
+shot es19_jefe9_guiezi
+wait 0.1
+press cancel
+wait 1.0
+escena 19
+wait 1.5
+shot es20_jefe10_benadad
+wait 0.1
+press cancel
+wait 1.0
+
+# --- 2) ES, completas: avanzan solas (1 s la primera pagina, 0.8 s las demas)
+escena 0 1
+wait 24
+escena 1 1
+wait 17
+escena 2 1
+wait 18
+escena 3 1
+wait 14
+escena 4 1
+wait 17
+escena 5 1
+wait 13
+escena 6 1
+wait 16
+escena 7 1
+wait 15
+escena 8 1
+wait 14
+escena 9 1
+wait 15
+escena 10 1
+wait 8
+escena 11 1
+wait 8
+escena 12 1
+wait 10
+escena 13 1
+wait 11
+escena 14 1
+wait 10
+escena 15 1
+wait 8
+escena 16 1
+wait 8
+escena 17 1
+wait 10
+escena 18 1
+wait 10
+escena 19 1
+wait 9
+
+# --- 3) EN, completas
+lang 1
+escena 0 1
+wait 24
+escena 1 1
+wait 17
+escena 2 1
+wait 18
+escena 3 1
+wait 14
+escena 4 1
+wait 17
+escena 5 1
+wait 13
+escena 6 1
+wait 16
+escena 7 1
+wait 15
+escena 8 1
+wait 14
+escena 9 1
+wait 15
+escena 10 1
+wait 8
+escena 11 1
+wait 8
+escena 12 1
+wait 10
+escena 13 1
+wait 11
+escena 14 1
+wait 10
+escena 15 1
+wait 8
+escena 16 1
+wait 8
+escena 17 1
+wait 10
+escena 18 1
+wait 10
+escena 19 1
+wait 9
+lang 0
+say escenas_check done
+quit

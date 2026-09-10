@@ -5,6 +5,7 @@
 #include "core/engine.h"
 #include "core/i18n.h"
 #include "render/sprites.h"
+#include "game/scenes.h"
 #include "platform/platform.h"
 #include <cstdio>
 #include <cstdlib>
@@ -40,11 +41,10 @@ static void web_main_loop() {
     if (frame_time > 0.1f) frame_time = 0.1f;
 
     g_engine->accumulator += frame_time;
-    bool first_step = true;
     while (g_engine->accumulator >= Config::FIXED_DT) {
         g_engine->update(Config::FIXED_DT);
         g_engine->accumulator -= Config::FIXED_DT;
-        if (first_step) { g_engine->input.consume_presses(); first_step = false; }
+        g_engine->input.consume_presses();   // tras cada paso: ver el bucle de escritorio
     }
 
     g_engine->render();
@@ -209,6 +209,9 @@ void Engine::load_sprites() {
 
     character_textures[static_cast<u32>(CharacterType::Elias)]  = load_sheet("sprites/elias.png");
     character_textures[static_cast<u32>(CharacterType::Eliseo)] = load_sheet("sprites/eliseo.png");
+    // Acab y Jezabel de pie en el escenario de las escenas guionizadas (start_scene)
+    acab_texture    = load_sheet("sprites/acab.png");
+    jezabel_texture = load_sheet("sprites/jezabel.png");
 
     // ECSWorld::enemy_textures tiene 8 huecos fijos: un noveno EnemyType escribiria fuera
     static_assert(static_cast<u32>(EnemyType::COUNT) <= 8,
@@ -287,15 +290,19 @@ void Engine::run() {
         delta_time = frame_time;
         fps = (frame_time > 0.0f) ? (1.0f / frame_time) : 0.0f;
 
-        // Fixed timestep accumulator. Una pulsacion = una accion: tras el primer paso se
+        // Fixed timestep accumulator. Una pulsacion = una accion: tras CADA paso se
         // consumen las teclas, o un frame lento (cargar un capitulo) daria varios pasos y
-        // el mismo ENTER pasaria varias paginas de historia de golpe.
+        // el mismo ENTER pasaria varias paginas de historia de golpe. Tras cada paso y no
+        // solo tras el primero: las pulsaciones del autoplay (`press`, dos ticks) se
+        // inyectan DENTRO de un paso, y si ese no era el primero del frame el siguiente
+        // paso las veia como recien pulsadas otra vez — en la audiencia con Acab, a 15-20
+        // fps, cada `press confirm` pasaba dos o tres paginas (2026-09-09). Para el teclado
+        // real no cambia nada: sus eventos entran antes del primer paso.
         accumulator += frame_time;
-        bool first_step = true;
         while (accumulator >= Config::FIXED_DT) {
             update(Config::FIXED_DT);
             accumulator -= Config::FIXED_DT;
-            if (first_step) { input.consume_presses(); first_step = false; }
+            input.consume_presses();
         }
 
         render();
@@ -431,6 +438,14 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Playing: {
+            // Escena pedida por load_room (el dialogo con el jefe): arranca aqui, con la
+            // transicion de sala ya cerrada y antes de que el mundo de un solo paso.
+            if (pending_scene >= 0) {
+                int s = pending_scene;
+                pending_scene = -1;
+                start_scene(s);
+                break;
+            }
             // Impact freeze after a boss hit: keep rendering, stop the world for 3 frames
             if (world.hitstop > 0.0f) {
                 world.hitstop -= dt;
@@ -972,7 +987,7 @@ void Engine::render() {
             if (dialogue.dark) renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH),
                                                    static_cast<f32>(Config::GAME_HEIGHT)}, {8, 6, 12, 255});
             else               render_world();
-            EventDef def = get_event_def(dialogue.event_id);
+            EventDef def = get_dialogue_def(dialogue.event_id);
             DialogueView v;
             v.speaker  = def.speaker;
             v.portrait = def.portrait;
@@ -990,7 +1005,7 @@ void Engine::render() {
                     v.costs[i]   = def.options[i].cost;
                 }
             } else {
-                v.body = def.lines[dialogue.line] ? def.lines[dialogue.line] : "";
+                v.body = (dialogue.line < 3 && def.lines[dialogue.line]) ? def.lines[dialogue.line] : "";
                 v.more_lines = (dialogue.line + 1 < 3) && def.lines[dialogue.line + 1] != nullptr;
             }
             draw_dialogue(renderer, v, tileset_texture, world.time, portrait_texture);
@@ -1089,15 +1104,19 @@ void Engine::start_new_run() {
 
     apply_meta_upgrades();   // lo comprado en El Santuario entra antes de la primera sala
 
-    // El mundo queda listo detras y la intro cinematica del cap. 1 se ve primero. El
-    // prologo de TEXTO ya no se lee aqui: duplicaba al prologo CINEMATICO que el jugador
-    // acaba de ver al arrancar el juego. Bajo autoplay se conserva el flujo de texto
-    // integro (lore_check fotografia prologo + carta), igual que si falta la estampa.
-    if (!autoplay.active && cinematic_chapter_ready(1)) {
-        start_chapter(1, ChapterAnnounce::None);
-        start_chapter_intro(1);
+    // El mundo queda listo detras y lo primero que se ve es la audiencia con Acab
+    // (1 R 17:1-4, guionizada sobre el palacio, game/scenes.h); al cerrarse, finish_scene lanza la
+    // intro cinematica del cap. 1 (o la carta si falta la estampa). El prologo de TEXTO ya
+    // no se lee aqui: duplicaba al prologo CINEMATICO que el jugador acaba de ver al
+    // arrancar el juego. Bajo autoplay se conserva el flujo de texto integro (lore_check
+    // fotografia prologo + carta); la audiencia la fuerza el comando `audiencia`.
+    start_chapter(1, ChapterAnnounce::None);
+    boss_talk_seen = 0;
+    pending_scene  = -1;
+    if (!autoplay.active) {
+        start_scene(Scene::AUDIENCIA);
     } else {
-        start_chapter(1, ChapterAnnounce::None);
+        SDL_Log("Audiencia con Acab suprimida (autoplay): flujo de texto");
         story.begin();
         story_prologue(story);
         story_chapter_card(story, 1);
@@ -1163,11 +1182,18 @@ void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
     // `announce`: que se lee antes de jugar (el mundo ya esta cargado detras).
     // `Cinematic` = la intro animada de la primera entrada natural; bajo autoplay o sin
     // estampa entregada cae a la carta de siempre, para que los guiones no vean cambio.
-    if (announce == ChapterAnnounce::Cinematic && !autoplay.active &&
+    // La APERTURA guionizada va antes que la intro (game/scenes.h): al cerrarse,
+    // finish_scene lanza la intro (o la carta). El cap. 1 la lanza start_new_run.
+    if (announce == ChapterAnnounce::Cinematic && !autoplay.active && chapter >= 2 &&
+        Scene::opening_of(chapter) >= 0) {
+        start_scene(Scene::opening_of(chapter));
+    } else if (announce == ChapterAnnounce::Cinematic && !autoplay.active &&
         cinematic_chapter_ready(chapter)) {
         start_chapter_intro(chapter);
     } else if (announce != ChapterAnnounce::None) {
         if (announce == ChapterAnnounce::Cinematic) {
+            if (autoplay.active && chapter >= 2)
+                SDL_Log("Apertura del capitulo %d suprimida (autoplay)", chapter);
             SDL_Log("Intro de capitulo %d suprimida (%s): carta de texto", chapter,
                     autoplay.active ? "autoplay" : "sin estampa");
         }
@@ -1295,6 +1321,180 @@ void Engine::epilogue_next() {
     story.begin();
     story_epilogue(story, joash_full);
     play_story(StoryThen::VictoryMenu);
+}
+
+// =============================================================================
+// Escenas guionizadas (game/scenes.h)
+// =============================================================================
+// La historia contada con el motor del gameplay. Un escenario montado con las piezas de
+// siempre —una sala del bioma (interior de silleria o exterior con un claro), figuras de
+// pie (`spawn_figure` / `spawn_npc_figure`), el profeta delante, HUD apagado— y una cadena
+// de cajas de `get_scene_line` sin decision. Se reutiliza GameScene::Dialogue: ningun
+// GameScene nuevo. Las aperturas se llaman con start_chapter YA hecho: el mapa esta
+// generado y la sala inicial cacheada, asi que al cerrarse basta con load_room para
+// volver a ella tal como estaba (el escenario nunca se cachea ni se guarda). Los dialogos
+// de jefe (`StageKind::Live`) no montan nada: congelan la arena con el jefe ya de pie.
+void Engine::start_scene(int id) {
+    if (id < 0 || id >= Scene::COUNT) return;
+    const SceneDef def = get_scene_def(id);
+    scene_id      = id;
+    scene_step    = -1;
+    pending_scene = -1;
+
+    for (Entity& fe : scene_figures) fe = ENTITY_NONE;
+    int ax = current_room_data.tiles_w / 2, ay = 3;   // ancla: en la arena, el tile del jefe
+    if (def.stage != StageKind::Live) {
+        // start_chapter ya sembro lo que hubiera en la sala inicial: saldria dibujado
+        // dentro del escenario. Se barre igual que hace load_room.
+        for (u32 e = 0; e < MAX_ENTITIES; e++) {
+            if (static_cast<Entity>(e) != world.player && world.masks[e].any())
+                world.destroy(static_cast<Entity>(e));
+        }
+        boss_entity = ENTITY_NONE;
+        world.popups.clear();
+
+        Room& room = current_room_data;
+        const int biome_chapter = def.stage_chapter ? def.stage_chapter : state.current_chapter;
+        // Sin puertas: de aqui no se sale andando, y sin aberturas no hay sendas que crucen
+        room.door_north = room.door_south = room.door_east = room.door_west = false;
+        if (def.stage == StageKind::Interior) {
+            room.generate(RoomType::Interior, biome_chapter, 1, -1, false);
+            // No hay trono en el tileset: fuera el altar (o el cofre) del fondo
+            room.tiles[2][room.tiles_w / 2] = TileType::Floor;
+            ax = room.tiles_w / 2;
+            ay = 4;
+        } else {
+            room.generate(RoomType::Normal, biome_chapter, 1);
+            ax = room.tiles_w / 2;
+            ay = room.tiles_h / 2;
+            // Un claro para la escena: la decoracion del bioma no tapa a nadie
+            for (int y = ay - 4; y <= ay + 3; y++)
+                for (int x = ax - 7; x <= ax + 7; x++)
+                    if (x > 0 && y > 0 && x < room.tiles_w - 1 && y < room.tiles_h - 1)
+                        room.tiles[y][x] = TileType::Floor;
+        }
+        room.door_north = room.door_south = room.door_east = room.door_west = false;
+        room.has_doorway = false;
+        room.enemy_spawns.clear();
+        room.cleared = true;
+        room.visited = true;
+        world.active_room = &room;
+        camera.set_room({0, 0, room.world_w(), room.world_h()});
+    }
+
+    // Las figuras. En la arena tambien (Acab y Jezabel flanqueando a su arquero): las de
+    // una escena Live se retiran en finish_scene, las demas las barre load_room.
+    for (int i = 0; i < 3; i++) {
+        const SceneFigure& f = def.figures[i];
+        if (f.kind == FigureKind::None) continue;
+        const Vec2 fp = current_room_data.tile_to_world(ax + f.dx, ay + f.dy);
+        Entity fe = ENTITY_NONE;
+        switch (f.kind) {
+            case FigureKind::Acab:    fe = spawn_figure(world, fp, acab_texture, f.facing); break;
+            case FigureKind::Jezabel: fe = spawn_figure(world, fp, jezabel_texture, f.facing); break;
+            case FigureKind::Enemy:
+                if (f.index >= 0 && f.index < static_cast<int>(EnemyType::COUNT))
+                    fe = spawn_figure(world, fp, enemy_textures[f.index], f.facing);
+                break;
+            case FigureKind::Npc:     fe = spawn_npc_figure(world, fp, npc_texture, f.index); break;
+            default: break;
+        }
+        scene_figures[i] = fe;
+    }
+
+    // El profeta se coloca cara a quien habla (en la arena, tres filas bajo el jefe: donde
+    // entro por el borde sur la caja lo tapaba entero) y se hornea su fila de reposo,
+    // porque system_animation no corre en Dialogue y se quedaria a medio paso.
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        auto& t = world.transforms[player.entity];
+        t.position = current_room_data.tile_to_world(ax + def.player_dx, ay + def.player_dy);
+        t.facing = def.player_facing;
+        if (world.has(player.entity, Component::Movement)) {
+            world.movements[player.entity].velocity  = {0, 0};
+            world.movements[player.entity].knockback = {0, 0};
+        }
+        const AnimID idle = facing_anim(AnimID::IdleDown, def.player_facing);
+        if (world.has(player.entity, Component::Animation))
+            play_anim(world.animations[player.entity], idle, true);
+        if (world.has(player.entity, Component::Sprite)) {
+            auto& sp = world.sprites[player.entity];
+            sp.src_rect.x = 0.0f;
+            sp.src_rect.y = static_cast<f32>(get_anim_def(idle).row * SHEET_FRAME_SIZE);
+            sp.flip_x = false;
+        }
+        if (def.stage != StageKind::Live) {
+            camera.set_target(t.position);
+            camera.position = t.position;
+            camera.update(0.0f);
+        }
+    }
+
+    hud.visible = false;   // render_world pinta el HUD tambien en Dialogue
+    SDL_Log("%s", def.name);
+    scene_next();
+}
+
+// Siguiente caja de la escena, o el cierre si ya no quedan.
+void Engine::scene_next() {
+    const SceneDef def = get_scene_def(scene_id);
+    scene_step++;
+    if (scene_step < def.count) {
+        const int line = def.first_line + scene_step;
+        open_dialogue(Sc::LINE_BASE + line);              // dark = false: se ve el escenario
+        if (scene_manual) dialogue.auto_timer = 0.0f;     // parada, como chintro
+        SDL_Log("%s: parada %d/%d (id %d)", def.tag, scene_step + 1, def.count, line);
+        return;
+    }
+    finish_scene(false);
+}
+
+// Cierre (completa o saltada con ESC). Una apertura vuelve la sala real desde room_cache
+// —load_room barre las figuras, recoloca profeta y camara y re-siembra lo que hubiera— y
+// arranca la intro del capitulo; un dialogo de jefe deja la arena como estaba y suelta
+// al mundo.
+void Engine::finish_scene(bool skipped) {
+    const SceneDef def = get_scene_def(scene_id);
+    SDL_Log("%s terminada (%s)", def.tag, skipped ? "saltada" : "completa");
+    scene_id     = -1;
+    scene_step   = -1;
+    scene_manual = false;
+    hud.visible  = true;
+
+    if (def.stage == StageKind::Live) {
+        // Las figuras se retiran (el rey y la reina dejan la pelea a su guardia)
+        for (Entity& fe : scene_figures) {
+            if (fe != ENTITY_NONE && world.masks[fe].any()) world.destroy(fe);
+            fe = ENTITY_NONE;
+        }
+        // El rotulo del jefe se perdio detras de la caja: vuelve, que ahora si empieza
+        if (boss_entity != ENTITY_NONE)
+            show_banner(tr("JEFE", "BOSS"), get_chapter_def(state.current_chapter).boss_name, 2.5f);
+        // Un respiro: el profeta esta a tres tiles del jefe y el mundo arranca de golpe.
+        // Sin esto el arquero del cap. 5 acertaba en el primer paso (visto en escenas_check).
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
+            world.healths[player.entity].iframes_timer = std::max(world.healths[player.entity].iframes_timer, 1.5f);
+        change_scene(GameScene::Playing);
+        return;
+    }
+
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
+        world.transforms[player.entity].facing = Direction::Down;
+    entry_direction = Direction::None;   // como lo deja start_chapter: aparece en el centro
+    load_room(floor_map.current_room);
+
+    if (def.then == SceneThen::ChapterIntro) {
+        const int chapter = state.current_chapter;
+        if (cinematic_chapter_ready(chapter)) {
+            start_chapter_intro(chapter);
+        } else {
+            story.begin();
+            if (chapter == 1) story_prologue(story);
+            story_chapter_card(story, chapter);
+            play_story(StoryThen::Play);
+        }
+    } else {
+        change_scene(GameScene::Playing);
+    }
 }
 
 // Siguiente parada del Ascenso, o el carro de fuego si ya no quedan.
@@ -2050,6 +2250,8 @@ void Engine::continue_run() {
     state.current_act     = (save.data.current_act == 1) ? Act::Act_I : Act::Act_II;
     state.current_chapter = save.data.current_chapter;
     state.current_room    = save.data.current_room;
+    boss_talk_seen = 0;
+    pending_scene  = -1;
     state.run_time        = save.data.run_time;
     run_kills = 0;
     run_hits_taken = 0;
@@ -2243,6 +2445,16 @@ void Engine::load_room(int room_index) {
             show_banner(tr("JEFE", "BOSS"), buf, 2.5f);
             play_voice(Voice::Jefe, 0.9f);   // se salta la espera: suena una vez por capitulo
             audio.play_sfx(SfxID::CriticalHit, 0.9f);
+            // El jefe habla antes de pelear (game/scenes.h): se pide aqui y arranca en el
+            // siguiente paso de Playing, no en mitad de la transicion de sala. Una vez por
+            // partida y capitulo: morir y reintentar no lo repite. Bajo autoplay se
+            // suprime (los guiones cronometran las peleas) y lo fuerza `escena`.
+            const u32 talk_bit = 1u << state.current_chapter;
+            if (Scene::boss_of(state.current_chapter) >= 0 && !(boss_talk_seen & talk_bit)) {
+                boss_talk_seen |= talk_bit;
+                if (autoplay.active) SDL_Log("Dialogo del jefe %d suprimido (autoplay)", state.current_chapter);
+                else                 pending_scene = Scene::boss_of(state.current_chapter);
+            }
         } else {
             spawn_room_enemies();
         }
@@ -2499,21 +2711,22 @@ void Engine::use_doorway() {
 // Encuentros biblicos (game/events.h): sala Event, dialogo y decision
 // =============================================================================
 void Engine::open_dialogue(int event_id) {
-    EventDef def = get_event_def(event_id);
+    EventDef def = get_dialogue_def(event_id);
     if (!def.speaker || !def.speaker[0]) return;
     dialogue = DialogueState{};
     dialogue.event_id = event_id;
     dialogue.chapter = event_chapter(event_id);
     // Se marca al ABRIRLO, no al resolverlo: el relato ya lo has leido, y quien cierre el
-    // juego a mitad de la caja no deberia perderlo del Codice.
-    codex_see_event(save.data, event_id);
+    // juego a mitad de la caja no deberia perderlo del Codice. Las cajas de escena
+    // (game/scenes.h) no son relatos: quedan fuera de la mascara.
+    if (event_id < Ev::COUNT) codex_see_event(save.data, event_id);
     dialogue.auto_timer = autoplay.active ? 1.0f : 0.0f;
     audio.play_sfx(SfxID::Notification, 0.7f);
     change_scene(GameScene::Dialogue);
 }
 
 void Engine::update_dialogue(f32 dt) {
-    EventDef def = get_event_def(dialogue.event_id);
+    EventDef def = get_dialogue_def(dialogue.event_id);
     int opt_count = def.options[1].label ? 2 : 1;
 
     bool confirm = input.is_action_just_pressed(Action::Confirm) ||
@@ -2521,6 +2734,13 @@ void Engine::update_dialogue(f32 dt) {
     if (dialogue.auto_timer > 0.0f) {
         dialogue.auto_timer -= dt;
         if (dialogue.auto_timer <= 0.0f) { confirm = true; dialogue.auto_timer = 0.8f; }
+    }
+
+    // Una escena guionizada se salta ENTERA con ESC (dispara Cancel y Pause a la vez).
+    if (scene_step >= 0 && (input.is_action_just_pressed(Action::Cancel) ||
+                            input.is_action_just_pressed(Action::Pause))) {
+        finish_scene(true);
+        return;
     }
 
     if (dialogue.choosing && !dialogue.resolved) {
@@ -2534,20 +2754,23 @@ void Engine::update_dialogue(f32 dt) {
     if (!dialogue.choosing) {
         // Avanzar por las lineas del personaje hasta agotarlas
         dialogue.line++;
-        if (dialogue.line >= 3 || !def.lines[dialogue.line]) {
+        if (dialogue.line < 3 && def.lines[dialogue.line]) return;
+        // Agotadas: a decidir, o —sin decision (options[0].label nulo)— directo al cierre
+        if (def.options[0].label) {
             dialogue.choosing = true;
             dialogue.selected = 0;
+            return;
         }
-        return;
-    }
-    if (!dialogue.resolved) {
+    } else if (!dialogue.resolved) {
         apply_event_choice(dialogue.event_id, dialogue.selected);
         dialogue.result = def.options[dialogue.selected].result;
         dialogue.resolved = true;
         return;
     }
     // Las cadenas encadenan: al cerrar una parada se abre la siguiente. No tocan la sala
-    // porque no estan pasando en ninguna.
+    // porque no estan pasando en ninguna (las escenas, porque la suya es un escenario que
+    // finish_scene desmonta; el dialogo del jefe, porque no cambia nada de la arena).
+    if (scene_step >= 0) { scene_next(); return; }
     if (ascent_step >= 0) { ascent_next(); return; }
     if (epilogue_step >= 0) { epilogue_next(); return; }
 
@@ -3127,6 +3350,8 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "cine")  { ss >> c.num; }              // estampa del prologo (0..7)
         else if (c.op == "chintro") { ss >> c.num; }            // intro cinematica del capitulo n
         else if (c.op == "asccine") { ss >> c.num; }            // cinematica del Ascenso (escena n)
+        else if (c.op == "audiencia") { }                      // = escena 0 (la audiencia), parada
+        else if (c.op == "escena") { ss >> c.num >> c.num2; }  // Scene::* + 1 = avanza sola
         else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
         else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
         else if (c.op == "learn") { ss >> c.num >> c.num2; }    // id de milagro + slot
@@ -3270,6 +3495,43 @@ void Engine::update_autoplay(f32 dt) {
                     start_chapter(ch, ChapterAnnounce::None);
                     start_chapter_intro(ch);
                     cinematic.auto_timer = 0.0f;   // quieta hasta el siguiente comando
+                }
+                continue;
+            }
+            // Fuerza una escena guionizada (game/scenes.h): `escena <id> [1]`, o `audiencia`
+            // (= escena 0). Se deja PARADA como chintro —`press confirm` pasa de pagina y
+            // `press cancel` la salta entera— salvo con el 1, que la hace avanzar sola. Una
+            // apertura al cerrarse lanza la intro del capitulo aunque haya autoplay (avanza
+            // sola), para que el guion compruebe el ORDEN real: escena -> intro -> Playing.
+            // Un dialogo de jefe carga antes la arena con el jefe de pie, y al cerrarse
+            // suelta la pelea.
+            if (c.op == "audiencia" || c.op == "escena") {
+                if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    const int id = (c.op == "audiencia") ? Scene::AUDIENCIA
+                                 : std::max(0, std::min(static_cast<int>(c.num), Scene::COUNT - 1));
+                    const SceneDef def = get_scene_def(id);
+                    // El profeta del acto: una escena del Acto II con Elias de pie (o al
+                    // reves) mentiria en la captura. Solo aqui, bajo el comando: en el
+                    // juego real el Ascenso ya ha hecho el cambio.
+                    const CharacterType want = (def.chapter > Config::CHAPTERS_ACT_I)
+                                             ? CharacterType::Eliseo : CharacterType::Elias;
+                    if (player.character != want) {
+                        if (player.entity != ENTITY_NONE) world.destroy(player.entity);
+                        world.gap_crosser = ENTITY_NONE;
+                        player = Player{};
+                        if (want == CharacterType::Elias) player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
+                        else                              player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
+                        apply_meta_upgrades();
+                        SDL_Log("escena %d: el profeta pasa a ser %s", id, want == CharacterType::Elias ? "Elias" : "Eliseo");
+                    }
+                    start_chapter(def.chapter, ChapterAnnounce::None);
+                    if (def.stage == StageKind::Live) {
+                        entry_direction = Direction::Down;   // como quien entra por el sur
+                        load_room(floor_map.boss_room);
+                        pending_scene = -1;                  // se fuerza aqui mismo
+                    }
+                    scene_manual = (c.op == "audiencia") || c.num2 == 0;
+                    start_scene(id);
                 }
                 continue;
             }

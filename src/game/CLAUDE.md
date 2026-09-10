@@ -8,7 +8,8 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 > bioma y las cinco deudas visuales del exterior.
 > **Antes de tocar secretos, tinajas, grietas, huecos o interiores, lee
 > `docs/secretos-e-interiores.md`.**
-> **Antes de tocar `events.h` o `lore.h`, lee `docs/encuentros-y-lore.md`.**
+> **Antes de tocar `events.h`, `lore.h` o `scenes.h` (las escenas guionizadas: aperturas de
+> capitulo y dialogos de jefe), lee `docs/encuentros-y-lore.md`.**
 > Los efectos (`spawn_fx` / `spawn_vfx`) y el tinte por capitulo: `docs/efectos-y-paleta.md`.
 
 ### Mapas FIJOS: mundo constante, reparto por configuracion y guardado v9 (2026-08-27)

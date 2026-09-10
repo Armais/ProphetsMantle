@@ -32,11 +32,16 @@ El arte lo genera `tools/blender/mantle_sprites/cine.py` (ver abajo). Música:
 ### Intros cinemáticas de capítulo (2026-08-29)
 
 Cada capítulo abre con una animación que cuenta su historia — el mismo sistema del
-prólogo (`CinematicSystem`), con **UNA estampa nueva por capítulo y DOS `CineScene`
-sobre el mismo `art`** (las texturas se cachean por path, así que el segundo plano sale
-gratis): el plano A lleva el rótulo "CAPÍTULO N" (dorado en el Acto I, azul en el II) +
-versículo + dos líneas, y el B deshace el paneo con la línea final + el objetivo. El
-texto sale ÍNTEGRO de `get_chapter_lore` — no se escribió una palabra nueva — y
+prólogo (`CinematicSystem`), con **una estampa por capítulo y DOS `CineScene`**: el
+plano A lleva el rótulo "CAPÍTULO N" (dorado en el Acto I, azul en el II) + versículo +
+dos líneas, y el B deshace el paneo con la línea final + el objetivo. Por defecto los dos
+planos van sobre el mismo `art` (las texturas se cachean por path, así que el segundo
+sale gratis), pero **el plano B puede llevar estampa propia** (`ChapterCine::art_b`,
+2026-09-09): la lleva el cap. 1 (`31_cap01b_escondite` — Elías de pie en el fondo de la
+garganta bajo los cuervos, dos soldados de Acab pasando de largo por la cresta), porque
+su plano A repite la estampa 7 del prólogo y el jugador veía a Elías arrodillado en el
+río tres veces seguidas. En `cine.py`, `PANELS[31..40]` = plano B del capítulo `idx-30`.
+El texto sale ÍNTEGRO de `get_chapter_lore` — no se escribió una palabra nueva — y
 `Scripture::ref` sigue sin pintarse.
 
 - **`cinematic_chapter(c, capitulo)` + tabla `CHAPTER_CINE[10]`** (cinematic.cpp), al
@@ -48,6 +53,14 @@ texto sale ÍNTEGRO de `get_chapter_lore` — no se escribió una palabra nueva 
   y la nueva partida (que ya NO lee el prólogo de TEXTO: duplicaba al cinemático recién
   visto). El reintento y el Continuar usan `Card` — repetir la intro en cada muerte
   cansa. Sin bit en el guardado: el criterio es el sitio de llamada.
+  **Nueva partida desde el 2026-09-09**: `start_new_run` → `start_scene(Scene::AUDIENCIA)`
+  (la audiencia con Acab, 1 R 17:1-4, guionizada sobre el palacio con `GameScene::Dialogue`)
+  → `finish_scene` → intro cinemática del cap. 1 (o la carta si falta la estampa). **Desde el
+  2026-09-10 todos los capítulos abren así**: `start_chapter(n, Cinematic)` lanza primero la
+  APERTURA guionizada (`Scene::opening_of(n)`, `game/scenes.h`) y es `finish_scene` quien
+  lanza la intro. Bajo autoplay las escenas se suprimen; `escena <id> [1]` las fuerza y las
+  deja paradas, ≈ `chintro` (confirm pasa de página, cancel la salta entera), o avanzando
+  solas con el `1`. Ver `docs/encuentros-y-lore.md`.
 - **`CineThen { MainMenu, Play }`** (`Engine::cine_then`): a dónde va `GameScene::Intro`
   al terminar. El case de `update_music` bifurca por él: prólogo → `Prologue`; intro de
   capítulo → el ambiente del acto (la decisión de no cortar la música entre capítulos).
