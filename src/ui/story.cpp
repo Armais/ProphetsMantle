@@ -240,15 +240,15 @@ void story_chapter_outro(StorySystem& s, int chapter) {
     s.add(p);
 }
 
-void story_ascension(StorySystem& s) {
+void story_ascension(StorySystem& s, bool asked_double) {
     for (int page = 0; page < 3; page++) {
-        ChapterLore l = get_ascension_lore(page);
+        ChapterLore l = get_ascension_lore(page, asked_double);
         StoryPage p;
         p.title = (page == 0) ? tr("EL ASCENSO", "THE ASCENT") : "";
         p.subtitle = (page == 0) ? tr("El torbellino del Jordán", "The whirlwind of the Jordan") : "";
         p.verse = l.verse;
         for (int i = 0; i < 4; i++) p.body[i] = l.lines[i];
-        if (page == 2) p.footer = tr("Heredas la mitad de su fe, su manto y dos milagros.", "You inherit half his faith, his mantle and two miracles.");
+        if (page == 2) p.footer = get_ascension_inheritance_line(asked_double);
         p.accent = {245, 220, 160, 255};
         s.add(p);
     }

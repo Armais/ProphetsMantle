@@ -4,6 +4,92 @@ Viene del `CLAUDE.md` de la raiz. Pertenece a **`src/game/`** (`events.h`, `lore
 caja de dialogo de **`src/ui/`**. El arte de los retratos y las vinetas lo genera
 `tools/blender/` (ver su `CLAUDE.md`).
 
+### Voz humana y coherencia capitulo a capitulo (2026-09-10, tarde)
+
+Veredicto del usuario al jugar las escenas guionizadas: *los dialogos suenan roboticos, a
+IA*, y *a partir del cap. 2 la historia se contradice* entre aperturas, intros, pozo y jefes.
+Se reescribieron las tres tablas de texto (`scenes.h`, `lore.h`, `events.h`) con dos
+decisiones suyas: **registro arcaizante, tipo Reina-Valera 1960 tambien en lo inventado**
+(KJV en ingles; las citas, verbatim), y **la apertura del cap. 7 es la viuda del profeta
+(2 R 4:1-4)** en vez de los tres reyes de Edom, que se funden en «El valle de las zanjas».
+Esta seccion SUPERA la lista de aperturas de la seccion siguiente.
+
+**Guia de estilo (ES y EN):**
+
+- Registro del libro: vosotros, «he aqui», «senor mio», «tu siervo / tu sierva», «varon de
+  Dios», «Vive Jehova». Frases cortas, preguntas directas, juramentos, sustantivos concretos
+  (harina, odre, yunta, vasijas). En ingles, thou/thee/thy en el trato singular.
+- **Una voz por personaje**: Elias seco y sin explicar lo que siente (jura y pregunta, nunca
+  describe la escena); Eliseo «senor mio» con Elias y autoridad tranquila en el Acto II
+  (los demas le llaman «hijo de Safat»); Acab rey ofendido con ironia pesada; Jezabel fria y
+  breve, sin exclamaciones; Guiezi cuenta el dinero; la viuda y la mujer del profeta cansadas
+  y concretas; la sunamita digna, no pide nada; Joram quejica; Josafat pregunta por Jehova;
+  los profetas de Baal orgullosos; la Muerte / el Espiritu / la Desesperacion cortos y frios,
+  sin adivinar el futuro; «La palabra de Jehova» solo cita, sin retrato.
+- **Prohibido**: mas de una sentencia bimembre por ESCENA («El aceite se acaba. Yo no»);
+  cadenas «no es A, sino B»; cerrar una caja con aforismo salvo que sea versiculo; narrar lo
+  visible («una viuda recogiendo dos lenos», dicho por Elias); apartes omniscientes («es la
+  primera de tres veces que lo va a decir»); exclamaciones fuera del grito ritual de Baal;
+  lexico moderno («espectaculo», «plan», «carta» por mensajero); cifras de anos de sequia
+  fuera de «al tercer ano» (18:1).
+- **Coherencia**: la intro NUNCA repite un versiculo ni un hecho que la apertura acaba de
+  jugar (arranca donde la apertura termina); el jefe NUNCA estrena algo que el pozo ya jugo
+  ni da por hecha una opcion del pozo (Dotan, el baculo: sus lineas valen para las dos); un
+  relato posterior al jefe lleva **marca de flash-forward en su primera frase** («Despues del
+  fuego», «Muerto Acab», «El ultimo dia del cerco», ademas de «Siete anos despues» y «Roto el
+  cerco»); los outros afirman el canon y solo se tocan cuando duplican.
+- **Techos**: cada `lines[i]` es una pagina; con retrato 4 lineas a 244 u, sin retrato 3 a
+  280 u; `objective` en una linea del mapa grande (sin wrap ni gate, ~70 caracteres). El gate
+  real es cero `TEXT TRUNCATED` en los nueve guiones de texto.
+
+**Espinas nuevas** (apertura -> intro -> pozo -> jefe -> outro):
+
+- **Cap. 3**: apertura de SEIS cajas — la Palabra 18:1 («Ve, muestrate a Acab») al frente,
+  Acab 18:17, Elias 18:18-19, el profeta de Baal que responde a la CONVOCATORIA, Elias 18:24
+  (el reto del fuego) y Acab «sea» (18:20, y lo que el quiere es lluvia). Intro desde 18:20.
+  «Abdias» pasa a ser el encuentro camino del monte con los cien profetas escondidos
+  (18:3-4, 13: subirlos al Carmelo / dejarlos en las cuevas); «La nubecilla» se titula
+  «Despues del fuego» y abre con la marca.
+- **Cap. 5**: apertura = el llamamiento (19:19-20), cuatro cajas: «Junto a las doce yuntas»
+  (sin retrato: el manto echado al pasar), Eliseo «dejame besar a mi padre», Elias «ve,
+  vuelve», Eliseo «hay un par de bueyes que matar». El manto sigue en Elias hasta 2 R 2:13.
+  Intro: Eliseo le sirve (19:21) y Nabot (21) en dos frases. Pozo: «La despedida de Eliseo»
+  (19:21: comer con ellos / seguir sin esperarle, mismos efectos) y «La palabra de Jehova»
+  sobre la vina (21:17-19) SIN Acab ni retrato ni PNJ (la sala pone la hoguera; Acab es el
+  jefe). «El tercer capitan» abre con «Muerto Acab».
+- **El Ascenso**: `get_ascension_lore(page, asked_double)`, `cinematic_ascension(c,
+  asked_double)` y `story_ascension(s, asked_double)` bifurcan la peticion de la pagina 0 y
+  la linea de la herencia (`get_ascension_inheritance_line`) por `Engine::ascent_double`; los
+  tres llamantes del Engine (paginas, cinematica y `asccine`) pasan el valor de la sesion.
+  Las paradas pierden los apartes («lo dice sin mirarte, y sigue andando»).
+- **Cap. 6**: los hijos de los profetas lo vieron «desde la orilla, enfrente» (2:7); Eliseo
+  no llama muerto a Elias. La intro no cita 2:19 (es el pozo) y «Los hombres de Jerico» ya NO
+  sana el manantial (lleva la sal al manantial; sanarlo es el jefe y el outro).
+- **Cap. 7**: apertura = la viuda del profeta en su casa (`StageKind::Interior`, bioma 7,
+  `Npc::MUJER_PROFETA` y `Npc::CRIADO_ELISEO` como en la 8): 4:1, 4:2, «una vasija de
+  aceite», Guiezi (el acreedor a la puerta con dos hombres; la ley le da los ninos) y 4:3-4.
+  Intro: la viuda de puerta en puerta, el acreedor, y «la guerra de Moab sigue en el sur, y
+  hay hambre en Gilgal» (prepara los relatos). Pozo: «La mujer del profeta muerto» es el
+  derramamiento (4:5-6: llenar hasta la ultima vasija de la aldea / llenar las de casa y
+  parar) y «El valle de las zanjas» absorbe a los tres reyes (3:9-23). El Acreedor habla de
+  la ley y de sus dos hombres; Eliseo no le recita 4:7 (es el outro, a la viuda).
+- **Cap. 8**: apertura = el ofrecimiento y la promesa (4:9-16), SEIS cajas: la sunamita
+  4:9-10, Eliseo 4:13, «yo habito en medio de mi pueblo», Guiezi 4:14, Eliseo 4:16, «no hagas
+  burla de tu sierva» + su ruego. Intro: nace (4:17), grita entre los segadores (4:18-19),
+  muere y ella cierra la puerta (4:20-21). Pozo: «La sunamita» son los anos en el aposento y
+  «El nino de Sunem» la madre en el Carmelo (4:25-30: ir tu / mandar a Guiezi con el baculo),
+  sin resucitar: el aposento cerrado es la Muerte y los siete estornudos el outro. La Muerte
+  no repite «¡ay, mi cabeza!» y Eliseo no da por hecho el baculo.
+- **Caps. 9 y 10**: Eliseo le habla al rey a la cara (5:8, segunda persona); la muchacha
+  cautiva viene en la comitiva del general (licencia minima que la pone en escena); outro
+  5:27 («salio de delante de el leproso, blanco como la nieve»). Joram sin marcador de tres
+  avisos; intro 6:12-14 (Ben-adad sabe quien avisa, «en Dotan», el cerco de noche); «Los
+  cuatro a la puerta» abre con «El ultimo dia del cerco»; Ben-adad vale para las dos opciones
+  de Dotan; outro = el cerco roto (7:6-7, 16).
+- **Motor**: `ChapterLore::boss_line` ha desaparecido (nadie lo leia desde que los jefes
+  hablan en `scenes.h`). Guion: `scripts/escenas_check.txt` (waits de AP3 y AP8, captura
+  `es07_ap7_viuda_profeta`, gate 7: contar `parada k/N`).
+
 ### La historia en ORDEN: coherencia intro -> capitulos con 1-2 Reyes (2026-08-31)
 
 Mandato del usuario: *"tiene que haber un seguimiento entre la intro y luego capitulo a
@@ -47,7 +133,8 @@ dialogo"*. La audiencia se generalizo en **`game/scenes.h`** y ahora hay **20 es
   (soldados, profetas de Baal) y las celdas de `npcs.png` via **`spawn_npc_figure`** (la
   viuda, Guiezi, los hijos de los profetas, el principe azul y plata como Josafat).
 - **Aperturas 2-10** (`Scene::opening_of`), antes de la intro cinematica, en el orden del
-  libro y sin repetir ni la intro ni el pozo: Sarepta 17:8-11 (termina en 17:11: el punado de
+  libro y sin repetir ni la intro ni el pozo (lista de la manana del 2026-09-10; las de los
+  caps. 3, 5, 7 y 8 cambiaron esa misma tarde, ver la seccion anterior): Sarepta 17:8-11 (termina en 17:11: el punado de
   harina es el pozo) · Elias ante Acab 18:17-19, 24 · el mensajero de Jezabel 19:1-3 (la intro
   del cap. 4 pierde el juramento) · camino de Jezreel 19:21 + 21:1-16 contado por Eliseo (la
   unica forma de contar a Nabot con el profeta en escena; termina en 21:16, la palabra es el

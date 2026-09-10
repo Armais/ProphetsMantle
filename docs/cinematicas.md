@@ -107,8 +107,12 @@ mundo cargado debajo (las paradas van sobre negro) — con `CineThen::FinishAsce
 saltarla con ESC **tambien** reparte la herencia (es presentacion, nunca la puerta del
 Manto). Mantiene `MusicID::Ascension` sonando y descarga sus capas al salir.
 
-- **El texto es EXACTAMENTE el de `get_ascension_lore`** (las tres paginas que leia
-  StorySystem) mas la linea de la herencia como cierre: ni una palabra nueva. Cuando la
+- **El texto es el de `get_ascension_lore`** (las tres paginas que leia StorySystem) mas
+  la linea de la herencia como cierre (`get_ascension_inheritance_line`): ni una palabra
+  nueva aqui. Desde el 2026-09-10 las dos van **bifurcadas por `Engine::ascent_double`**
+  (`cinematic_ascension(c, asked_double)` / `story_ascension(s, asked_double)`): si en la
+  cuarta parada Eliseo pidio «solo verte partir», la pagina 0 no puede decir «te ruego que
+  una doble porcion...» ni la herencia prometer un milagro (2 Reyes 2:10). Cuando la
   cinematica se ve, las paginas de texto **no se leen despues** (precedente del prologo:
   no repetir lo recien visto); bajo autoplay o sin estampas, el fallback ES el texto de
   siempre (`Cinematica del Ascenso suprimida (...)` en el log) y los guiones no ven cambio.

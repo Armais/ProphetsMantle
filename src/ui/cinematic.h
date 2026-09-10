@@ -122,5 +122,7 @@ bool cinematic_chapter_ready(int chapter);
 // get_ascension_lore (las mismas tres paginas que leia StorySystem); cuando la
 // cinematica se ve, esas paginas NO se leen despues (precedente del prologo: no se
 // repite lo recien visto). Sin estampas entregadas, el Engine cae al texto de siempre.
-void cinematic_ascension(CinematicSystem& c);
+// `asked_double` = Engine::ascent_double: si Eliseo no pidio la doble porcion, ni la
+// peticion ni la herencia pueden decir que la pidio (2 Reyes 2:10).
+void cinematic_ascension(CinematicSystem& c, bool asked_double = true);
 bool cinematic_ascension_ready();

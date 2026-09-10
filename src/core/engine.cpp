@@ -1520,7 +1520,7 @@ void Engine::ascent_next() {
     SDL_Log("Cinematica del Ascenso suprimida (%s): paginas de texto",
             autoplay.active ? "autoplay" : "sin estampa");
     story.begin();
-    story_ascension(story);
+    story_ascension(story, ascent_double);
     play_story(StoryThen::FinishAscension);
 }
 
@@ -1671,7 +1671,7 @@ void Engine::start_chapter_intro(int chapter) {
 // mundo cargado (las cuatro paradas van sobre negro), y al terminar no entra a jugar:
 // finish_ascension reparte la herencia y es quien abre el capitulo 6 con su intro.
 void Engine::start_ascension_intro() {
-    cinematic_ascension(cinematic);
+    cinematic_ascension(cinematic, ascent_double);
     cinematic.load_art(renderer);
     cinematic.active = true;
     cinematic.clock = 0.0f;
@@ -3542,7 +3542,8 @@ void Engine::update_autoplay(f32 dt) {
                 if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
                     if (!cinematic_ascension_ready())
                         SDL_Log("asccine: sin estampas (se vera cielo y texto)");
-                    cinematic_ascension(cinematic);
+                    // Con la rama que tenga la sesion (true de fabrica; la cambia ASC_JORDAN).
+                    cinematic_ascension(cinematic, ascent_double);
                     cinematic.load_art(renderer);
                     cinematic.active = true;
                     cinematic.clock = 0.0f;

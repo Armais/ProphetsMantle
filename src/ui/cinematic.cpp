@@ -536,8 +536,9 @@ void cinematic_chapter(CinematicSystem& c, int chapter) {
 // =============================================================================
 // La escena que da nombre al juego, asi que es la mas trabajada: seis escenas sobre
 // cuatro estampas (Jordan abierto A/B, carro de fuego, torbellino, manto caido A/B).
-// El texto es EXACTAMENTE el de get_ascension_lore mas la linea de la herencia: no se
-// escribio una palabra nueva, igual que en las intros de capitulo.
+// El texto es el de get_ascension_lore (con la rama de `asked_double`: sin doble porcion
+// la peticion es otra) mas la linea de la herencia: no se escribio una palabra nueva
+// aqui, igual que en las intros de capitulo.
 namespace {
 
 // nullptr = estampa no entregada (mismo interruptor que CHAPTER_CINE)
@@ -578,9 +579,9 @@ bool cinematic_ascension_ready() {
     return true;
 }
 
-void cinematic_ascension(CinematicSystem& c) {
+void cinematic_ascension(CinematicSystem& c, bool asked_double) {
     c.begin();
-    const ChapterLore jordan = get_ascension_lore(0);   // el cruce y la doble porcion
+    const ChapterLore jordan = get_ascension_lore(0, asked_double);   // el cruce y la peticion
     const ChapterLore carro  = get_ascension_lore(1);   // el carro y el torbellino
     const ChapterLore manto  = get_ascension_lore(2);   // el manto caido
     const Color accent = {245, 220, 160, 255};          // el dorado de story_ascension
@@ -640,10 +641,9 @@ void cinematic_ascension(CinematicSystem& c) {
         CineScene s = asc_scene(3, 9.0f, 9.0f, -3.5f, 1.04f, 1.12f,
                                 {70, 70, 96, 255}, {188, 168, 140, 255});
         s.lines[0] = manto.lines[2];         // «El manto no era suyo. Le fue prestado.»
-        // La misma linea que ponia el pie de story_ascension: es la unica informacion
+        // La misma linea que pone el pie de story_ascension: es la unica informacion
         // de partida de toda la cinematica, y por eso va la ultima.
-        s.lines[1] = tr("Heredas la mitad de su fe, su manto y dos milagros.",
-                        "You inherit half his faith, his mantle and two miracles.");
+        s.lines[1] = get_ascension_inheritance_line(asked_double);
         c.add(s);
     }
 }

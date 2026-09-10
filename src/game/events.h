@@ -178,7 +178,7 @@ inline EventDef get_event_def(int id) {
          nullptr},
         {"1 Reyes 17:7", nullptr},
         {{tr("Quedarte donde te mandó", "Stay where he sent you"), "-12 HP",
-          tr("Aguantas dos días con la boca seca. Al tercero llega la orden: levántate, vete a Sarepta.", "You last two days with a dry mouth. On the third the word comes: arise, get thee to Zarephath.")},
+          tr("Aguantas dos días con la boca seca, y al tercero el arroyo calla del todo. Sigues donde te mandó.", "You hold out two days dry-mouthed, and on the third the brook falls silent. You stay where he sent you.")},
          {tr("Buscar agua río abajo", "Look for water downstream"), tr("-6 Fe", "-6 Faith"),
           tr("Encuentras una poza turbia y bebes hasta hartarte. Nadie te mandó ir.", "You find a muddy pool and drink your fill. No one sent you.")}},
         Portrait::ARROYO_SECO
@@ -239,16 +239,19 @@ inline EventDef get_event_def(int id) {
           tr("Prendes la leña con tus manos. Arde rápido, y no dice nada de Dios.", "You light the wood with your hands. It burns fast, and says nothing of God.")}},
         Portrait::ALTAR_CARMELO
     };
+    // Camino del monte, DESPUES de la audiencia con Acab (que es la apertura del capitulo):
+    // Abdias ya no tiene que anunciar a Elias (18:7-16); lo que le queda son los cien
+    // profetas que sigue escondiendo (18:3-4, 13).
     case Ev::ABDIAS: return {
         tr("Abdías, mayordomo del rey", "Obadiah, the king's steward"),
-        {tr("«¿Soy yo tu enemigo? Yo temo a Jehová desde mi juventud.", "«Am I thine enemy? I have feared the Lord from my youth."),
-         tr("Cuando Jezabel mataba a los profetas, escondí a cien en dos cuevas y los mantuve».", "When Jezebel slew the prophets, I hid a hundred in two caves and fed them»."),
-         tr("«Si voy y le digo a Acab que estás aquí, y no te encuentra, me matará».", "«If I go and tell Ahab thou art here, and he find thee not, he shall slay me».")},
-        {"1 Reyes 18:3-16", nullptr},
-        {{tr("Jurarle que hoy te verá el rey", "Swear the king shall see you today"), "-12 HP",
-          tr("Bajas al valle sin descansar y esperas de pie. Acab llega antes que la noche.", "You go down to the valley without rest and wait on your feet. Ahab comes before nightfall.")},
-         {tr("Dejar que siga oculto", "Let him stay hidden"), tr("-6 Fe", "-6 Faith"),
-          tr("No le pides que se juegue el cuello. Comparte contigo el pan de sus cuevas.", "You do not ask him to risk his neck. He shares with you the bread of his caves.")}},
+        {tr("«Yo temo a Jehová desde mi juventud. Cuando Jezabel mataba a los profetas, escondí a cien en dos cuevas, y los sustenté con pan y agua».", "«I fear the Lord from my youth. When Jezebel slew the prophets, I hid an hundred in two caves, and fed them with bread and water»."),
+         tr("«Siguen allí, señor mío: cincuenta y cincuenta, sin ver el sol. ¿Qué hago hoy con ellos?».", "«They are there yet, my lord: fifty and fifty, seeing no sun. What shall I do with them to day?»."),
+         nullptr},
+        {"1 Reyes 18:3-4, 13", nullptr},
+        {{tr("Que suban los cien al Carmelo", "Let the hundred go up to Carmel"), "-12 HP",
+          tr("Suben de las cuevas con la cara blanca y se ponen entre el pueblo. Cien testigos más de lo que va a caer.", "They come up out of the caves white-faced and stand among the people. An hundred more witnesses of what is to fall.")},
+         {tr("Que sigan en las cuevas", "Let them stay in the caves"), tr("-6 Fe", "-6 Faith"),
+          tr("Los dejas donde Abdías los puso. Comparte contigo el pan de sus cuevas.", "You leave them where Obadiah put them. He shares with you the bread of his caves.")}},
         Portrait::ABDIAS, Npc::ABDIAS
     };
     case Ev::DOS_PENSAMIENTOS: return {
@@ -263,9 +266,11 @@ inline EventDef get_event_def(int id) {
           tr("Que hable el fuego. Guardas el aliento para lo que viene después.", "Let the fire speak. You save your breath for what comes after.")}},
         Portrait::DOS_PENSAMIENTOS
     };
+    // Cronologicamente va DESPUES del jefe (los profetas de Baal, 18:26-29): la primera
+    // frase lleva la marca de flash-forward (pacto de «Siete anos despues» / «Roto el cerco»).
     case Ev::NUBECILLA: return {
-        tr("La nubecilla", "The little cloud"),
-        {tr("Estás en la cumbre con la cara entre las rodillas, y no ha caído una gota en tres años.", "You are on the summit with your face between your knees, and no drop has fallen in three years."),
+        tr("Después del fuego", "After the fire"),
+        {tr("Caído el fuego, estás en la cumbre del Carmelo con la cara entre las rodillas. Todavía no ha llovido.", "The fire fallen, you are on the top of Carmel with your face between your knees. Still no rain has come."),
          tr("Seis veces ha subido el criado a mirar el mar, y seis veces: «no hay nada».", "Six times the servant has gone up to look at the sea, and six times: «there is nothing»."),
          tr("A la séptima: «una pequeña nube como la palma de la mano».", "The seventh time: «a little cloud like a man's hand».")},
         {"1 Reyes 18:41-46", nullptr},
@@ -317,9 +322,10 @@ inline EventDef get_event_def(int id) {
     };
     case Ev::SIETE_MIL: return {
         tr("Los siete mil", "The seven thousand"),
-        {tr("«He sentido un vivo celo por Jehová. Yo solo he quedado, y me buscan para quitarme la vida».", "«I have been very jealous for the Lord. I, even I only, am left; and they seek my life»."),
-         tr("«Yo haré que queden en Israel siete mil,", "«Yet I have left me seven thousand in Israel,"),
-         tr("cuyas rodillas no se doblaron ante Baal».", "all the knees which have not bowed unto Baal».")},
+        // 19:10 («solo yo he quedado») lo dice Elias ante el jefe (scenes.h): aqui, la respuesta.
+        {tr("Dijiste: sólo yo he quedado. Y la voz apacible responde con una cuenta.", "You said: I only am left. And the still voice answers with a reckoning."),
+         tr("«Y yo haré que queden en Israel siete mil,", "«Yet I have left me seven thousand in Israel,"),
+         tr("cuyas rodillas no se doblaron ante Baal, y cuyas bocas no lo besaron».", "all the knees which have not bowed unto Baal, and every mouth which hath not kissed him».")},
         {"1 Reyes 19:18", nullptr},
         {{tr("Volver por el camino del desierto", "Go back by the wilderness"), "-10 HP",
           tr("No estabas solo. Nunca lo estuviste. Desandas el desierto con eso a cuestas.", "You were not alone. You never were. You walk the desert back with that on your shoulders.")},
@@ -331,33 +337,37 @@ inline EventDef get_event_def(int id) {
     // =========================================================================
     // Cap. 5 - El Llamado (1 Reyes 19:19-21; 21; 2 Reyes 1)
     // =========================================================================
+    // El llamamiento (19:19-20) es la apertura del capitulo; aqui, la despedida (19:21).
     case Ev::LLAMADO_ELISEO: return {
-        tr("Eliseo hijo de Safat", "Elisha the son of Shaphat"),
-        {tr("Ara con doce yuntas de bueyes, y él está con la última.", "He is plowing with twelve yoke of oxen, and he is with the last of them."),
-         tr("Le echas encima el manto, y él lo entiende sin que digas nada.", "You cast the mantle over him, and he understands without a word from you."),
-         tr("«Te ruego que me dejes besar a mi padre y a mi madre, y luego te seguiré».", "«Let me, I pray thee, kiss my father and my mother, and then I will follow thee.")},
-        {"1 Reyes 19:20", nullptr},
-        {{tr("Dejarlo todo atrás", "Leave everything behind"), tr("consumible", "consumable"),
-          tr("Mató la yunta, la coció con los aperos y dio de comer al pueblo. Ya no hay vuelta.", "He slew the yoke, boiled it with the gear and fed the people. There is no going back.")},
-         {tr("Dejarle despedirse", "Let him say goodbye"), nullptr,
-          tr("Vuelve a su casa una última vez. La despedida también es obediencia.", "He goes home one last time. Farewell is obedience too.")}},
+        tr("La despedida de Eliseo", "Elisha's farewell"),
+        {tr("Eliseo se vuelve al surco, toma un par de bueyes, y los mata.", "Elisha turns back to the furrow, takes a yoke of oxen, and slays them."),
+         tr("Con los aperos de los bueyes cuece la carne, y la da al pueblo, y comen.", "With the instruments of the oxen he boils the flesh, and gives it to the people, and they eat."),
+         tr("«Siéntate con nosotros, señor mío. Después iré tras de ti».", "«Sit thou with us, my lord. After that I will go after thee».")},
+        {"1 Reyes 19:21", nullptr},
+        {{tr("Comer con ellos", "Eat with them"), tr("consumible", "consumable"),
+          tr("Comes con ellos hasta que cae el sol. Después se levanta, y va tras de ti, y te sirve.", "You eat with them until the sun goes down. Then he arises, and goes after you, and ministers unto you.")},
+         {tr("Seguir camino sin esperarle", "Go on without waiting for him"), nullptr,
+          tr("Sigues solo. Te alcanza antes de la noche, con el olor del humo en la ropa.", "You go on alone. He overtakes you before night, with the smell of the smoke on his clothes.")}},
         Portrait::ELISEO_LABRADOR, Npc::ELISEO_LABRADOR
     };
+    // La PALABRA sobre la vina (21:17-19), sin Acab presente: a Acab se le ve en el jefe
+    // del capitulo (scenes.h, 21:20-23). Sin retrato ni PNJ: es la escena, y la sala pone la
+    // hoguera. Sin retrato la caja tiene 3 lineas de 280 u.
     case Ev::VINA_NABOT: return {
-        tr("En la viña de Nabot", "In Naboth's vineyard"),
-        {tr("El rey ha bajado a tomar posesión de la viña. Nabot lleva un día muerto a pedradas.", "The king has come down to possess the vineyard. Naboth has been a day dead by stoning."),
-         tr("Dos hombres perversos juraron en falso, y la ciudad entera hizo como que se lo creía.", "Two sons of Belial swore falsely, and the whole city pretended to believe it."),
-         tr("«¿Has matado, y también has despojado?». Acab se vuelve y te reconoce.", "«Hast thou killed, and also taken possession?». Ahab turns and knows you.")},
+        tr("La palabra de Jehová", "The word of the Lord"),
+        {tr("«Levántate, desciende a encontrarte con Acab rey de Israel; he aquí él está en la viña de Nabot, a la cual ha descendido a tomar posesión».", "«Arise, go down to meet Ahab king of Israel; behold, he is in the vineyard of Naboth, whither he is gone down to possess it»."),
+         tr("«Y le hablarás diciendo: Así ha dicho Jehová: ¿No mataste, y también has despojado?».", "«And thou shalt speak unto him, saying, Thus saith the Lord, Hast thou killed, and also taken possession?»."),
+         tr("Es toda la palabra. Hay que bajar a decirla a la cara del rey, con la reina y la guardia al lado.", "That is the whole of the word. It must be carried down and said to the king's face, with the queen and the guard beside him.")},
         {"1 Reyes 21:17-19", nullptr},
-        {{tr("Decirle la palabra entera", "Speak the whole word"), "-15 HP",
-          tr("Se lo dices hasta la última línea. El rey rasga sus vestidos y ayuna: incluso él lo ha oído.", "You say it to the last line. The king rends his clothes and fasts: even he has heard it.")},
-         {tr("Callar delante del rey", "Hold your peace before the king"), tr("-12 Fe", "-12 Faith"),
-          tr("Bajas la mirada y le dejas pasar. La viña queda suya, y el silencio tuyo.", "You lower your eyes and let him pass. The vineyard stays his, and the silence yours.")}},
-        Portrait::ACAB, Npc::ACAB
+        {{tr("Bajar con la palabra entera", "Go down with the whole word"), "-15 HP",
+          tr("Bajas a Jezreel con todo lo que has oído, y lo llevas hasta la puerta de la viña.", "You go down to Jezreel with all you have heard, and carry it to the gate of the vineyard.")},
+         {tr("Bajar y callar lo peor", "Go down and keep back the worst"), tr("-12 Fe", "-12 Faith"),
+          tr("Bajas con la mitad de la palabra. Lo de los perros se te queda dentro.", "You go down with half the word. The part about the dogs stays inside you.")}}
     };
     case Ev::TERCER_CAPITAN: return {
         tr("El tercer capitán", "The third captain"),
-        {tr("Ocozías cayó por la ventana y ha mandado a consultar a Baal-zebub, dios de Ecrón.", "Ahaziah fell through the lattice and has sent to enquire of Baal-zebub, god of Ekron."),
+        // Va DESPUES del jefe (Acab muere en 22:37): la primera frase lleva la marca.
+        {tr("Muerto Acab, reinó Ocozías su hijo. Cayó por la celosía de su sala, y ha mandado consultar a Baal-zebub, dios de Ecrón.", "Ahab dead, Ahaziah his son reigned. He fell through the lattice of his upper chamber, and hath sent to enquire of Baal-zebub the god of Ekron."),
          tr("Dos cincuentenas han subido a por ti, y dos cincuentenas ha consumido el fuego.", "Two companies of fifty came up for you, and fire consumed two companies of fifty."),
          tr("El tercero sube solo, dobla la rodilla y no ordena nada: ruega por la vida de sus cincuenta.", "The third comes up alone, bows his knees and commands nothing: he begs for the life of his fifty.")},
         {"2 Reyes 1:13-15", nullptr},
@@ -376,8 +386,10 @@ inline EventDef get_event_def(int id) {
          tr("Mas las aguas son malas, y la tierra estéril».", "But the water is naught, and the ground barren»."),
          tr("Te traen una vasija nueva, y sal dentro de ella.", "They bring you a new cruse, with salt in it.")},
         {"2 Reyes 2:19-20", nullptr},
-        {{tr("Echar la sal en el manantial", "Cast the salt into the spring"), tr("-10 Fe", "-10 Faith"),
-          tr("«Yo sané estas aguas». Y fueron sanas hasta el día de hoy.", "«I have healed these waters». And they were healed unto this day.")},
+        // El manantial NO se sana aqui: sanarlo es el jefe del capitulo (el Espiritu de
+        // Corrupcion, scenes.h) y «fueron sanas las aguas» es el outro.
+        {{tr("Llevar la sal al manantial", "Carry the salt to the spring"), tr("-10 Fe", "-10 Faith"),
+          tr("Tomas la vasija y la llevas al manantial. Lo que vive en el agua ya sabe que vienes.", "You take the cruse and carry it to the spring. What lives in the water knows already that you are coming.")},
          {tr("Beber del agua igualmente", "Drink the water anyway"), "-10 HP",
           tr("El agua raspa la garganta. Pero la ciudad ve que no la temes.", "The water scrapes your throat. But the city sees you do not fear it.")}},
         Portrait::HOMBRE_JERICO, Npc::HOMBRE_JERICO
@@ -401,7 +413,7 @@ inline EventDef get_event_def(int id) {
         tr("En el camino de Betel", "On the way up to Bethel"),
         {tr("Salen del pueblo detrás de ti y no vienen a preguntar nada.", "They come out of the city behind you, and they come to ask nothing."),
          tr("«¡Calvo, sube! ¡Calvo, sube!». Saben lo que le pasó a tu maestro y se ríen de ello.", "«Go up, thou bald head! Go up!». They know what became of your master, and they laugh at it."),
-         tr("No es a ti a quien están gritando, y los dos lo sabéis.", "It is not you they are shouting at, and you both know it.")},
+         tr("Se ríen del que subió en el torbellino, y de ti, que te quedaste con su manto.", "They laugh at him that went up in the whirlwind, and at you, that were left his mantle.")},
         {"2 Reyes 2:23-25", nullptr},
         {{tr("Seguir camino sin volverte", "Walk on without turning"), nullptr,
           tr("Subes al monte Carmelo con la burla a la espalda. Que la lleve quien la ha dicho.", "You go up to mount Carmel with the mockery behind you. Let it stay with those who said it.")},
@@ -425,24 +437,28 @@ inline EventDef get_event_def(int id) {
     // =========================================================================
     // Cap. 7 - El Aceite de la Viuda (2 Reyes 3; 4:1-7, 38-44)
     // =========================================================================
+    // La suplica (4:1-4) es la apertura del capitulo; aqui, el derramamiento (4:5-6).
     case Ev::ACEITE_VIUDA: return {
         tr("La mujer del profeta muerto", "The dead prophet's wife"),
-        {tr("«Tu siervo mi marido ha muerto, y tú sabes que él temía a Jehová.", "«Thy servant my husband is dead, and thou knowest he feared the Lord."),
-         tr("Y ha venido el acreedor para tomarse dos hijos míos por siervos».", "And the creditor is come to take my two sons to be bondmen»."),
-         tr("No tiene nada en casa, sino una vasija de aceite.", "She has nothing in the house, save a pot of oil.")},
-        {"2 Reyes 4:1", nullptr},
-        {{tr("Pedir muchas vasijas", "Ask for many vessels"), "-20 HP",
-          tr("El aceite no se detuvo hasta que no quedó vasija vacía en toda la aldea.", "The oil did not stop until there was not an empty vessel left in the whole village.")},
-         {tr("Pedir unas pocas", "Ask for a few"), nullptr,
-          tr("Llenáis tres vasijas. Alcanza para hoy, y no para la deuda.", "You fill three vessels. Enough for today, not for the debt.")}},
+        {tr("Ha cerrado la puerta tras sí y tras sus hijos, y ellos le traen las vasijas, y ella echa el aceite.", "She has shut the door upon her and upon her sons, and they bring the vessels to her, and she pours out."),
+         tr("«Tráeme aún otra vasija», dice a su hijo. Y él le trae la última que había en casa.", "«Bring me yet a vessel», she says to her son. And he brings her the last there was in the house."),
+         tr("Las de casa están llenas, y el aceite sigue. Los vecinos tienen más.", "Those of the house are full, and the oil still runs. The neighbours have more.")},
+        {"2 Reyes 4:5-6", nullptr},
+        {{tr("Llenar hasta la última vasija de la aldea", "Fill to the last vessel in the village"), "-20 HP",
+          tr("El aceite no se detuvo hasta que no quedó vasija vacía en toda la aldea.", "The oil stayed not until there was not an empty vessel left in the whole village.")},
+         {tr("Llenar las de casa y parar", "Fill those of the house and stop"), nullptr,
+          tr("«No hay más vasijas». Y el aceite se detuvo. Alcanza para hoy, y no para la deuda.", "«There is not a vessel more». And the oil stayed. Enough for to day, and not for the debt.")}},
         Portrait::MUJER_PROFETA, Npc::MUJER_PROFETA
     };
+    // Los tres reyes en el desierto de Edom (3:9-15: Josafat que pregunta por un profeta, el
+    // tanedor y la mano de Jehova) viven aqui desde el 2026-09-10 (decision del usuario: la
+    // apertura del capitulo es la viuda del profeta). Sin retrato: es la escena.
     case Ev::ZANJAS_MOAB: return {
         tr("El valle de las zanjas", "The valley of ditches"),
-        {tr("Tres ejércitos llevan siete días de rodeo y no queda agua ni para las bestias.", "Three armies have marched seven days about, and there is no water for the beasts."),
-         tr("«Haced en este valle muchos estanques».", "«Make this valley full of ditches»."),
-         tr("«No veréis viento, ni veréis lluvia; pero este valle será lleno de agua».", "«Ye shall not see wind, neither shall ye see rain; yet that valley shall be filled with water».")},
-        {"2 Reyes 3:16-23", nullptr},
+        {tr("Siete días de rodeo por el desierto de Edom, y no queda agua para el ejército ni para las bestias. Josafat pregunta si hay aquí profeta de Jehová.", "Seven days' march about the wilderness of Edom, and no water for the host nor for the cattle. Jehoshaphat asks if there be here a prophet of the Lord."),
+         tr("«Traedme ahora un tañedor». Y mientras el tañedor toca, la mano de Jehová viene sobre ti.", "«Bring me a minstrel». And as the minstrel plays, the hand of the Lord comes upon you."),
+         tr("«Haced en este valle muchos estanques. No veréis viento, ni veréis lluvia; pero este valle será lleno de agua».", "«Make this valley full of ditches. Ye shall not see wind, neither shall ye see rain; yet that valley shall be filled with water».")},
+        {"2 Reyes 3:9-23", nullptr},
         {{tr("Cavar el valle entero", "Dig the whole valley"), "-15 HP",
           tr("Cavan hasta la noche sin una nube encima. Al alba el valle está lleno, y rojo como sangre para los de Moab.", "They dig till night without a cloud above. At dawn the valley is full, and red as blood to the Moabites.")},
          {tr("Esperar a que llueva", "Wait for rain"), tr("-10 Fe", "-10 Faith"),
@@ -489,28 +505,32 @@ inline EventDef get_event_def(int id) {
     // =========================================================================
     // Cap. 8 - El Hijo Sunamita (2 Reyes 4:8-37; 6:1-7; 8:1-6)
     // =========================================================================
+    // El ofrecimiento del aposento y la promesa (4:9-16) son la apertura del capitulo:
+    // aqui, los anos que siguen (4:11, 18), con el nino ya corriendo por el patio.
     case Ev::APOSENTO_SUNAMITA: return {
         tr("La sunamita", "The Shunammite woman"),
-        {tr("«He aquí, yo entiendo que este que siempre pasa por nuestra casa", "«Behold now, I perceive that this man which passeth by us continually"),
-         tr("es varón santo de Dios.", "is a holy man of God."),
-         tr("Hagámosle un pequeño aposento de paredes, con cama, mesa, silla y candelero».", "Let us make a little chamber with walls, and set for him a bed, a table, a stool and a candlestick».")},
-        {"2 Reyes 4:9-10", nullptr},
-        {{tr("Aceptar el aposento", "Accept the chamber"), tr("-15 HP máx", "-15 max HP"),
-          tr("Descansas bajo techo por primera vez en años. Si caes aquí, alguien te levantará.", "You rest under a roof for the first time in years. If you fall here, someone will lift you.")},
-         {tr("Rechazar la hospitalidad", "Refuse the hospitality"), nullptr,
-          tr("«Yo habito en medio de mi pueblo». Duermes fuera, y duermes en paz.", "«I dwell among mine own people». You sleep outside, and you sleep in peace.")}},
+        {tr("Pasan los años, y cada vez que pasas por Sunem hay pan en su mesa y una cama en el aposento de paredes.", "Years pass, and every time you pass by Shunem there is bread on her table and a bed in the chamber on the wall."),
+         tr("El niño que prometiste corre por el patio, y su madre no te pide nada.", "The child you promised runs about the court, and his mother asks nothing of you."),
+         nullptr},
+        {"2 Reyes 4:11, 18", nullptr},
+        {{tr("Quedarte en el aposento", "Stay in the chamber"), tr("-15 HP máx", "-15 max HP"),
+          tr("Descansas bajo techo por primera vez en años. Si caes aquí, alguien te levantará.", "You rest under a roof for the first time in years. If you fall here, someone will lift you up.")},
+         {tr("Seguir camino", "Go on your way"), nullptr,
+          tr("Bendices la casa desde la puerta y sigues hacia el Carmelo. Duermes fuera, y duermes en paz.", "You bless the house from the door and go on toward Carmel. You sleep outside, and you sleep in peace.")}},
         Portrait::SUNAMITA, Npc::SUNAMITA
     };
+    // La madre llega al Carmelo (4:25-30). El nino NO resucita aqui: el aposento cerrado
+    // es el jefe del capitulo (la Muerte, scenes.h) y los siete estornudos son el outro.
     case Ev::NINO_SUNAMITA: return {
         tr("El niño de Sunem", "The child of Shunem"),
-        {tr("«¿Pedí yo hijo a mi señor? ¿No dije que no me engañases?».", "«Did I desire a son of my lord? Did I not say, Do not deceive me?»."),
-         tr("El niño se quejó de la cabeza en el campo y a mediodía estaba muerto sobre sus rodillas.", "The child cried of his head in the field, and at noon he died upon her knees."),
-         tr("Lo ha acostado en tu cama, en el aposento de paredes, y ha cerrado la puerta.", "She has laid him on your bed, in the chamber with walls, and shut the door.")},
-        {"2 Reyes 4:29-35", nullptr},
-        {{tr("Ir tú, y tenderte sobre él", "Go yourself, and stretch upon him"), "-25 HP",
-          tr("Boca sobre boca, ojos sobre ojos, manos sobre manos. La carne del niño entró en calor. Estornudó siete veces.", "Mouth upon mouth, eyes upon eyes, hands upon hands. The flesh of the child waxed warm. He sneezed seven times.")},
+        {tr("La ves venir de lejos por el camino del Carmelo, sobre el asna, sin aflojar el paso.", "You see her afar off on the way to Carmel, upon the ass, slacking not her riding."),
+         tr("«¿Pedí yo hijo a mi señor? ¿No dije que no me engañases?». Se ha abrazado a tus pies, y Guiezi quiere apartarla.", "«Did I desire a son of my lord? did I not say, Do not deceive me?». She has caught you by the feet, and Gehazi would thrust her away."),
+         tr("«Vive Jehová, y vive tu alma, que no te dejaré».", "«As the Lord liveth, and as thy soul liveth, I will not leave thee».")},
+        {"2 Reyes 4:25-31", nullptr},
+        {{tr("Ir tú, detrás de ella", "Go yourself, after her"), "-25 HP",
+          tr("Te levantas y la sigues. El camino hasta Sunem se hace largo, y la puerta del aposento está cerrada.", "You arise and follow her. The way to Shunem is long, and the door of the chamber is shut.")},
          {tr("Mandar a Guiezi con el báculo", "Send Gehazi with the staff"), tr("-15 Fe", "-15 Faith"),
-          tr("Puso el báculo sobre el rostro del niño, y no hubo voz ni sentido. Un báculo no resucita a nadie.", "He laid the staff upon the child's face, and there was neither voice nor hearing. A staff raises no one.")}},
+          tr("«Toma mi báculo, y ponlo sobre el rostro del niño». Volvió a tu encuentro: no hubo voz ni sentido.", "«Take my staff, and lay it upon the face of the child». He came back to meet you: there was neither voice nor hearing.")}},
         Portrait::SUNAMITA, Npc::SUNAMITA
     };
     case Ev::HACHA_QUE_FLOTA: return {
@@ -546,7 +566,7 @@ inline EventDef get_event_def(int id) {
     // de muerte un capitulo antes de pelear contra el era mentir sobre el orden.
     case Ev::NAAMAN_PUERTA: return {
         tr("Naamán, general de Siria", "Naaman, captain of Syria"),
-        {tr("Ha venido con caballos y carros, y se ha parado a tu puerta.", "He has come with horses and chariots, and stopped at your door."),
+        {tr("Está a tu puerta con sus caballos y sus carros, y no se ha bajado.", "He stands at your door with his horses and his chariots, and has not come down."),
          tr("«He aquí, yo decía para mí: Saldrá él luego, e invocando el nombre de Jehová", "«Behold, I thought, He will surely come out to me, and call on the name of the Lord"),
          tr("alzará su mano y tocará el lugar, y sanará la lepra».", "and strike his hand over the place, and recover the leper».")},
         {"2 Reyes 5:11", nullptr},
@@ -558,10 +578,12 @@ inline EventDef get_event_def(int id) {
     };
     case Ev::MUCHACHA_CAUTIVA: return {
         tr("La muchacha cautiva", "The captive maid"),
-        {tr("Se la llevaron de Israel en una correría y sirve a la mujer del general.", "They took her out of Israel in a raid, and she waits on the captain's wife."),
+        // Licencia minima: en el libro se queda en Damasco (5:2-3); aqui viene en la
+        // comitiva, que es la unica forma de ponerla en escena con el profeta delante.
+        {tr("Viene en la comitiva del general, detrás de los carros: una muchacha de Israel que se llevaron en una correría.", "She comes in the captain's train, behind the chariots: a maid of Israel, carried away in a raid."),
          tr("«Si rogase mi señor al profeta que está en Samaria, él lo sanaría de su lepra».", "«Would God my lord were with the prophet that is in Samaria! he would recover him of his leprosy»."),
-         tr("Toda esta historia empieza en una niña esclava que no tenía por qué hablar bien de nadie.", "This whole story begins with a slave girl who owed no one a kind word.")},
-        {"2 Reyes 5:2-3", nullptr},
+         tr("Fue ella quien lo dijo, en Damasco, a la mujer de su señor. Por eso está aquí el sirio.", "It was she that said it, in Damascus, to her master's wife. That is why the Syrian is here.")},
+        {"2 Reyes 5:2-4", nullptr},
         {{tr("Pedir que la devuelvan a su tierra", "Ask that she be sent home"), tr("-15 HP máx", "-15 max HP"),
           tr("Negocias su vuelta antes que nada. Sin ella no habría nada que negociar.", "You bargain for her return before anything else. Without her there would be nothing to bargain for.")},
          {tr("Recibir al sirio que viene", "Receive the Syrian who comes"), tr("-15 Fe", "-15 Faith"),
@@ -614,7 +636,8 @@ inline EventDef get_event_def(int id) {
     };
     case Ev::CUATRO_LEPROSOS: return {
         tr("Los cuatro a la puerta", "The four at the gate"),
-        {tr("Samaria lleva tanto tiempo sitiada que una cabeza de asno se paga a ochenta de plata.", "Samaria has been besieged so long that an ass's head sells for eighty pieces of silver."),
+        // Es el FIN del cerco (7:3-10), despues del jefe: la primera frase lleva la marca.
+        {tr("El último día del cerco. Samaria lleva tanto tiempo sitiada que una cabeza de asno se paga a ochenta de plata.", "The last day of the siege. Samaria has been so long besieged that an ass's head sells for fourscore pieces of silver."),
          tr("«¿Para qué nos estamos aquí hasta que muramos?». Cuatro leprosos, a la caída de la tarde.", "«Why sit we here until we die?». Four lepers, at the twilight."),
          tr("Entraron al campamento sirio y no había nadie: plata, oro, vestidos y toda la comida del mundo.", "They came to the Syrian camp and there was no man: silver, gold, raiment, and all the food in the world.")},
         {"2 Reyes 7:3-10", nullptr},
@@ -674,8 +697,8 @@ inline EventDef get_event_def(int id) {
     case Ev::ASC_GILGAL: return {
         tr("Camino de Betel", "On the way to Bethel"),
         {tr("«Quédate ahora aquí, porque Jehová me ha enviado a Betel».", "«Tarry here, I pray thee; for the Lord hath sent me to Bethel»."),
-         tr("Lo dice sin mirarte. Es la primera de tres veces que lo va a decir.", "He says it without looking at you. It is the first of three times he will say it."),
-         tr("Y los hijos de los profetas ya susurran lo que nadie quiere decir en voz alta.", "And the sons of the prophets are already whispering what no one will say aloud.")},
+         tr("Lo dice sin mirarte, y sigue andando.", "He says it without looking at you, and walks on."),
+         tr("Por el camino, los hijos de los profetas os miran pasar y no dicen nada.", "Along the way the sons of the prophets watch you pass, and say nothing.")},
         {"2 Reyes 2:2", nullptr},
         {{tr("«Vive Jehová, no te dejaré»", "«As the Lord liveth, I will not leave thee»"), nullptr,
           tr("Y descendieron ambos a Betel.", "So they went down to Bethel.")},
@@ -710,7 +733,7 @@ inline EventDef get_event_def(int id) {
     case Ev::ASC_JORDAN: return {
         tr("«Pide lo que quieras»", "«Ask what I shall do for thee»"),
         {tr("«Pide lo que quieras que haga por ti, antes que yo sea quitado de ti».", "«Ask what I shall do for thee, before I be taken away from thee»."),
-         tr("Es lo último que te va a preguntar, y lo sabes.", "It is the last thing he will ask you, and you know it."),
+         tr("Se ha parado en medio del cauce seco, y espera tu respuesta.", "He has stopped in the midst of the dry channel, and waits for your answer."),
          nullptr},
         {"2 Reyes 2:9-10", nullptr},
         {{tr("«Una doble porción de tu espíritu»", "«A double portion of thy spirit»"), nullptr,
@@ -736,7 +759,7 @@ inline EventDef get_event_def(int id) {
         {{tr("Recordar la palabra sobre la viña", "Recall the word about the vineyard"), nullptr,
           tr("«En la heredad de Nabot comerán los perros la carne de Jezabel». Se cumplió hasta la última letra, veinte años después.", "«In the portion of Naboth shall dogs eat the flesh of Jezebel». It came to pass to the last letter, twenty years after.")},
          {tr("Callar y mirar", "Say nothing, and watch"), nullptr,
-          tr("Miras sin decir nada. Se cumple igual: la palabra no necesitaba testigos.", "You watch and say nothing. It comes to pass anyway: the word needed no witnesses.")}},
+          tr("Miras sin decir nada. Se cumple igual, delante de tus ojos.", "You watch and say nothing. It comes to pass all the same, before your eyes.")}},
         Portrait::JEZABEL
     };
     case Ev::EPI_ARCO_JOAS: return {
@@ -758,7 +781,7 @@ inline EventDef get_event_def(int id) {
          tr("Y cuando tocó los huesos del profeta, revivió, y se levantó sobre sus pies.", "And when the man touched the bones of Elisha, he revived, and stood up on his feet.")},
         {"2 Reyes 13:20-21", nullptr},
         {{tr("Bajar la mirada", "Lower your eyes"), nullptr,
-          tr("El último milagro del profeta ocurre cuando el profeta ya lleva un año muerto. No hacía falta que estuviera.", "The prophet's last miracle happens a year after the prophet is dead. He did not need to be there.")},
+          tr("Revivió, y se levantó sobre sus pies. Y el profeta llevaba un año en el sepulcro.", "He revived, and stood up on his feet. And the prophet had been a year in the sepulchre.")},
          {nullptr, nullptr, nullptr}},
         Portrait::ELISEO
     };

@@ -18,8 +18,12 @@
 #   4. Orden en cada apertura completa: "Apertura N terminada (completa)" ->
 #      "Cinematica de capitulo N" (la intro va DESPUES de la apertura). En cada jefe:
 #      "Jefe N terminada (completa)" y despues el juego SIGUE en la arena (la pelea).
-#   5. Cero "TEXT TRUNCATED": las ~155 paginas caben en 4 lineas a 244 u con retrato
-#      (techo ~115 caracteres), en ES y en EN. Es el gate que manda.
+#   5. Cero "TEXT TRUNCATED": cada `lines[i]` es una pagina y cabe en 4 lineas a 244 u
+#      con retrato (3 a 280 u sin retrato), en ES y en EN. Es el gate que manda.
+#   7. Cada escena recorre TODAS sus cajas: "<tag>: parada k/N" con N = `count` de
+#      get_scene_def (7/5/6/4/4/4/5/6/5/5 aperturas, 3/3/4/4/4/4/4/4/4/4 jefes) y k
+#      llegando a N en cada pasada. Un `case` que falte en get_scene_line salta la caja
+#      en silencio, y esto es lo unico que lo caza.
 #   6. Cero "WARNING: sprite sheet" y cero "Failed to load".
 #
 # Capturas es01..es20 (mirar CADA una): el escenario de cada escena con su primera
@@ -76,7 +80,7 @@ press cancel
 wait 4.0
 escena 6
 wait 1.5
-shot es07_ap7_tres_reyes
+shot es07_ap7_viuda_profeta
 wait 0.1
 press cancel
 wait 4.0
@@ -165,7 +169,7 @@ wait 24
 escena 1 1
 wait 17
 escena 2 1
-wait 18
+wait 20
 escena 3 1
 wait 14
 escena 4 1
@@ -175,7 +179,7 @@ wait 13
 escena 6 1
 wait 16
 escena 7 1
-wait 15
+wait 17
 escena 8 1
 wait 14
 escena 9 1
@@ -208,7 +212,7 @@ wait 24
 escena 1 1
 wait 17
 escena 2 1
-wait 18
+wait 20
 escena 3 1
 wait 14
 escena 4 1
@@ -218,7 +222,7 @@ wait 13
 escena 6 1
 wait 16
 escena 7 1
-wait 15
+wait 17
 escena 8 1
 wait 14
 escena 9 1

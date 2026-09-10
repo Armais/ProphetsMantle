@@ -31,8 +31,17 @@
 // en el escenario. Los reyes que no tienen retrato propio (Joram, Josafat) llevan
 // `Portrait::NONE`: usar la cara de Acab para su hijo seria mentir.
 //
-// Techo de texto: ~115 caracteres por pagina con retrato (4 lineas a 244 u), en ES y en EN.
-// `scripts/escenas_check.txt` recorre las 20 escenas en los dos idiomas: cero TEXT TRUNCATED.
+// VOZ (pasada del 2026-09-10, veredicto del usuario: «suenan a IA»): el registro es el de
+// la Reina-Valera 1960 tambien en lo inventado — vosotros, «he aqui», «senor mio», «tu
+// siervo», «varon de Dios», «Vive Jehova» —, y cada personaje habla como en 1-2 Reyes, no
+// con sentencias. Una sola sentencia bimembre por ESCENA, ninguna caja cerrada con
+// aforismo salvo que sea versiculo, nadie narra lo que se ve en pantalla, ningun aparte
+// omnisciente, y la unica exclamacion del juego es el grito ritual de Baal. La guia
+// completa y la espina de cada capitulo: docs/encuentros-y-lore.md.
+//
+// Techo de texto: cada `lines[i]` es UNA pagina; con retrato caben 4 lineas a 244 u, sin
+// retrato 3 a 280 u, en ES y en EN. `scripts/escenas_check.txt` recorre las 20 escenas en
+// los dos idiomas: cero TEXT TRUNCATED.
 //
 // =============================================================================
 
@@ -109,6 +118,9 @@ inline int boss_of(int chapter) {
 // =============================================================================
 // Ids de las cajas (lineas) de escena
 // =============================================================================
+// El ORDEN del enum dentro de cada bloque ES la cadena (`SceneDef::first_line` + `count`):
+// un `case` que falte en get_scene_line hace que open_dialogue salte la caja en silencio
+// (contar `parada k/N` en el log de escenas_check).
 namespace Sc {
 constexpr int LINE_BASE = 1000;   // desplazamiento en DialogueState::event_id
 enum : int {
@@ -116,14 +128,14 @@ enum : int {
     AUD_REPRENDE = 0, AUD_ACAB_DESPRECIA, AUD_JEZABEL_AMENAZA, AUD_SENTENCIA,
     AUD_ACAB_BURLA, AUD_JEZABEL_CAZA, AUD_PALABRA_QUERIT,
     // --- Aperturas 2..10 -----------------------------------------------------------
-    AP2_PALABRA, AP2_ELIAS_AGUA, AP2_VIUDA_LENA, AP2_ELIAS_PAN, AP2_SACERDOTE,
-    AP3_ACAB_TURBAS, AP3_ELIAS_TURBAS, AP3_PROFETA_BAAL, AP3_ACAB_SEA, AP3_ELIAS_FUEGO,
-    AP4_MENSAJERO, AP4_ELIAS_MIEDO, AP4_CRIADO, AP4_ELIAS_HUYE,
-    AP5_ELISEO_YUNTAS, AP5_ELIAS_HOREB, AP5_ELISEO_NABOT, AP5_ELIAS_HEREDAD,
+    AP2_PALABRA, AP2_ELIAS_AGUA, AP2_VIUDA_AGUA, AP2_ELIAS_PAN, AP2_SACERDOTE,
+    AP3_PALABRA, AP3_ACAB_TURBAS, AP3_ELIAS_TURBAS, AP3_PROFETA_BAAL, AP3_ELIAS_FUEGO, AP3_ACAB_SEA,
+    AP4_MENSAJERO, AP4_ELIAS_VAMONOS, AP4_CRIADO, AP4_ELIAS_HUYE,
+    AP5_YUNTAS, AP5_ELISEO_BESAR, AP5_ELIAS_VUELVE, AP5_ELISEO_BUEYES,
     AP6_HIJOS_ESPIRITU, AP6_ELISEO_MANTO, AP6_HIJOS_JERICO, AP6_ELISEO_VAMOS,
-    AP7_JORAM, AP7_JOSAFAT, AP7_ELISEO_QUE, AP7_JORAM_NO, AP7_ELISEO_TANEDOR,
-    AP8_ELISEO_LLAMALA, AP8_SUNAMITA_PUEBLO, AP8_GUIEZI_HIJO, AP8_ELISEO_HIJO, AP8_SUNAMITA_BURLA,
-    AP9_JORAM_CARTA, AP9_GUIEZI_PLATA, AP9_ELISEO_PROFETA, AP9_GUIEZI_ORO, AP9_ELISEO_NO_VENDE,
+    AP7_VIUDA, AP7_ELISEO_QUE_TIENES, AP7_VIUDA_ACEITE, AP7_GUIEZI, AP7_ELISEO_VASIJAS,
+    AP8_SUNAMITA_APOSENTO, AP8_ELISEO_LLAMALA, AP8_SUNAMITA_PUEBLO, AP8_GUIEZI_HIJO, AP8_ELISEO_HIJO, AP8_SUNAMITA_BURLA,
+    AP9_JORAM_CARTA, AP9_GUIEZI_PLATA, AP9_ELISEO_PROFETA, AP9_GUIEZI_PRESENTE, AP9_ELISEO_SIN_PLATA,
     AP10_ELISEO_AVISO, AP10_JORAM_COMO, AP10_ELISEO_QUIEN, AP10_CRIADO_JURADO, AP10_ELISEO_DOTAN,
     // --- Dialogos con el jefe 1..10 ------------------------------------------------
     J1_CAPITAN, J1_ELIAS, J1_CAPITAN_2,
@@ -158,85 +170,82 @@ inline EventDef get_scene_line(int line) {
     // La audiencia con Acab (1 R 17:1-4): siete cajas en orden. En 17:1 Acab no
     // responde; aqui SI responde, y Jezabel con el, por decision del usuario
     // (2026-09-09): el jugador tiene que ver a quien se enfrenta el profeta antes de
-    // huir. Lo inventado se apoya en el libro: el altar y el bosque de Baal y la sidonia
+    // huir. Lo inventado se apoya en el libro: el altar y la imagen de Asera y la sidonia
     // Jezabel (16:30-33), Jezabel que ya mata profetas (18:4), los 450 de Baal (18:19),
     // Acab que lo busca por todos los reinos (18:10) y el manto de pelo (2 R 1:8). La
-    // sentencia de 17:1 es la del prologo, tal cual, en la cuarta caja.
+    // sentencia de 17:1 va tal cual la RV1960, en la cuarta caja.
     // =========================================================================
     case Sc::AUD_REPRENDE: return {
         tr("Elías", "Elijah"),
-        {tr("Acab, hijo de Omri. He cruzado el Jordán a pie para decirte lo que tú ya sabes.",
-            "Ahab, son of Omri. I have crossed the Jordan on foot to tell you what you already know."),
-         tr("Has hecho lo malo ante el Señor más que todos los reyes que hubo antes de ti.",
-            "You have done evil in the sight of the Lord, more than all the kings who came before you."),
-         tr("Levantaste altar a Baal en Samaria y plantaste su bosque. Y los altares del Señor están en ruinas.",
-            "You raised an altar to Baal in Samaria and planted his grove. And the altars of the Lord lie in ruins.")},
+        {tr("Acab, hijo de Omri. He venido de Galaad a decirte lo que ya sabes.",
+            "Ahab, son of Omri. I am come from Gilead to tell thee what thou knowest already."),
+         tr("Has hecho lo malo ante los ojos de Jehová, más que todos los que fueron antes de ti.",
+            "Thou hast done evil in the sight of the Lord, above all that were before thee."),
+         tr("Levantaste altar a Baal en Samaria, y plantaste una imagen de Asera; y los altares de Jehová están derribados.",
+            "Thou hast reared up an altar for Baal in Samaria, and made a grove; and the altars of the Lord are thrown down.")},
         {"1 Reyes 16:30-33", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::AUD_ACAB_DESPRECIA: return {
         tr("Acab", "Ahab"),
-        {tr("¿Quién ha dejado pasar a este? Un tisbita de Galaad, manto de pelo y polvo del camino, viene a enseñar al rey.",
-            "Who let this one in? A Tishbite of Gilead, in a hairy mantle and the dust of the road, come to lecture the king."),
-         tr("Samaria tiene paz, tiene grano y tiene murallas nuevas. Cuando tu Dios haga otro tanto, te escucharé.",
-            "Samaria has peace, it has grain, it has new walls. When your God does as much, I will listen."),
-         tr("Sidón nos manda cedro y púrpura, y Baal, la lluvia. ¿Qué me manda el Dios de Galaad? A ti.",
-            "Sidon sends us cedar and purple, and Baal sends the rain. What does the God of Gilead send me? You.")},
+        {tr("¿Quién ha dejado entrar a este? Un tisbita de Galaad, con manto de pelo y el polvo del camino, viene a reprender al rey.",
+            "Who let this man in? A Tishbite of Gilead, in a hairy mantle and the dust of the road, come to rebuke the king."),
+         tr("Samaria tiene paz, tiene grano y tiene muros nuevos. Sidón nos manda cedro y púrpura, y Baal manda la lluvia.",
+            "Samaria hath peace, and corn, and new walls. Sidon sendeth us cedar and purple, and Baal sendeth the rain."),
+         nullptr},
         {"1 Reyes 16:31", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
     };
     case Sc::AUD_JEZABEL_AMENAZA: return {
         tr("Jezabel", "Jezebel"),
-        {tr("Déjalo, mi señor. En Sidón sabemos qué hacer con los que hablan contra los dioses.",
-            "Let him be, my lord. In Sidon we know what to do with those who speak against the gods."),
-         tr("Los profetas de tu Señor ya han aprendido a callar, Elías. Vuelve a tu monte antes de que aprendas tú.",
-            "Your Lord's prophets have already learned silence, Elijah. Go back to your mountain before you learn it too."),
+        {tr("Déjalo, señor mío. En Sidón sabemos qué se hace con los que hablan contra los dioses.",
+            "Let him be, my lord. In Sidon we know what is done with those who speak against the gods."),
+         tr("Los profetas de tu Dios ya han aprendido a callar, Elías. Vuélvete a tu monte.",
+            "Thy God's prophets have learned to hold their peace, Elijah. Get thee back to thy mountain."),
          nullptr},
         {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, Portrait::JEZABEL
     };
     case Sc::AUD_SENTENCIA: return {
         tr("Elías", "Elijah"),
-        {tr("No es a mí a quien despreciáis, sino a Aquel delante de quien estoy. Israel lo olvidó; Él no ha olvidado a Israel.",
-            "It is not me you despise, but Him before whom I stand. Israel forgot Him; He has not forgotten Israel."),
-         tr("Dices que Baal da la lluvia. Pues que la dé. Que Israel entero vea de quién es el cielo.",
-            "You say Baal gives the rain. Then let him give it. Let all Israel see whose sky it is."),
-         tr("Vive el Señor, Dios de Israel, delante de quien estoy: no habrá rocío ni lluvia en estos años, sino por mi palabra.",
-            "As the Lord God of Israel liveth, before whom I stand: there shall not be dew nor rain these years, but according to my word.")},
+        {tr("Tú dices que Baal da la lluvia. Pues que la dé.",
+            "Thou sayest that Baal giveth the rain. Then let him give it."),
+         tr("Vive Jehová Dios de Israel, en cuya presencia estoy, que no habrá lluvia ni rocío en estos años, sino por mi palabra.",
+            "As the Lord God of Israel liveth, before whom I stand, there shall not be dew nor rain these years, but according to my word."),
+         nullptr},
         {"1 Reyes 17:1", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::AUD_ACAB_BURLA: return {
         tr("Acab", "Ahab"),
-        {tr("¿Sequía? ¿Por tu palabra? Baal tiene cuatrocientos cincuenta profetas en Israel. Tú eres uno solo.",
-            "Drought? By your word? Baal has four hundred and fifty prophets in Israel. You are one man."),
-         tr("Vete. Y cuando llueva, que lloverá, mis hombres te traerán de vuelta para que lo veas de rodillas.",
-            "Go. And when the rain comes, and it will, my men will bring you back to watch it on your knees."),
+        {tr("¿Sequía por tu palabra? Baal tiene cuatrocientos cincuenta profetas en Israel, y tú eres un hombre solo.",
+            "Drought, by thy word? Baal hath four hundred and fifty prophets in Israel, and thou art one man."),
+         tr("Vete. Y cuando llueva, mis hombres te traerán para que lo veas.",
+            "Go. And when the rain cometh, my men shall bring thee back to see it."),
          nullptr},
         {"1 Reyes 18:19", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
     };
     case Sc::AUD_JEZABEL_CAZA: return {
         tr("Jezabel", "Jezebel"),
-        {tr("No hará falta esperar a la lluvia, mi señor. Mis jinetes saben buscar, y Galaad no es tan grande.",
-            "No need to wait for the rain, my lord. My riders know how to search, and Gilead is not so large."),
-         tr("Sidón no olvida una cara, profeta. Y Samaria ya ha aprendido de Sidón.",
-            "Sidon does not forget a face, prophet. And Samaria has learned from Sidon."),
-         nullptr},
+        {tr("No hará falta esperar a la lluvia, señor mío. Galaad no es tan grande, y mis jinetes saben buscar.",
+            "There is no need to wait for the rain, my lord. Gilead is not so large, and my horsemen know how to search."),
+         nullptr, nullptr},
         {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::JEZABEL
     };
     case Sc::AUD_PALABRA_QUERIT: return {
-        tr("La palabra del Señor", "The word of the Lord"),
+        tr("La palabra de Jehová", "The word of the Lord"),
         {tr("Apártate de aquí, y vuélvete al oriente, y escóndete en el arroyo de Querit, que está frente al Jordán.",
             "Get thee hence, and turn thee eastward, and hide thyself by the brook Cherith, that is before Jordan."),
-         tr("Beberás del arroyo, y he mandado a los cuervos que allí te sustenten.",
-            "Thou shalt drink of the brook, and I have commanded the ravens to feed thee there."),
+         tr("Beberás del arroyo; y yo he mandado a los cuervos que te den allí de comer.",
+            "Thou shalt drink of the brook; and I have commanded the ravens to feed thee there."),
          nullptr},
         {"1 Reyes 17:2-4", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
 
     // =========================================================================
     // Cap. 2 - A la puerta de Sarepta (1 R 17:8-11). Termina en 17:11: el ultimo punado
-    // de harina (17:12) y la tinaja son del pozo. El sacerdote que mira desde la puerta
-    // es invencion apoyada en «Sarepta es tierra de Jezabel» y en 18:4.
+    // de harina (17:12) y la tinaja son del pozo. El sacerdote que vigila desde la puerta
+    // es invencion apoyada en «Sarepta es tierra de Jezabel» y en 18:4; la viuda no da
+    // cifras de anos de sequia (la unica cifra del juego es «al tercer ano», 18:1).
     // =========================================================================
     case Sc::AP2_PALABRA: return {
-        tr("La palabra del Señor", "The word of the Lord"),
+        tr("La palabra de Jehová", "The word of the Lord"),
         {tr("Levántate, vete a Sarepta de Sidón, y mora allí.",
             "Arise, get thee to Zarephath, which belongeth to Zidon, and dwell there."),
          tr("He aquí yo he dado orden allí a una mujer viuda que te sustente.",
@@ -246,290 +255,285 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::AP2_ELIAS_AGUA: return {
         tr("Elías", "Elijah"),
-        {tr("El Señor me trae a la tierra de Jezabel. Y a la puerta de la ciudad, una viuda recogiendo dos leños.",
-            "The Lord brings me to Jezebel's own land. And at the city gate, a widow gathering two sticks."),
-         tr("Te ruego que me traigas un poco de agua en un vaso, para que beba.",
+        {tr("Te ruego que me traigas un poco de agua en un vaso, para que beba.",
             "Fetch me, I pray thee, a little water in a vessel, that I may drink."),
-         nullptr},
+         nullptr, nullptr},
         {"1 Reyes 17:10", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
-    case Sc::AP2_VIUDA_LENA: return {
+    case Sc::AP2_VIUDA_AGUA: return {
         tr("La viuda de Sarepta", "The widow of Zarephath"),
-        {tr("¿Agua para un forastero? No ha llovido en Sidón en dos años. Baal calla, y el pozo está a medio secar.",
-            "Water, for a stranger? No rain has fallen on Sidon in two years. Baal is silent, and the well is half dry."),
-         tr("Pero se te ve más seco que el pozo. Espera aquí; te la traigo.",
-            "But you look drier than the well. Wait here; I will bring it."),
-         nullptr},
+        {tr("Agua sí hay, aunque poca: el pozo de la ciudad se seca, y Baal no responde. Espera aquí, que te la traigo.",
+            "Water there is, though little: the well of the city faileth, and Baal answereth not. Wait here, and I will bring it thee."),
+         nullptr, nullptr},
         {"1 Reyes 17:11", nullptr}, SC_NO_OPTIONS, Portrait::VIUDA_SAREPTA
     };
     case Sc::AP2_ELIAS_PAN: return {
         tr("Elías", "Elijah"),
-        {tr("Tráeme también un bocado de pan en tu mano.",
+        {tr("Te ruego que me traigas también un bocado de pan en tu mano.",
             "Bring me, I pray thee, a morsel of bread in thine hand."),
-         tr("Tú no me conoces. Pero el que me manda a tu puerta te conoce a ti.",
-            "You do not know me. But the one who sends me to your door knows you."),
-         nullptr},
+         nullptr, nullptr},
         {"1 Reyes 17:11", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::AP2_SACERDOTE: return {
         tr("Sacerdote de Baal", "Priest of Baal"),
-        {tr("Manto de pelo y polvo de Galaad. Tú eres el que cerró el cielo sobre Israel, y ahora Sidón paga tu sequía.",
-            "A hairy mantle, Gilead's dust. You shut the sky over Israel, and now Sidon pays for your drought."),
-         tr("Sarepta es de Baal, tisbita. Y a Baal se le debe una ofrenda por cada año sin lluvia.",
-            "Zarephath belongs to Baal, Tishbite. And Baal is owed an offering for every year without rain."),
+        {tr("Manto de pelo y polvo de Galaad. Sé quién eres, tisbita: el que cerró el cielo sobre Israel.",
+            "A hairy mantle, and the dust of Gilead. I know who thou art, Tishbite: he that shut up the heaven over Israel."),
+         tr("Aquí vigila Baal, y yo por él. Mira bien a quién pides pan en Sarepta.",
+            "Here Baal keepeth watch, and I for him. Take heed whom thou askest bread of in Zarephath."),
          nullptr},
         {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
 
     // =========================================================================
-    // Cap. 3 - Elias ante Acab (1 R 18:17-19, 24): el encuentro que convoca el Carmelo.
-    // La burla del profeta de Baal y el «hoy gano yo» de Acab son invencion.
+    // Cap. 3 - «Ve, muestrate a Acab» (18:1) y Elias ante Acab (1 R 18:17-19, 24): el
+    // encuentro que convoca el Carmelo. El profeta de Baal responde a la CONVOCATORIA
+    // (los 450 de 18:19) y Elias propone el fuego despues; Acab cierra con el «sea» de
+    // 18:20, y lo que el quiere es lluvia (18:1). La burla del profeta es invencion.
     // =========================================================================
+    case Sc::AP3_PALABRA: return {
+        tr("La palabra de Jehová", "The word of the Lord"),
+        {tr("Ve, muéstrate a Acab, y yo haré llover sobre la faz de la tierra.",
+            "Go, shew thyself unto Ahab; and I will send rain upon the earth."),
+         nullptr, nullptr},
+        {"1 Reyes 18:1", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+    };
     case Sc::AP3_ACAB_TURBAS: return {
         tr("Acab", "Ahab"),
         {tr("¿Eres tú el que turbas a Israel?",
             "Art thou he that troubleth Israel?"),
-         tr("Tres años te busqué por todos los reinos, y ahora vienes tú a mí, con la tierra hecha polvo.",
-            "Three years I sought you through every kingdom, and now you come to me, with the land turned to dust."),
+         tr("Te he buscado por todos los reinos, y a cada uno le hice jurar que no te habían hallado. Y ahora vienes tú a mí.",
+            "I have sought thee through every kingdom, and taken an oath of each that they found thee not. And now thou comest to me."),
          nullptr},
-        {"1 Reyes 18:17", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
+        {"1 Reyes 18:17, 10", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
     };
     case Sc::AP3_ELIAS_TURBAS: return {
         tr("Elías", "Elijah"),
-        {tr("Yo no he turbado a Israel, sino tú y la casa de tu padre, dejando al Señor y siguiendo a los baales.",
-            "I have not troubled Israel, but thou and thy father's house, forsaking the Lord and following Baalim."),
-         tr("Envía ahora y congrégame a todo Israel en el monte Carmelo.",
-            "Send now, and gather to me all Israel unto mount Carmel."),
-         tr("Y a los cuatrocientos cincuenta profetas de Baal, y a los de Asera, que comen de la mesa de Jezabel.",
-            "And the four hundred and fifty prophets of Baal, and those of Asherah, which eat at Jezebel's table.")},
+        {tr("Yo no he turbado a Israel, sino tú y la casa de tu padre, dejando los mandamientos de Jehová y siguiendo a los baales.",
+            "I have not troubled Israel; but thou, and thy father's house, in that ye have forsaken the Lord, and followed Baalim."),
+         tr("Envía, pues, ahora y congrégame a todo Israel en el monte Carmelo.",
+            "Now therefore send, and gather to me all Israel unto mount Carmel."),
+         tr("Y a los cuatrocientos cincuenta profetas de Baal, y a los cuatrocientos profetas de Asera, que comen de la mesa de Jezabel.",
+            "And the four hundred and fifty prophets of Baal, and the four hundred prophets of the groves, which eat at Jezebel's table.")},
         {"1 Reyes 18:18-19", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::AP3_PROFETA_BAAL: return {
         tr("Profeta de Baal", "Prophet of Baal"),
-        {tr("Señor de la tormenta, jinete de las nubes: así llaman a Baal de Sidón a Samaria. ¿Y tú lo retas con fuego?",
-            "Lord of the storm, rider of the clouds: so they call Baal from Sidon to Samaria. And you dare him with fire?"),
-         tr("Somos cuatrocientos cincuenta. Sube al monte, tisbita, y cuenta cuántos bajan.",
-            "We are four hundred and fifty. Go up the mountain, Tishbite, and count how many come down."),
-         nullptr},
+        {tr("¿Al Carmelo? Baal es señor de la lluvia y jinete de las nubes. Somos cuatrocientos cincuenta, tisbita, y tú uno.",
+            "To Carmel? Baal is lord of the rain and rider of the clouds. We are four hundred and fifty, Tishbite, and thou art one."),
+         nullptr, nullptr},
         {"1 Reyes 18:19", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
-    };
-    case Sc::AP3_ACAB_SEA: return {
-        tr("Acab", "Ahab"),
-        {tr("Sea. Que suba todo Israel y lo vea. Si Baal responde, se acabó el tisbita; si no responde, se acabó la sequía.",
-            "So be it. Let all Israel go up and watch. If Baal answers, the Tishbite is finished; if not, the drought is."),
-         tr("De un modo u otro, hoy gano yo.",
-            "One way or the other, today I win."),
-         nullptr},
-        {"1 Reyes 18:20", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
     };
     case Sc::AP3_ELIAS_FUEGO: return {
         tr("Elías", "Elijah"),
-        {tr("Invocad vosotros el nombre de vuestro dios, y yo invocaré el nombre del Señor.",
-            "Call ye on the name of your god, and I will call on the name of the Lord."),
-         tr("Y el Dios que responda por medio del fuego, ese es Dios.",
+        {tr("Invocad luego vosotros el nombre de vuestro dios, y yo invocaré el nombre de Jehová.",
+            "And call ye on the name of your gods, and I will call on the name of the Lord."),
+         tr("Y el Dios que respondiere por medio de fuego, ése sea Dios.",
             "And the God that answereth by fire, let him be God."),
          nullptr},
         {"1 Reyes 18:24", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
+    case Sc::AP3_ACAB_SEA: return {
+        tr("Acab", "Ahab"),
+        {tr("Sea. Que suba todo Israel al Carmelo. Trae tu fuego, tisbita; lo que yo quiero de tu Dios es la lluvia.",
+            "So be it. Let all Israel go up to Carmel. Bring thy fire, Tishbite; what I want of thy God is the rain."),
+         nullptr, nullptr},
+        {"1 Reyes 18:20", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
+    };
 
     // =========================================================================
     // Cap. 4 - El mensajero de Jezabel (1 R 19:1-3), en Jezreel, la manana despues del
-    // Carmelo. El miedo de Elias y la pregunta del criado son invencion; Beerseba y «dejo
-    // alli a su criado» son 19:3. La intro del capitulo ya no repite el juramento.
+    // Carmelo. Elias no explica lo que siente: se va (19:3). Beerseba y «dejo alli a su
+    // criado» son 19:3; el enebro (19:4) es el pozo y la intro no lo repite.
     // =========================================================================
     case Sc::AP4_MENSAJERO: return {
         tr("El mensajero de Jezabel", "Jezebel's messenger"),
-        {tr("Palabra de la reina, tisbita. Acab le ha contado lo del Carmelo: el fuego, y los profetas degollados en el Cisón.",
-            "Word from the queen, Tishbite. Ahab told her of Carmel: the fire, and the prophets slain at the brook Kishon."),
-         tr("«Así me hagan los dioses, si mañana a estas horas no he puesto tu vida como la de uno de ellos».",
-            "«So let the gods do to me, and more also, if I make not thy life as the life of one of them by to morrow»."),
+        {tr("Palabra de la reina, tisbita. Acab le ha contado lo del Carmelo: el fuego, y los profetas degollados junto al Cisón.",
+            "Word from the queen, Tishbite. Ahab hath told her of Carmel: the fire, and the prophets slain by the brook Kishon."),
+         tr("«Así me hagan los dioses, y aun me añadan, si mañana a estas horas yo no he puesto tu persona como la de uno de ellos».",
+            "«So let the gods do to me, and more also, if I make not thy life as the life of one of them by to morrow about this time»."),
          nullptr},
         {"1 Reyes 19:1-2", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
     };
-    case Sc::AP4_ELIAS_MIEDO: return {
+    case Sc::AP4_ELIAS_VAMONOS: return {
         tr("Elías", "Elijah"),
-        {tr("Ayer cayó fuego del cielo a mi palabra. Y hoy tiemblo por la carta de una mujer.",
-            "Yesterday fire fell from heaven at my word. And today I tremble at a woman's letter."),
-         tr("Cuatrocientos cincuenta no me acobardaron. Una sola voz sí.",
-            "Four hundred and fifty did not daunt me. One single voice has."),
-         nullptr},
+        {tr("Vámonos. Esta noche no dormimos en Jezreel.",
+            "Let us go. To night we sleep not in Jezreel."),
+         nullptr, nullptr},
         {"1 Reyes 19:3", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::AP4_CRIADO: return {
         tr("Su criado", "His servant"),
-        {tr("¿A dónde, mi señor? Jezreel entero ha oído el juramento. No hay casa que te abra la puerta esta noche.",
-            "Where to, my lord? All Jezreel has heard the oath. No house will open its door to you tonight."),
+        {tr("¿A dónde, señor mío? Todo Jezreel ha oído el juramento; ninguna casa te abrirá esta noche.",
+            "Whither, my lord? All Jezreel hath heard the oath; no house will open to thee to night."),
          nullptr, nullptr},
         {"1 Reyes 19:3", nullptr}, SC_NO_OPTIONS, Portrait::HIJO_PROFETAS
     };
     case Sc::AP4_ELIAS_HUYE: return {
         tr("Elías", "Elijah"),
-        {tr("Al sur. A Beerseba de Judá, fuera del brazo de Acab. Allí te quedas tú.",
-            "South. To Beersheba of Judah, beyond Ahab's reach. There you stay."),
-         tr("Yo sigo solo al desierto. Un día de camino, y ya veremos si hay un segundo.",
-            "I go on alone into the wilderness. A day's journey, and we shall see if there is a second."),
+        {tr("A Beerseba de Judá. Allí te quedas tú.",
+            "To Beersheba of Judah. There thou stayest."),
+         tr("Yo sigo al desierto, un día de camino. Solo.",
+            "I go on into the wilderness, a day's journey. Alone."),
          nullptr},
         {"1 Reyes 19:3-4", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
 
     // =========================================================================
-    // Cap. 5 - Camino de Jezreel (1 R 19:21; 21:1-16). Eliseo ya sigue a Elias; lo de
-    // Nabot se cuenta en dialogo (la unica forma de contarlo con el profeta en escena,
-    // regla del 2026-08-30). Termina en 21:16: la palabra de 21:17-19 es el pozo.
+    // Cap. 5 - El llamamiento de Eliseo (1 R 19:19-20), junto a las doce yuntas. La
+    // primera caja no tiene retrato: es la escena (el manto echado al pasar), y lo demas
+    // es 19:20 tal cual. La despedida (19:21) es el pozo; Nabot (21) lo cuenta la intro.
+    // El manto sigue en los hombros de Elias hasta 2 R 2:13.
     // =========================================================================
-    case Sc::AP5_ELISEO_YUNTAS: return {
+    case Sc::AP5_YUNTAS: return {
+        tr("Junto a las doce yuntas", "By the twelve yoke"),
+        {tr("Eliseo hijo de Safat ara con la última de las doce yuntas. Elías pasa por delante de él, y echa sobre él su manto.",
+            "Elisha the son of Shaphat ploweth with the last of twelve yoke. Elijah passeth by him, and casteth his mantle upon him."),
+         nullptr, nullptr},
+        {"1 Reyes 19:19", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+    };
+    case Sc::AP5_ELISEO_BESAR: return {
         tr("Eliseo hijo de Safat", "Elisha the son of Shaphat"),
-        {tr("Doce yuntas dejé en el surco, y un manto de pelo me pesa en los hombros más que el arado.",
-            "Twelve yoke I left in the furrow, and a hairy mantle weighs on my shoulders more than the plough."),
-         tr("Llevo tres días detrás de ti y todavía no me has dicho a dónde vamos.",
-            "Three days I have walked behind you and you still have not told me where we go."),
-         nullptr},
+        {tr("Te ruego que me dejes besar a mi padre y a mi madre, y luego te seguiré.",
+            "Let me, I pray thee, kiss my father and my mother, and then I will follow thee."),
+         nullptr, nullptr},
+        {"1 Reyes 19:20", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO_LABRADOR
+    };
+    case Sc::AP5_ELIAS_VUELVE: return {
+        tr("Elías", "Elijah"),
+        {tr("Ve, vuelve; ¿qué te he hecho yo?",
+            "Go back again: for what have I done to thee?"),
+         nullptr, nullptr},
+        {"1 Reyes 19:20", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
+    };
+    case Sc::AP5_ELISEO_BUEYES: return {
+        tr("Eliseo hijo de Safat", "Elisha the son of Shaphat"),
+        {tr("Hay un par de bueyes que matar, y un pueblo al que dar de comer. Antes de la noche voy tras de ti, señor mío.",
+            "There is a yoke of oxen to slay, and a people to feed. Before nightfall I come after thee, my lord."),
+         nullptr, nullptr},
         {"1 Reyes 19:21", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO_LABRADOR
-    };
-    case Sc::AP5_ELIAS_HOREB: return {
-        tr("Elías", "Elijah"),
-        {tr("En Horeb el Señor me dio tres nombres: un rey para Siria, un rey para Israel y un profeta en mi lugar.",
-            "At Horeb the Lord gave me three names: a king for Syria, a king for Israel, and a prophet in my room."),
-         tr("El tuyo era el último. Lo que hagan los otros dos, lo verás tú, no yo.",
-            "Yours was the last. What the other two do, you will see, not I."),
-         nullptr},
-        {"1 Reyes 19:15-16", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
-    };
-    case Sc::AP5_ELISEO_NABOT: return {
-        tr("Eliseo hijo de Safat", "Elisha the son of Shaphat"),
-        {tr("Oye lo que se cuenta por los caminos. En Jezreel apedrearon a Nabot: dicen que blasfemó contra Dios y el rey.",
-            "Hear what is said along the roads. In Jezreel they stoned Naboth: they say he cursed God and the king."),
-         tr("Dos testigos, una carta con el sello del rey, y la viña que él no quiso vender ya no tiene dueño.",
-            "Two witnesses, a letter under the king's seal, and the vineyard he would not sell now has no owner."),
-         tr("Acab baja hoy a la viña a tomar posesión. Con la reina, y con la guardia.",
-            "Ahab goes down to the vineyard today to take possession. With the queen, and with the guard.")},
-        {"1 Reyes 21:8-16", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO_LABRADOR
-    };
-    case Sc::AP5_ELIAS_HEREDAD: return {
-        tr("Elías", "Elijah"),
-        {tr("Nabot no vendió la heredad de sus padres. Esa fue toda su blasfemia.",
-            "Naboth would not sell the inheritance of his fathers. That was the whole of his blasphemy."),
-         tr("Un sello de Acab, una carta de Jezabel. El Señor conoce esa letra.",
-            "Ahab's seal, Jezebel's hand. The Lord knows that writing."),
-         tr("Entonces allí lo hallará la palabra del Señor. Ven: en Jezreel hay una viña que visitar.",
-            "Then there the word of the Lord will find him. Come: in Jezreel there is a vineyard to visit.")},
-        {"1 Reyes 21:3", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
 
     // =========================================================================
     // Cap. 6 - A la orilla del Jordan (2 R 2:15), recien cruzado: los hijos de los
-    // profetas de Jerico lo reconocen. Lo que dicen del rio abierto es 2:8 y 2:14 vistos
-    // desde la orilla; los cincuenta que insisten (2:16-18) son el pozo.
+    // profetas de Jerico, que lo vieron desde enfrente (2:7), lo reconocen. El rio
+    // abierto dos veces es 2:8 y 2:14; los cincuenta que insisten (2:16-18) son el pozo.
     // =========================================================================
     case Sc::AP6_HIJOS_ESPIRITU: return {
         tr("Los hijos de los profetas", "The sons of the prophets"),
-        {tr("Lo vimos desde Jericó: el río se abrió dos veces. Una para los dos, y otra para ti solo.",
-            "We saw it from Jericho: the river opened twice. Once for the two of you, and once for you alone."),
+        {tr("Lo vimos desde la orilla, enfrente: el río se abrió dos veces. Una para los dos, y otra para ti solo.",
+            "We saw it from the bank, over against you: the river opened twice. Once for you both, and once for thee alone."),
          tr("El espíritu de Elías reposó sobre Eliseo.",
             "The spirit of Elijah doth rest on Elisha."),
          nullptr},
-        {"2 Reyes 2:15", nullptr}, SC_NO_OPTIONS, Portrait::HIJO_PROFETAS
+        {"2 Reyes 2:7, 15", nullptr}, SC_NO_OPTIONS, Portrait::HIJO_PROFETAS
     };
     case Sc::AP6_ELISEO_MANTO: return {
         tr("Eliseo", "Elisha"),
-        {tr("No os inclinéis ante mí. Este manto se le cayó a él; no me lo dio nadie.",
-            "Do not bow to me. This mantle fell from him; no one gave it to me."),
-         tr("Elías ya no está. El Dios de Elías, sí. Es lo único que sé desde esta mañana.",
-            "Elijah is gone. The God of Elijah is not. It is the one thing I know since this morning."),
+        {tr("Levantaos. Este manto se le cayó a él; nadie me lo dio.",
+            "Rise up. This mantle fell from him; no man gave it me."),
+         tr("Elías ya no está. El Dios de Elías, sí.",
+            "Elijah is gone. The God of Elijah is not."),
          nullptr},
         {"2 Reyes 2:13-14", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::AP6_HIJOS_JERICO: return {
         tr("Los hijos de los profetas", "The sons of the prophets"),
-        {tr("Ven a Jericó, señor. Cincuenta de los nuestros te esperan allí, y la ciudad tiene una pena que contarte.",
-            "Come to Jericho, master. Fifty of us wait for you there, and the city has a sorrow to tell you."),
+        {tr("Ven a Jericó, señor. Cincuenta de los nuestros te esperan allí, y la ciudad tiene un mal que contarte: sus aguas.",
+            "Come to Jericho, master. Fifty of us wait for thee there, and the city hath an evil to tell thee of: its waters."),
          nullptr, nullptr},
         {"2 Reyes 2:15-16", nullptr}, SC_NO_OPTIONS, Portrait::HIJO_PROFETAS
     };
     case Sc::AP6_ELISEO_VAMOS: return {
         tr("Eliseo", "Elisha"),
-        {tr("Vamos. Y dejad de mirarme como se mira a un muerto: al muerto se lo llevó el carro.",
-            "Let us go. And stop looking at me as one looks at a dead man: the chariot took the dead one."),
+        {tr("Vamos a Jericó. Y no me miréis así: el carro se lo llevó a él, no a mí.",
+            "Let us go to Jericho. And look not on me so: the chariot took him, not me."),
          nullptr, nullptr},
         {"2 Reyes 2:11", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
     // =========================================================================
-    // Cap. 7 - Los tres reyes en el desierto de Edom (2 R 3:9-15). Joram y Josafat no
-    // tienen retrato: llevan NONE a proposito (la cara de Acab para su hijo seria mentir).
-    // Termina en el tanedor (3:15): las zanjas (3:16-23) son el pozo.
+    // Cap. 7 - La suplica de la viuda del profeta (2 R 4:1-4), en su casa (decision del
+    // usuario, 2026-09-10: los tres reyes de Edom y el tanedor pasan al relato «El valle
+    // de las zanjas», events.h). Todo es 4:1-4 salvo Guiezi, que es invencion: el
+    // acreedor a la puerta con dos hombres es lo que la viuda dice en 4:1, y la ley
+    // (Exodo 21:7; Levitico 25:39) es lo que le da los ninos. El derramamiento (4:5-6) es
+    // el pozo, y «vende el aceite» (4:7) el outro.
     // =========================================================================
-    case Sc::AP7_JORAM: return {
-        tr("Joram, rey de Israel", "Jehoram, king of Israel"),
-        {tr("Siete días de rodeo por el desierto de Edom, y ni una gota para el ejército ni para las bestias.",
-            "Seven days' march round the wilderness of Edom, and not a drop for the host nor for the cattle."),
-         tr("¡Ah! El Señor ha juntado a tres reyes para entregarlos en manos de Moab.",
-            "Alas! The Lord hath called these three kings together, to deliver them into the hand of Moab."),
+    case Sc::AP7_VIUDA: return {
+        tr("La mujer del profeta", "The prophet's wife"),
+        {tr("Tu siervo mi marido ha muerto; y tú sabes que tu siervo era temeroso de Jehová.",
+            "Thy servant my husband is dead; and thou knowest that thy servant did fear the Lord."),
+         tr("Y ha venido el acreedor para tomarse dos hijos míos por siervos.",
+            "And the creditor is come to take unto him my two sons to be bondmen."),
          nullptr},
-        {"2 Reyes 3:9-10", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+        {"2 Reyes 4:1", nullptr}, SC_NO_OPTIONS, Portrait::MUJER_PROFETA
     };
-    case Sc::AP7_JOSAFAT: return {
-        tr("Josafat, rey de Judá", "Jehoshaphat, king of Judah"),
-        {tr("¿No hay aquí profeta del Señor, para que consultemos al Señor por medio de él?",
-            "Is there not here a prophet of the Lord, that we may enquire of the Lord by him?"),
-         tr("Dicen que aquí está Eliseo hijo de Safat, que servía a Elías. La palabra del Señor está con él.",
-            "They say Elisha the son of Shaphat is here, who served Elijah. The word of the Lord is with him."),
-         nullptr},
-        {"2 Reyes 3:11-12", nullptr}, SC_NO_OPTIONS, Portrait::NONE
-    };
-    case Sc::AP7_ELISEO_QUE: return {
+    case Sc::AP7_ELISEO_QUE_TIENES: return {
         tr("Eliseo", "Elisha"),
-        {tr("¿Qué tengo yo contigo, rey de Israel? Ve a los profetas de tu padre y a los profetas de tu madre.",
-            "What have I to do with thee, king of Israel? Get thee to the prophets of thy father, and of thy mother."),
-         tr("Vive el Señor de los ejércitos, delante de quien estoy: si no fuera por Josafat, no te miraría ni te vería.",
-            "As the Lord of hosts liveth, before whom I stand: were it not for Jehoshaphat, I would not look toward thee."),
-         nullptr},
-        {"2 Reyes 3:13-14", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
-    };
-    case Sc::AP7_JORAM_NO: return {
-        tr("Joram, rey de Israel", "Jehoram, king of Israel"),
-        {tr("No. El Señor juntó a estos tres reyes, y sin agua nos entrega a Moab a los tres. También a Judá.",
-            "No. The Lord gathered these three kings, and without water he gives all three to Moab. Judah too."),
+        {tr("¿Qué te haré yo? Declárame qué tienes en casa.",
+            "What shall I do for thee? Tell me, what hast thou in the house?"),
          nullptr, nullptr},
-        {"2 Reyes 3:13", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+        {"2 Reyes 4:2", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
-    case Sc::AP7_ELISEO_TANEDOR: return {
+    case Sc::AP7_VIUDA_ACEITE: return {
+        tr("La mujer del profeta", "The prophet's wife"),
+        {tr("Tu sierva ninguna cosa tiene en casa, sino una vasija de aceite.",
+            "Thine handmaid hath not any thing in the house, save a pot of oil."),
+         nullptr, nullptr},
+        {"2 Reyes 4:2", nullptr}, SC_NO_OPTIONS, Portrait::MUJER_PROFETA
+    };
+    case Sc::AP7_GUIEZI: return {
+        tr("Guiezi", "Gehazi"),
+        {tr("Señor mío, el acreedor está a la puerta con dos hombres. La ley le da los niños, y no hay con qué pagarle.",
+            "My lord, the creditor is at the door with two men. The law giveth him the children, and there is nothing to pay him with."),
+         nullptr, nullptr},
+        {"2 Reyes 4:1", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
+    };
+    case Sc::AP7_ELISEO_VASIJAS: return {
         tr("Eliseo", "Elisha"),
-        {tr("Traedme ahora un tañedor. Cuando la mano del Señor venga sobre mí, hablaré.",
-            "But now bring me a minstrel. When the hand of the Lord comes upon me, I will speak."),
-         tr("Mientras tanto, callad los tres. En este desierto va a hablar alguien más que un rey.",
-            "Till then, be silent, all three of you. In this wilderness someone greater than a king is about to speak."),
+        {tr("Ve y pide para ti vasijas prestadas de todos tus vecinos, vasijas vacías, no pocas.",
+            "Go, borrow thee vessels abroad of all thy neighbours, even empty vessels; borrow not a few."),
+         tr("Entra, y cierra la puerta tras ti y tras tus hijos; echa en todas las vasijas, y la que esté llena, ponla aparte.",
+            "Go in, and shut the door upon thee and upon thy sons; pour out into all those vessels, and set aside that which is full."),
          nullptr},
-        {"2 Reyes 3:15", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
+        {"2 Reyes 4:3-4", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
     // =========================================================================
-    // Cap. 8 - El aposento de Sunem (2 R 4:12-16): la promesa del hijo. Lo que sigue
-    // (el nino muerto) lo narra la intro y lo juega el pozo. La ultima frase de la
-    // sunamita es invencion que mira a 4:28 («¿Pedí yo hijo a mi señor?»).
+    // Cap. 8 - El aposento de Sunem: el ofrecimiento y la promesa (2 R 4:9-16). En 4:9-10
+    // la sunamita se lo dice a su marido; aqui se lo dice al profeta, que es quien esta
+    // en escena. Los anos en el aposento y la madre en el Carmelo son el pozo; la ultima
+    // frase de ella es invencion que mira a 4:28 («¿Pedi yo hijo a mi senor?»).
     // =========================================================================
+    case Sc::AP8_SUNAMITA_APOSENTO: return {
+        tr("La sunamita", "The Shunammite"),
+        {tr("Yo entiendo que este que siempre pasa por nuestra casa es varón santo de Dios.",
+            "I perceive that this is an holy man of God, which passeth by us continually."),
+         tr("Te hemos hecho un pequeño aposento de paredes, con cama, mesa, silla y candelero, para cuando vinieres a nosotros.",
+            "We have made thee a little chamber on the wall, with a bed, a table, a stool and a candlestick, for when thou comest to us."),
+         nullptr},
+        {"2 Reyes 4:9-10", nullptr}, SC_NO_OPTIONS, Portrait::SUNAMITA
+    };
     case Sc::AP8_ELISEO_LLAMALA: return {
         tr("Eliseo", "Elisha"),
-        {tr("Guiezi, llama a esta sunamita. Cada vez que paso por Sunem hay pan en su mesa y un cuarto con luz para mí.",
-            "Gehazi, call this Shunammite. Every time I pass through Shunem there is bread on her table and a room for me."),
-         tr("Dile: ¿Qué quieres que haga por ti? ¿Necesitas que hable por ti al rey, o al general del ejército?",
-            "Say to her: What is to be done for thee? Shall I speak for thee to the king, or to the captain of the host?"),
+        {tr("Guiezi, dile: He aquí tú has estado solícita por nosotros con todo este esmero; ¿qué quieres que haga por ti?",
+            "Gehazi, say unto her: Behold, thou hast been careful for us with all this care; what is to be done for thee?"),
+         tr("¿Necesitas que hable por ti al rey, o al general del ejército?",
+            "Wouldest thou be spoken for to the king, or to the captain of the host?"),
          nullptr},
-        {"2 Reyes 4:12-13", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
+        {"2 Reyes 4:13", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::AP8_SUNAMITA_PUEBLO: return {
         tr("La sunamita", "The Shunammite"),
         {tr("Yo habito en medio de mi pueblo.",
             "I dwell among mine own people."),
-         tr("No me falta nada que un rey pueda dar, varón de Dios. Lo que me falta no lo da un rey.",
-            "I lack nothing a king can give, man of God. What I lack, no king gives."),
-         nullptr},
+         nullptr, nullptr},
         {"2 Reyes 4:13", nullptr}, SC_NO_OPTIONS, Portrait::SUNAMITA
     };
     case Sc::AP8_GUIEZI_HIJO: return {
         tr("Guiezi", "Gehazi"),
-        {tr("Yo sé lo que le falta, señor. No tiene hijo, y su marido es viejo.",
-            "I know what she lacks, master. Verily she hath no child, and her husband is old."),
+        {tr("Señor mío, ella no tiene hijo, y su marido es viejo.",
+            "My lord, verily she hath no child, and her husband is old."),
          nullptr, nullptr},
         {"2 Reyes 4:14", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
@@ -544,130 +548,127 @@ inline EventDef get_scene_line(int line) {
         tr("La sunamita", "The Shunammite"),
         {tr("No, señor mío, varón de Dios, no hagas burla de tu sierva.",
             "Nay, my lord, thou man of God, do not lie unto thine handmaid."),
-         tr("Una esperanza así pesa más que un aposento. Si me la das, no me la vuelvas a quitar.",
-            "A hope like that weighs more than a chamber. If you give it to me, do not take it back."),
+         tr("Yo no te he pedido un hijo. Si me lo das, no me lo quites después.",
+            "I asked not a son of thee. If thou give him me, take him not from me after."),
          nullptr},
-        {"2 Reyes 4:16", nullptr}, SC_NO_OPTIONS, Portrait::SUNAMITA
+        {"2 Reyes 4:16, 28", nullptr}, SC_NO_OPTIONS, Portrait::SUNAMITA
     };
 
     // =========================================================================
-    // Cap. 9 - La carta del rey de Siria (2 R 5:5-8), en el palacio de Samaria. Los ojos
-    // de Guiezi puestos en el oro son invencion que prepara al jefe del capitulo (5:20).
+    // Cap. 9 - La carta del rey de Siria (2 R 5:5-8), en el palacio de Samaria. Eliseo
+    // le habla al rey a la cara (5:8, en segunda persona). Las cuentas de Guiezi y su
+    // pregunta por el presente son invencion que prepara al jefe del capitulo (5:20).
     // =========================================================================
     case Sc::AP9_JORAM_CARTA: return {
         tr("Joram, rey de Israel", "Jehoram, king of Israel"),
-        {tr("«Sabe que te envío a Naamán mi siervo, para que lo sanes de su lepra». Lo firma Ben-adad, rey de Siria.",
-            "«I have sent Naaman my servant to thee, that thou mayest heal him of his leprosy». Signed: Ben-hadad of Syria."),
-         tr("¿Soy yo Dios, que mate y dé vida? Mirad cómo busca ocasión contra mí.",
-            "Am I God, to kill and to make alive? See how he seeketh a quarrel against me."),
+        {tr("«Sabe que te envío a Naamán mi siervo, para que lo sanes de su lepra». Con el sello de Ben-adad, rey de Siria.",
+            "«I have sent Naaman my servant to thee, that thou mayest recover him of his leprosy». Under the seal of Ben-hadad, king of Syria."),
+         tr("¿Soy yo Dios, que mate y dé vida? Considerad, pues, y ved cómo busca ocasión contra mí.",
+            "Am I God, to kill and to make alive? Consider, I pray you, and see how he seeketh a quarrel against me."),
          nullptr},
         {"2 Reyes 5:6-7", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
     case Sc::AP9_GUIEZI_PLATA: return {
         tr("Guiezi", "Gehazi"),
-        {tr("Con la carta vienen diez talentos de plata, seis mil piezas de oro y diez vestidos. Ya están en la puerta.",
-            "With the letter come ten talents of silver, six thousand pieces of gold and ten garments. They are at the gate."),
+        {tr("Con la carta trae diez talentos de plata, seis mil piezas de oro y diez mudas de vestidos. Con la mitad se compran olivares, señor mío.",
+            "With the letter he bringeth ten talents of silver, six thousand pieces of gold and ten changes of raiment. Half of it would buy oliveyards, my lord."),
          nullptr, nullptr},
         {"2 Reyes 5:5", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
     case Sc::AP9_ELISEO_PROFETA: return {
         tr("Eliseo", "Elisha"),
-        {tr("¿Por qué ha rasgado el rey sus vestidos? Que venga ahora a mí, y sabrá que hay profeta en Israel.",
-            "Why has the king rent his clothes? Let him come now to me, and he shall know there is a prophet in Israel."),
+        {tr("¿Por qué has rasgado tus vestidos, rey? Venga ahora a mí, y sabrá que hay profeta en Israel.",
+            "Wherefore hast thou rent thy clothes, O king? Let him come now to me, and he shall know that there is a prophet in Israel."),
          nullptr, nullptr},
         {"2 Reyes 5:8", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
-    case Sc::AP9_GUIEZI_ORO: return {
+    case Sc::AP9_GUIEZI_PRESENTE: return {
         tr("Guiezi", "Gehazi"),
-        {tr("Seis mil piezas de oro, mi señor. Con la mitad se compran olivares; con la otra, siervos que los caven.",
-            "Six thousand pieces of gold, master. Half would buy olive groves; the other half, servants to dig them."),
+        {tr("¿Y el presente, señor mío? Lo envía un rey, y a un rey no se le devuelve.",
+            "And the present, my lord? A king sendeth it, and to a king a gift is not returned."),
          nullptr, nullptr},
         {"2 Reyes 5:20", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
-    case Sc::AP9_ELISEO_NO_VENDE: return {
+    case Sc::AP9_ELISEO_SIN_PLATA: return {
         tr("Eliseo", "Elisha"),
-        {tr("Lo que el Señor da no se vende, Guiezi. Recuérdalo cuando veas los carros.",
-            "What the Lord gives is not for sale, Gehazi. Remember that when you see the chariots."),
-         tr("Ve a la puerta y dile al sirio que venga. Sin plata.",
-            "Go to the gate and tell the Syrian to come. Without the silver."),
-         nullptr},
+        {tr("Ve a la puerta y dile al sirio que venga. La plata, que se la quede.",
+            "Go to the gate and bid the Syrian come. The silver, let him keep it."),
+         nullptr, nullptr},
         {"2 Reyes 5:16", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
     // =========================================================================
     // Cap. 10 - El rey avisado (2 R 6:9-13): los avisos de Eliseo al rey de Israel y el
     // juramento del rey de Siria. El criado ya no es Guiezi (5:27): la celda se reusa con
-    // el nombre generico de 6:15, como hace el pozo.
+    // el nombre generico de 6:15, como hace el pozo. Ben-adad sabe quien avisa (6:12)
+    // en la intro, no aqui.
     // =========================================================================
     case Sc::AP10_ELISEO_AVISO: return {
         tr("Eliseo", "Elisha"),
-        {tr("Guárdate de pasar por aquel lugar, rey, porque los sirios van a bajar allí.",
-            "Beware that thou pass not such a place, king; for thither the Syrians are come down."),
-         tr("Es la tercera vez. Manda a tus hombres por el otro camino.",
-            "This is the third time. Send your men by the other road."),
+        {tr("Mira que no pases por tal lugar, porque los sirios van allí.",
+            "Beware that thou pass not such a place; for thither the Syrians are come down."),
+         tr("Manda a tus hombres por el otro camino.",
+            "Send thy men by the other way."),
          nullptr},
         {"2 Reyes 6:9-10", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::AP10_JORAM_COMO: return {
         tr("Joram, rey de Israel", "Jehoram, king of Israel"),
-        {tr("Tres avisos, tres aciertos, varón de Dios. Ben-adad cambia el plan de noche y tú lo sabes al alba.",
-            "Three warnings, three times right, man of God. Ben-hadad changes his plan by night and you know it by dawn."),
-         tr("¿Quién te lo dice?",
-            "Who tells you?"),
-         nullptr},
+        {tr("Ni una ni dos veces, varón de Dios. Ben-adad muda su campamento de noche, y tú lo sabes al alba. ¿Quién te lo dice?",
+            "Not once nor twice, man of God. Ben-hadad moveth his camp by night, and thou knowest it at dawn. Who telleth thee?"),
+         nullptr, nullptr},
         {"2 Reyes 6:10", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
     case Sc::AP10_ELISEO_QUIEN: return {
         tr("Eliseo", "Elisha"),
-        {tr("El que oye lo que se habla en Damasco a puerta cerrada. Yo solo lo repito.",
-            "The one who hears what is spoken in Damascus behind closed doors. I only repeat it."),
+        {tr("El que oye lo que Ben-adad habla en su cámara. Yo solo lo repito.",
+            "He that heareth what Ben-hadad speaketh in his bedchamber. I do but repeat it."),
          nullptr, nullptr},
         {"2 Reyes 6:12", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::AP10_CRIADO_JURADO: return {
         tr("El criado de Eliseo", "Elisha's servant"),
-        {tr("Señor, dicen que el rey de Siria ha jurado prenderte. Sus jinetes preguntan por ti en cada aldea hasta Dotán.",
-            "Master, they say the king of Syria has sworn to take you. His horsemen ask for you in every village to Dothan."),
+        {tr("Señor mío, dicen que el rey de Siria ha jurado prenderte, y que sus jinetes preguntan por ti en cada aldea.",
+            "My lord, they say the king of Syria hath sworn to take thee, and his horsemen ask for thee in every village."),
          nullptr, nullptr},
         {"2 Reyes 6:13", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
     case Sc::AP10_ELISEO_DOTAN: return {
         tr("Eliseo", "Elisha"),
-        {tr("Que pregunten. Estaremos en Dotán, y no escondidos.",
-            "Let them ask. We shall be in Dothan, and not in hiding."),
-         tr("Un ejército por un solo hombre: Ben-adad ya ha contado mal una vez.",
-            "An army for one man: Ben-hadad has already counted wrong once."),
-         nullptr},
-        {"2 Reyes 6:13-14", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
+        {tr("A Dotán, y que nos hallen.",
+            "To Dothan, and let them find us."),
+         nullptr, nullptr},
+        {"2 Reyes 6:13", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
     // =========================================================================
     // Dialogos con el jefe. El jefe habla primero y el profeta responde; la ultima caja
-    // es la que abre la pelea. Las frases de `ChapterLore::boss_line` viven ahora aqui.
+    // es la que abre la pelea. Ninguna caja da por hecha una opcion del pozo (Dotan, el
+    // baculo): sus lineas valen para las dos elecciones.
     // =========================================================================
     // Cap. 1 - El Capitan de Acab (1 R 18:10). Cincuenta hombres: 2 R 1:9.
     case Sc::J1_CAPITAN: return {
         tr("Capitán de Acab", "Ahab's Captain"),
-        {tr("Acab ha jurado por todos los reinos que no te hallaron. Yo te hallé: bastó seguir el único arroyo con agua.",
-            "Ahab made every kingdom swear they had not found you. I found you: I only followed the one brook with water."),
+        {tr("Acab ha hecho jurar a todos los reinos que no te hallaron. Yo te he hallado: seguí el único arroyo que aún lleva agua.",
+            "Ahab hath made every kingdom swear they found thee not. I have found thee: I followed the one brook that yet hath water."),
          tr("El rey te quiere vivo, profeta. Vivo, o en pedazos.",
-            "The king wants you alive, prophet. Alive, or in pieces."),
+            "The king will have thee alive, prophet. Alive, or in pieces."),
          nullptr},
         {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
     };
     case Sc::J1_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("Cada mañana bajan los cuervos con pan y carne. ¿Crees que el que los manda me va a soltar de tu mano?",
-            "Every morning the ravens bring bread and flesh. Do you think the one who sends them will let go of me now?"),
-         tr("Vive el Señor delante de quien estoy. Ven a por el manto, capitán.",
-            "As the Lord liveth, before whom I stand. Come and take the mantle, captain."),
+        {tr("Cada mañana bajan los cuervos con pan y carne. ¿Y el que los manda va a soltarme en tu mano?",
+            "Every morning the ravens come down with bread and flesh. And shall he that sendeth them give me up into thy hand?"),
+         tr("Vive Jehová, delante de quien estoy.",
+            "As the Lord liveth, before whom I stand."),
          nullptr},
         {"1 Reyes 17:6", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J1_CAPITAN_2: return {
         tr("Capitán de Acab", "Ahab's Captain"),
-        {tr("Cincuenta hombres por un tisbita. Al rey le parecerá poco.",
-            "Fifty men for one Tishbite. The king will think it too few."),
+        {tr("Cincuenta hombres por un tisbita. Al rey le parecerán pocos.",
+            "Fifty men for one Tishbite. The king will count them too few."),
          nullptr, nullptr},
         {"2 Reyes 1:9", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
     };
@@ -675,44 +676,41 @@ inline EventDef get_scene_line(int line) {
     // Cap. 2 - El Sacerdote de Baal. La amenaza a la viuda se apoya en 18:4.
     case Sc::J2_SACERDOTE: return {
         tr("Sacerdote de Baal", "Priest of Baal"),
-        {tr("Tres años sin lluvia. Baal está airado, y en Sarepta todos saben con quién.",
-            "Three years without rain. Baal is angry, and everyone in Zarephath knows with whom."),
-         tr("¡Sarepta es de Baal! ¡Y tú serás su ofrenda!",
-            "Zarephath belongs to Baal! And you will be its offering!"),
-         nullptr},
+        {tr("Baal está airado, y en Sarepta todos saben con quién. Sarepta es de Baal, tisbita.",
+            "Baal is wroth, and all Zarephath knoweth with whom. Zarephath is Baal's, Tishbite."),
+         nullptr, nullptr},
         {"1 Reyes 17:9", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
     case Sc::J2_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("Tu dios no ha cerrado el cielo. Y no será tu dios quien lo abra.",
-            "Your god did not shut the sky. And it will not be your god who opens it."),
-         tr("Y la viuda que me esconde tiene en su casa más Dios que tú en tu altar.",
-            "And the widow who hides me has more God in her house than you have on your altar."),
-         nullptr},
+        {tr("Tu dios no ha cerrado el cielo, y no será tu dios quien lo abra.",
+            "Thy god shut not the heaven, and it is not thy god that shall open it."),
+         nullptr, nullptr},
         {"1 Reyes 17:1", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J2_SACERDOTE_2: return {
         tr("Sacerdote de Baal", "Priest of Baal"),
-        {tr("Sidón sabe qué hacer con las viudas que esconden profetas. Primero tú; después ella.",
-            "Sidon knows what to do with widows who hide prophets. First you; then her."),
+        {tr("Sidón sabe qué hacer con las viudas que esconden profetas. Cuando acabe contigo, iré a su casa.",
+            "Sidon knoweth what to do with widows that hide prophets. When I have done with thee, I go to her house."),
          nullptr, nullptr},
         {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
 
-    // Cap. 3 - Los 450 profetas de Baal (1 R 18:26-29, 36).
+    // Cap. 3 - Los 450 profetas de Baal (1 R 18:26-29, 36). Su grito ritual es la UNICA
+    // exclamacion del juego; la burla de Elias es 18:27 tal cual.
     case Sc::J3_PROFETAS: return {
         tr("Los profetas de Baal", "The prophets of Baal"),
         {tr("¡Baal, respóndenos! ¡Respóndenos!",
             "O Baal, hear us! Hear us!"),
-         tr("Desde la mañana hasta el mediodía hemos gritado, y el altar sigue frío. ¡Pero Baal oirá!",
-            "From morning until noon we have cried, and the altar is still cold. But Baal will hear!"),
+         tr("Desde la mañana hasta el mediodía hemos clamado, y el altar sigue frío. Pero Baal oirá.",
+            "From morning even until noon we have cried, and the altar is yet cold. But Baal will hear."),
          nullptr},
         {"1 Reyes 18:26", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
     case Sc::J3_ELIAS_BURLA: return {
         tr("Elías", "Elijah"),
-        {tr("Gritad en alta voz, porque dios es. Quizá está meditando, o tiene algún trabajo, o va de camino.",
-            "Cry aloud: for he is a god. Either he is talking, or he is pursuing, or he is in a journey."),
+        {tr("Gritad en alta voz, porque dios es; quizá está meditando, o tiene algún trabajo, o va de camino.",
+            "Cry aloud: for he is a god; either he is talking, or he is pursuing, or he is in a journey."),
          tr("Tal vez duerme, y hay que despertarle.",
             "Or peradventure he sleepeth, and must be awaked."),
          nullptr},
@@ -720,196 +718,194 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::J3_PROFETAS_2: return {
         tr("Los profetas de Baal", "The prophets of Baal"),
-        {tr("¡Nos sajaremos con cuchillos y con lanzas hasta chorrear la sangre! ¡Y si Baal no baja, bajarás tú!",
-            "We will cut ourselves with knives and lancets till the blood gushes! And if Baal does not come down, you will!"),
+        {tr("Nos sajaremos con cuchillos y con lanzas hasta chorrear la sangre, y Baal bajará.",
+            "We will cut ourselves with knives and lancets till the blood gush out, and Baal will come down."),
          nullptr, nullptr},
         {"1 Reyes 18:28", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
     case Sc::J3_ELIAS_FIN: return {
         tr("Elías", "Elijah"),
-        {tr("Ni voz, ni quien respondiese, ni quien escuchase.",
+        {tr("No hubo voz, ni quien respondiese, ni quien escuchase.",
             "There was neither voice, nor any to answer, nor any that regarded."),
-         tr("Ya ha pasado el mediodía. Ahora le toca al Dios de Abraham, de Isaac y de Israel.",
-            "Noon is past. Now it is the turn of the God of Abraham, of Isaac, and of Israel."),
+         tr("Ha pasado el mediodía. Ahora hablará el Dios de Abraham, de Isaac y de Israel.",
+            "Noon is past. Now shall the God of Abraham, of Isaac, and of Israel speak."),
          nullptr},
         {"1 Reyes 18:29, 36", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
 
-    // Cap. 4 - Tu propia desesperacion (1 R 19:4, 10). Habla con la cara de Elias a
-    // proposito: es su propia voz. La respuesta es 19:10 tal cual; el cierre, invencion.
+    // Cap. 4 - Tu propia desesperacion (1 R 19:4, 10), en la cueva de Horeb. Habla con la
+    // cara de Elias a proposito: es su propia voz, y abre con el eco del enebro (que el
+    // pozo ya jugo) reconocido como eco. La respuesta es 19:10 tal cual; el cierre de
+    // Elias es el juramento de 17:1, que es lo unico que le queda.
     case Sc::J4_DESESPERACION: return {
         tr("Tu propia desesperación", "Your own despair"),
-        {tr("Basta ya, Señor. Quítame la vida, porque no soy yo mejor que mis padres.",
-            "It is enough; now, O Lord, take away my life; for I am not better than my fathers."),
-         tr("Un día de fuego, y luego cuarenta de huida. ¿De qué sirvió el Carmelo?",
-            "One day of fire, then forty of flight. What was Carmel for?"),
+        {tr("Basta ya, Jehová; quítame la vida. Lo dijiste bajo el enebro, y era verdad.",
+            "It is enough; now, O Lord, take away my life. Thou saidst it under the juniper, and it was true."),
+         tr("Un día de fuego en el Carmelo, y luego cuarenta de huida. ¿De qué sirvió?",
+            "One day of fire on Carmel, and then forty of flight. What did it serve?"),
          nullptr},
         {"1 Reyes 19:4", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J4_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("He sentido un vivo celo por el Señor. Los hijos de Israel han dejado tu pacto y derribado tus altares.",
-            "I have been very jealous for the Lord. Israel has forsaken thy covenant and thrown down thine altars."),
-         tr("Han matado a espada a tus profetas, y solo yo he quedado, y me buscan para quitarme la vida.",
-            "They have slain thy prophets with the sword; and I, even I only, am left; and they seek my life."),
+        {tr("He sentido un vivo celo por Jehová Dios de los ejércitos; porque los hijos de Israel han dejado tu pacto, han derribado tus altares,",
+            "I have been very jealous for the Lord God of hosts: for the children of Israel have forsaken thy covenant, thrown down thine altars,"),
+         tr("y han matado a espada a tus profetas; y sólo yo he quedado, y me buscan para quitarme la vida.",
+            "and slain thy prophets with the sword; and I, even I only, am left; and they seek my life, to take it away."),
          nullptr},
         {"1 Reyes 19:10", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J4_DESESPERACION_2: return {
         tr("Tu propia desesperación", "Your own despair"),
-        {tr("Solo tú. Jezabel lo juró y lo cumplirá: mañana serás como uno de ellos.",
-            "You alone. Jezebel swore it and will keep it: tomorrow you will be as one of them."),
-         tr("Túmbate bajo el enebro, tisbita. Nadie te busca ya en esta cueva.",
-            "Lie down under the juniper, Tishbite. No one seeks you in this cave any more."),
+        {tr("Sólo tú. Jezabel lo juró, y lo cumplirá: mañana serás como uno de ellos.",
+            "Thou only. Jezebel hath sworn it, and will keep it: to morrow thou shalt be as one of them."),
+         tr("Échate al fondo de la cueva, tisbita. Aquí nadie te busca.",
+            "Lie thee down in the back of the cave, Tishbite. Here no man seeketh thee."),
          nullptr},
         {"1 Reyes 19:2", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J4_ELIAS_2: return {
         tr("Elías", "Elijah"),
-        {tr("Solo, sí. Pero delante de quien estoy.",
-            "Alone, yes. But before whom I stand."),
-         tr("Y si esta es la última vez, que me halle en pie.",
-            "And if this is the last time, let him find me on my feet."),
-         nullptr},
+        {tr("Vive Jehová, delante de quien estoy. Aquí estoy, y en pie.",
+            "As the Lord liveth, before whom I stand. Here I am, and on my feet."),
+         nullptr, nullptr},
         {"1 Reyes 17:1", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
 
-    // Cap. 5 - Acab y Jezabel en la vina de Nabot (1 R 21:20-23). Lo de Jezabel
-    // («yo escribí las cartas») es 21:8 dicho por ella.
+    // Cap. 5 - Acab y Jezabel en la vina de Nabot (1 R 21:20-23). Lo de Jezabel («yo
+    // escribi las cartas») es 21:8 dicho por ella; Jezabel no exclama nunca.
     case Sc::J5_ACAB: return {
         tr("Acab", "Ahab"),
         {tr("¿Me has hallado, enemigo mío?",
             "Hast thou found me, O mine enemy?"),
-         tr("La viña es mía por sello y por sentencia. Nabot blasfemó, dos testigos lo juraron, y la ciudad lo apedreó.",
-            "The vineyard is mine by seal and sentence. Naboth blasphemed, two witnesses swore it, and the city stoned him."),
+         tr("La viña es mía por sello y por sentencia. Nabot blasfemó contra Dios y el rey; dos testigos lo juraron, y la ciudad lo apedreó.",
+            "The vineyard is mine by seal and by sentence. Naboth blasphemed God and the king; two witnesses swore it, and the city stoned him."),
          nullptr},
         {"1 Reyes 21:20", nullptr}, SC_NO_OPTIONS, Portrait::ACAB
     };
     case Sc::J5_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("Te he hallado, porque te has vendido a hacer lo malo delante del Señor.",
+        {tr("Te he encontrado, porque te has vendido a hacer lo malo delante de Jehová.",
             "I have found thee: because thou hast sold thyself to work evil in the sight of the Lord."),
-         tr("He aquí yo traigo mal sobre ti, y barreré tu posteridad, y cortaré de Acab hasta el último varón en Israel.",
-            "Behold, I will bring evil upon thee, and take away thy posterity, and cut off from Ahab every male in Israel."),
+         tr("He aquí yo traigo mal sobre ti, y barreré tu posteridad, y destruiré de Acab a todo varón en Israel.",
+            "Behold, I will bring evil upon thee, and will take away thy posterity, and will cut off from Ahab every male in Israel."),
          nullptr},
         {"1 Reyes 21:20-21", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
     case Sc::J5_JEZABEL: return {
         tr("Jezabel", "Jezebel"),
-        {tr("Dos testigos, tisbita. Yo escribí las cartas y yo puse el sello. Búscame a mí, si te atreves.",
-            "Two witnesses, Tishbite. I wrote the letters and I set the seal. Come for me, if you dare."),
-         tr("Los perros de Jezreel comen lo que yo les echo. Hoy les echo un profeta.",
-            "The dogs of Jezreel eat what I throw them. Today I throw them a prophet."),
+        {tr("Dos testigos, tisbita. Yo escribí las cartas, y yo puse el sello del rey.",
+            "Two witnesses, Tishbite. I wrote the letters, and I set the king's seal."),
+         tr("Los perros de Jezreel comen lo que yo les echo.",
+            "The dogs of Jezreel eat what I cast them."),
          nullptr},
         {"1 Reyes 21:8", nullptr}, SC_NO_OPTIONS, Portrait::JEZABEL
     };
     case Sc::J5_ELIAS_2: return {
         tr("Elías", "Elijah"),
-        {tr("También de ti ha hablado el Señor, Jezabel: los perros te comerán en el muro de Jezreel.",
-            "Of thee also hath the Lord spoken, Jezebel: the dogs shall eat thee by the wall of Jezreel."),
+        {tr("También de ti ha hablado Jehová, Jezabel: los perros te comerán en el muro de Jezreel.",
+            "And of thee also hath the Lord spoken, Jezebel: the dogs shall eat thee by the wall of Jezreel."),
          nullptr, nullptr},
         {"1 Reyes 21:23", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
 
     // Cap. 6 - El Espiritu de Corrupcion (1 R 16:34; 2 R 2:21). Que un espiritu hable es
-    // licencia del jefe, no del libro; lo que dice de Hiel y de Josue es 16:34.
+    // licencia del jefe, no del libro; lo de Hiel y sus hijos lo conto ya el pozo (16:34).
     case Sc::J6_ESPIRITU: return {
         tr("Espíritu de Corrupción", "Spirit of Corruption"),
-        {tr("Hiel levantó esta ciudad sobre el juramento de Josué, y pagó con dos hijos. Yo soy lo que quedó en el agua.",
-            "Hiel raised this city upon the oath of Joshua, and paid with two sons. I am what was left in the water."),
-         tr("Esta agua es mía. Bebe de ella.",
-            "This water is mine. Drink of it."),
-         nullptr},
+        {tr("Yo soy lo que Hiel enterró bajo los cimientos. Bebe de esta agua, hijo de Safat.",
+            "I am what Hiel buried under the foundations. Drink of this water, son of Shaphat."),
+         nullptr, nullptr},
         {"1 Reyes 16:34", nullptr}, SC_NO_OPTIONS, P_AGUA_CORRUPTA
     };
     case Sc::J6_ELISEO: return {
         tr("Eliseo", "Elisha"),
-        {tr("El manto que llevo abrió el Jordán esta mañana. Tu manantial no es más ancho que el Jordán.",
-            "The mantle I carry opened the Jordan this morning. Your spring is no wider than the Jordan."),
+        {tr("Este manto abrió el Jordán esta mañana. Tu manantial no es más ancho que el Jordán.",
+            "This mantle opened the Jordan this morning. Thy spring is no wider than the Jordan."),
          nullptr, nullptr},
         {"2 Reyes 2:14", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::J6_ESPIRITU_2: return {
         tr("Espíritu de Corrupción", "Spirit of Corruption"),
-        {tr("Elías se fue en el carro. ¿Y tú quién eres, labrador? Doce yuntas no hacen un profeta.",
-            "Elijah went up in the chariot. And who are you, ploughman? Twelve yoke do not make a prophet."),
+        {tr("Elías subió en el carro. ¿Y tú quién eres, labrador de Abel-mehola?",
+            "Elijah went up in the chariot. And who art thou, ploughman of Abel-meholah?"),
          nullptr, nullptr},
         {"2 Reyes 2:11", nullptr}, SC_NO_OPTIONS, P_AGUA_CORRUPTA
     };
     case Sc::J6_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
-        {tr("Nadie. Pero el Dios de Elías no se fue en el carro. Y ha dicho de estas aguas: ni muerte ni esterilidad.",
-            "No one. But Elijah's God did not go up in the chariot. Of these waters he has said: no more death nor barrenness."),
+        {tr("Nadie. Pero el Dios de Elías no subió en el carro, y de estas aguas ha dicho: no habrá más en ellas muerte.",
+            "No man. But the God of Elijah went not up in the chariot, and of these waters he hath said: there shall be no more death in them."),
          nullptr, nullptr},
         {"2 Reyes 2:21", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
-    // Cap. 7 - El Acreedor (2 R 4:1, 7). Que la ley le da los hijos por siervos es lo
-    // que la viuda dice en 4:1; «vende el aceite y paga» es 4:7.
+    // Cap. 7 - El Acreedor (2 R 4:1-7), a la puerta cerrada de la viuda. Que la ley le da
+    // los hijos por siervos es lo que la viuda dice en 4:1; los dos hombres, lo que dijo
+    // Guiezi en la apertura. «Vende el aceite y paga» (4:7) se lo dice Eliseo a la viuda:
+    // es el outro, no algo que se le recite al acreedor.
     case Sc::J7_ACREEDOR: return {
         tr("El Acreedor", "The Creditor"),
-        {tr("El profeta murió debiendo. La ley me da a sus dos hijos por siervos, y la ley está de mi parte.",
-            "The prophet died in debt. The law gives me his two sons for bondmen, and the law is on my side."),
-         tr("La deuda se paga con hijos o con sangre.",
-            "A debt is paid in sons or in blood."),
-         nullptr},
+        {tr("El profeta murió debiendo. La ley me da a sus dos hijos por siervos, y traigo dos hombres para llevárselos.",
+            "The prophet died in debt. The law giveth me his two sons for bondmen, and I have brought two men to take them."),
+         nullptr, nullptr},
         {"2 Reyes 4:1", nullptr}, SC_NO_OPTIONS, P_SOLDADO_SIRIO
     };
     case Sc::J7_ELISEO: return {
         tr("Eliseo", "Elisha"),
-        {tr("Ese hombre temía al Señor. Su deuda la ha tomado el Señor, y el Señor paga en aceite, no en niños.",
-            "That man feared the Lord. The Lord has taken up his debt, and the Lord pays in oil, not in children."),
+        {tr("Ese hombre temía a Jehová, y su viuda ha cerrado la puerta. Lo que hay dentro no es tuyo.",
+            "That man feared the Lord, and his widow hath shut the door. What is within is not thine."),
          nullptr, nullptr},
         {"2 Reyes 4:1-2", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::J7_ACREEDOR_2: return {
         tr("El Acreedor", "The Creditor"),
-        {tr("El aceite se acaba. Yo no.",
-            "Oil runs out. I do not."),
+        {tr("Vasijas prestadas y una viuda a puerta cerrada. Cuando se abra, entrarán mis hombres.",
+            "Borrowed vessels and a widow behind a shut door. When it openeth, my men go in."),
          nullptr, nullptr},
-        {"2 Reyes 4:6", nullptr}, SC_NO_OPTIONS, P_SOLDADO_SIRIO
+        {"2 Reyes 4:5", nullptr}, SC_NO_OPTIONS, P_SOLDADO_SIRIO
     };
     case Sc::J7_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
-        {tr("«Vende el aceite y paga tu deuda». Hasta la última vasija de la aldea, si hace falta. Sal de esta casa.",
-            "«Sell the oil, and pay thy debt». Down to the last vessel in the village, if need be. Get out of this house."),
+        {tr("Cuando se abra, saldrá aceite para pagarte hasta el último siclo. Aparta de esa puerta.",
+            "When it openeth, there shall come out oil to pay thee to the last shekel. Stand off from that door."),
          nullptr, nullptr},
         {"2 Reyes 4:7", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
-    // Cap. 8 - La Muerte (2 R 4:19-20, 27, 31-33). Sin retrato: no es nadie. La mencion
-    // del nino de Sarepta (1 R 17:22) es la burla que la Muerte le hace a Eliseo.
+    // Cap. 8 - La Muerte (2 R 4:19-21, 27, 33), en el aposento cerrado. Sin retrato: no es
+    // nadie. El nino que grito entre los segadores lo conto la intro; aqui la Muerte solo
+    // dice donde estaba. La mencion del nino de Sarepta (1 R 17:22) es su burla a Eliseo.
+    // Eliseo no da por hecho el baculo (4:29-31 es una opcion del pozo).
     case Sc::J8_MUERTE: return {
         tr("La Muerte", "Death"),
-        {tr("Todo lo que respira es mío. También el hijo prometido.",
-            "All that breathes is mine. The promised son as well."),
-         tr("«¡Ay, mi cabeza!», dijo entre los segadores. Y al mediodía dormía sobre las rodillas de su madre.",
-            "«My head, my head!», he said among the reapers. And at noon he slept on his mother's knees."),
+        {tr("Todo lo que respira es mío. También el hijo que prometiste.",
+            "All that breatheth is mine. The son thou didst promise also."),
+         tr("Su madre lo acostó en tu cama y cerró la puerta. Yo ya estaba dentro, hijo de Safat.",
+            "His mother laid him on thy bed and shut the door. I was already within, son of Shaphat."),
          nullptr},
-        {"2 Reyes 4:19-20", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+        {"2 Reyes 4:20-21", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
     case Sc::J8_ELISEO: return {
         tr("Eliseo", "Elisha"),
-        {tr("Su alma está en amargura, y el Señor me lo encubrió. Pero he venido.",
-            "Her soul is vexed within her, and the Lord hid it from me. But I have come."),
-         tr("Mi criado puso el báculo sobre el rostro del niño, y no hubo voz ni sentido. Yo no traigo un báculo.",
-            "My servant laid the staff upon the child's face, and there was neither voice nor hearing. I bring no staff."),
-         nullptr},
-        {"2 Reyes 4:27, 31", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
+        {tr("Su alma está en amargura, y Jehová me lo encubrió. Pero he venido.",
+            "Her soul is vexed within her, and the Lord hid it from me. But I am come."),
+         nullptr, nullptr},
+        {"2 Reyes 4:27", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::J8_MUERTE_2: return {
         tr("La Muerte", "Death"),
-        {tr("¿Y qué traes, hijo de Safat? Elías devolvió un niño en Sarepta. Tú todavía no has devuelto a nadie.",
-            "And what do you bring, son of Shaphat? Elijah gave back a child in Zarephath. You have given back no one yet."),
+        {tr("¿Y qué traes, hijo de Safat? Elías devolvió un niño en Sarepta. Tú aún no has devuelto a nadie.",
+            "And what bringest thou, son of Shaphat? Elijah gave back a child in Zarephath. Thou hast given back no man yet."),
          nullptr, nullptr},
         {"1 Reyes 17:22", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
     case Sc::J8_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
-        {tr("Cerré la puerta tras los dos. Aquí solo estamos el niño, tú y el Señor.",
-            "I shut the door upon us both. Here there are only the child, you and the Lord."),
-         tr("Y de los tres, el único que se va eres tú.",
-            "And of the three, the only one leaving is you."),
+        {tr("He cerrado la puerta tras los dos. Aquí estamos el niño, tú, y Jehová.",
+            "I have shut the door upon us both. Here are the child, and thou, and the Lord."),
+         tr("Y voy a orar a Jehová.",
+            "And I will pray unto the Lord."),
          nullptr},
         {"2 Reyes 4:33", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
@@ -920,67 +916,69 @@ inline EventDef get_scene_line(int line) {
         tr("Guiezi", "Gehazi"),
         {tr("Tu siervo no ha ido a ninguna parte.",
             "Thy servant went no whither."),
-         tr("Solo hasta la puerta, a despedir al sirio. Se fue contento: tierra de dos mulas y la carne de un niño.",
-            "Only to the gate, to see the Syrian off. He left happy: two mules' burden of earth and a child's flesh."),
+         tr("Sólo hasta la puerta, a despedir al sirio. Se fue con la carne nueva y los carros llenos.",
+            "Only to the gate, to see the Syrian off. He went away with his new flesh and his chariots full."),
          nullptr},
         {"2 Reyes 5:25", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
     case Sc::J9_ELISEO: return {
         tr("Eliseo", "Elisha"),
-        {tr("¿No estaba también allí mi corazón cuando el hombre volvió de su carro a recibirte?",
+        {tr("¿No estaba también allí mi corazón, cuando el hombre volvió de su carro a recibirte?",
             "Went not mine heart with thee, when the man turned again from his chariot to meet thee?"),
-         tr("Dos talentos de plata y dos vestidos, escondidos en la casa. Hasta la última pieza.",
-            "Two talents of silver and two changes of garments, hidden in the house. Down to the last piece."),
+         tr("Dos talentos de plata y dos vestidos, escondidos en la casa.",
+            "Two talents of silver and two changes of garments, hid in the house."),
          nullptr},
         {"2 Reyes 5:23-26", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::J9_GUIEZI_2: return {
         tr("Guiezi", "Gehazi"),
-        {tr("¡Naamán se ríe de nosotros con su carne nueva y sus carros llenos! Tú rechazaste lo que era tuyo. Yo no.",
-            "Naaman laughs at us with his new flesh and his loaded chariots! You refused what was yours. I did not."),
+        {tr("Naamán se ríe de nosotros con su carne nueva. Tú no quisiste tomar de su mano lo que era tuyo. Yo sí.",
+            "Naaman laugheth at us with his new flesh. Thou wouldest not take of his hand what was thine. I would."),
          nullptr, nullptr},
         {"2 Reyes 5:20", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
     };
     case Sc::J9_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
-        {tr("¿Es tiempo de tomar plata, y vestidos, olivares y viñas, siervos y siervas?",
-            "Is it a time to receive money, and garments, oliveyards and vineyards, menservants and maidservants?"),
-         tr("La lepra de Naamán se te pegará a ti y a tu descendencia para siempre.",
-            "The leprosy of Naaman shall cleave unto thee, and unto thy seed for ever."),
+        {tr("¿Es tiempo de tomar plata, y de tomar vestidos, olivares, viñas, ovejas, bueyes, siervos y siervas?",
+            "Is it a time to receive money, and to receive garments, and oliveyards, and vineyards, and sheep, and oxen, and menservants, and maidservants?"),
+         tr("Por tanto, la lepra de Naamán se te pegará a ti y a tu descendencia para siempre.",
+            "The leprosy therefore of Naaman shall cleave unto thee, and unto thy seed for ever."),
          nullptr},
         {"2 Reyes 5:26-27", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
 
     // Cap. 10 - Ben-adad de Siria (2 R 6:16, 22-25; 7:1). El precio de la cabeza de asno
     // es 6:25; la harina a un siclo, 7:1, que es la profecia que el principe (pozo) niega.
+    // Lo de Dotan vale para las dos opciones del pozo (los jinetes entraron ciegos en
+    // Samaria y salieron vivos: 6:19-23).
     case Sc::J10_BENADAD: return {
         tr("Ben-adad de Siria", "Ben-hadad of Syria"),
-        {tr("Cegaste a mis jinetes en Dotán y les diste de comer en Samaria. Hoy no hay mesa puesta, profeta.",
-            "You blinded my horsemen at Dothan and fed them in Samaria. There is no table laid today, prophet."),
-         tr("Toda Siria contra un solo hombre. Ríndete.",
-            "All Syria against one man. Surrender."),
+        {tr("Mis jinetes entraron ciegos en Samaria y salieron vivos por tu mano. Hoy no hay mesa puesta, profeta.",
+            "My horsemen went blind into Samaria and came out alive by thy hand. There is no table laid to day, prophet."),
+         tr("Toda Siria está a la puerta de Samaria por un solo hombre. Entrégate, y la ciudad comerá mañana.",
+            "All Syria is at the gate of Samaria for one man. Yield thyself, and the city shall eat to morrow."),
          nullptr},
         {"2 Reyes 6:22-24", nullptr}, SC_NO_OPTIONS, Portrait::GENERAL_SIRIO
     };
     case Sc::J10_ELISEO: return {
         tr("Eliseo", "Elisha"),
-        {tr("Más son los que están con nosotros que los que están con ellos. Se lo dije a mi criado, y lo vio.",
-            "They that be with us are more than they that be with them. I told my servant, and he saw it."),
+        {tr("Más son los que están con nosotros que los que están con ellos.",
+            "They that be with us are more than they that be with them."),
          nullptr, nullptr},
-        {"2 Reyes 6:16-17", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
+        {"2 Reyes 6:16", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
     };
     case Sc::J10_BENADAD_2: return {
         tr("Ben-adad de Siria", "Ben-hadad of Syria"),
-        {tr("Tus carros de fuego no se ven desde aquí. Se ve el hambre de Samaria, y una cabeza de asno a ochenta siclos.",
-            "No chariots of fire can be seen from here. Only Samaria's hunger, and an ass's head sold for eighty shekels."),
+        {tr("Desde aquí no se ve ningún carro de fuego. Se ve el hambre de Samaria: una cabeza de asno por ochenta siclos de plata.",
+            "From here no chariot of fire is seen. What is seen is the hunger of Samaria: an ass's head for fourscore pieces of silver."),
          nullptr, nullptr},
         {"2 Reyes 6:25", nullptr}, SC_NO_OPTIONS, Portrait::GENERAL_SIRIO
     };
     case Sc::J10_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
-        {tr("En Dotán tampoco los viste, y comiste de mi mesa.",
-            "You did not see them at Dothan either, and you ate at my table."),
-         tr("Mañana a estas horas, a la puerta de Samaria, un seah de flor de harina valdrá un siclo.",
+        {tr("En Dotán tampoco los viste, y estaban allí.",
+            "At Dothan thou sawest them not either, and there they were."),
+         tr("Mañana a estas horas valdrá el seah de flor de harina un siclo, a la puerta de Samaria.",
             "To morrow about this time shall a measure of fine flour be sold for a shekel, in the gate of Samaria."),
          nullptr},
         {"2 Reyes 7:1", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO
@@ -1033,11 +1031,11 @@ inline SceneDef get_scene_def(int id) {
     };
     // Al pie del Carmelo: Acab con dos profetas de Baal a los flancos.
     case Scene::APERTURA_3: return {
-        "Apertura 3", "Apertura del capitulo 3: Elias ante Acab (1 Reyes 18:17-19)", 3,
+        "Apertura 3", "Apertura del capitulo 3: Elias ante Acab (1 Reyes 18:1, 17-24)", 3,
         StageKind::Exterior, 3, 0, 1, Direction::Up,
         {{FK::Acab, 0, 0, -2, Direction::Down}, {FK::Enemy, E_PROFETA_BAAL, -3, -2, Direction::Down},
          {FK::Enemy, E_PROFETA_BAAL, 3, -2, Direction::Down}},
-        Sc::AP3_ACAB_TURBAS, 5, SceneThen::ChapterIntro
+        Sc::AP3_PALABRA, 6, SceneThen::ChapterIntro
     };
     // Jezreel (el valle: campos del cap. 5): el mensajero de la reina, y el criado detras.
     case Scene::APERTURA_4: return {
@@ -1046,12 +1044,12 @@ inline SceneDef get_scene_def(int id) {
         {{FK::Enemy, E_SOLDADO_ACAB, 0, -2, Direction::Down}, {FK::Npc, Npc::HIJO_PROFETAS, 2, 1, Direction::Left}, none},
         Sc::AP4_MENSAJERO, 4, SceneThen::ChapterIntro
     };
-    // Los campos, camino de Jezreel: Eliseo a su lado.
+    // Los campos de Abel-mehola: Eliseo, labrador, junto a Elias.
     case Scene::APERTURA_5: return {
-        "Apertura 5", "Apertura del capitulo 5: camino de Jezreel (1 Reyes 19:21; 21:1-16)", 5,
+        "Apertura 5", "Apertura del capitulo 5: el llamamiento de Eliseo (1 Reyes 19:19-20)", 5,
         StageKind::Exterior, 5, 0, 0, Direction::Left,
         {{FK::Npc, Npc::ELISEO_LABRADOR, -2, 0, Direction::Right}, none, none},
-        Sc::AP5_ELISEO_YUNTAS, 4, SceneThen::ChapterIntro
+        Sc::AP5_YUNTAS, 4, SceneThen::ChapterIntro
     };
     // La orilla del Jordan (ribera del cap. 9): dos de los hijos de los profetas.
     case Scene::APERTURA_6: return {
@@ -1060,20 +1058,19 @@ inline SceneDef get_scene_def(int id) {
         {{FK::Npc, Npc::HIJO_PROFETAS, -1, -2, Direction::Down}, {FK::Npc, Npc::HIJO_PROFETAS, 2, -2, Direction::Down}, none},
         Sc::AP6_HIJOS_ESPIRITU, 4, SceneThen::ChapterIntro
     };
-    // El desierto de Edom (cap. 4): Joram (hoja del rey), Josafat (azul y plata) y un soldado.
+    // La casa de la viuda del profeta (interior del cap. 7): ella al fondo, Guiezi al lado.
     case Scene::APERTURA_7: return {
-        "Apertura 7", "Apertura del capitulo 7: los tres reyes en el desierto (2 Reyes 3:9-15)", 7,
-        StageKind::Exterior, 4, 0, 1, Direction::Up,
-        {{FK::Acab, 0, -2, -2, Direction::Down}, {FK::Npc, Npc::PRINCIPE_SAMARIA, 2, -2, Direction::Down},
-         {FK::Enemy, E_SOLDADO_ACAB, 5, -1, Direction::Down}},
-        Sc::AP7_JORAM, 5, SceneThen::ChapterIntro
+        "Apertura 7", "Apertura del capitulo 7: la viuda del profeta (2 Reyes 4:1-4)", 7,
+        StageKind::Interior, 7, 0, 1, Direction::Up,
+        {{FK::Npc, Npc::MUJER_PROFETA, -1, -2, Direction::Down}, {FK::Npc, Npc::CRIADO_ELISEO, 2, 0, Direction::Left}, none},
+        Sc::AP7_VIUDA, 5, SceneThen::ChapterIntro
     };
     // El aposento de Sunem: la sunamita al fondo, Guiezi al lado.
     case Scene::APERTURA_8: return {
-        "Apertura 8", "Apertura del capitulo 8: el aposento de Sunem (2 Reyes 4:12-16)", 8,
+        "Apertura 8", "Apertura del capitulo 8: el aposento de Sunem (2 Reyes 4:9-16)", 8,
         StageKind::Interior, 8, 0, 1, Direction::Up,
         {{FK::Npc, Npc::SUNAMITA, -1, -2, Direction::Down}, {FK::Npc, Npc::CRIADO_ELISEO, 2, 0, Direction::Left}, none},
-        Sc::AP8_ELISEO_LLAMALA, 5, SceneThen::ChapterIntro
+        Sc::AP8_SUNAMITA_APOSENTO, 6, SceneThen::ChapterIntro
     };
     // El palacio de Samaria: el rey con la carta, Guiezi con los ojos en el oro.
     case Scene::APERTURA_9: return {
