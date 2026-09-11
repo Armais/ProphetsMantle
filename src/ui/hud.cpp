@@ -333,12 +333,18 @@ void HUD::render(Renderer& renderer, const Player& player,
     // (Engine::render), igual que dash y consumible.
     const bool slots_in_band = ctx.input && ctx.input->touch_ui && ctx.input->touch_band >= 62.0f;
     if (!slots_in_band) draw_miracle_slots(renderer, player, ctx, faith);
-    draw_minimap(renderer, ctx, ctx.show_map);
-    if (!ctx.show_map) draw_objective(renderer, ctx);
+    if (!ctx.show_map) {
+        draw_minimap(renderer, ctx, false);
+        draw_objective(renderer, ctx);
+    }
     draw_boss_bar(renderer, ctx);
     draw_message(renderer, ctx);
     draw_banner(renderer, ctx);
     draw_touch_controls(renderer, player, ctx);
+    // El mapa grande va EL ULTIMO: ahora ocupa casi toda la pantalla y con el orden de
+    // antes el panel de vitales le cortaba la esquina y un mensaje de aviso se le plantaba
+    // encima del terreno. Es una superposicion a pantalla completa, como el Codice.
+    if (ctx.show_map) draw_minimap(renderer, ctx, true);
 }
 
 void HUD::draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDContext& ctx) {
@@ -627,6 +633,10 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         f32 x = static_cast<f32>(Config::GAME_WIDTH) - 28.0f - i * 27.0f;
         f32 y = static_cast<f32>(Config::GAME_HEIGHT) - 36.0f;
         if (tin && (2 + i) < TOUCH_BUTTON_COUNT) {
+            // `enabled` manda en el DIBUJO y en el hit-test, el mismo contrato que la fila
+            // de accion. Durante la entrada del jefe el tactil se apaga entero, y una celda
+            // latiendo que no responde al dedo es peor que no pintar nada.
+            if (!tin->touch_buttons[2 + i].enabled) continue;
             x = tin->touch_buttons[2 + i].rect.x;
             y = tin->touch_buttons[2 + i].rect.y;
         }
@@ -646,8 +656,26 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         bool locked = lock_tier || lock_cost;
         bool ready = !slot.is_empty() && slot.is_ready() && !locked;
 
+        // Latido: la celda que se puede lanzar AHORA respira en oro. Es la unica senal que
+        // separa "puedes lanzarlo" de "esta ahi", y en tactil la unica que dice que la celda
+        // ES un boton (ahi no hay chapa de tecla que lo diga). Lo bloqueado NO late: un
+        // boton que late y no hace nada miente. Y RESPIRA, no parpadea: a 0,7 Hz el ojo lo
+        // lee como brillo, no como ruido, que es donde se estrello en su dia el destello
+        // de impacto.
+        f32 beat = ready ? 0.5f + 0.5f * std::sin(ctx.time * 4.2f) : 0.0f;
+        if (ready) {
+            // Aureola por fuera del marco: la parte de dentro la tapa la celda, asi que
+            // esto es un anillo aunque se dibuje como un rect (cuatro rects menos).
+            renderer.draw_rect({x - 3.5f, y - 3.5f, S + 7, S + 7},
+                               {255, 205, 90, static_cast<u8>(28 + 92 * beat)});
+        }
+
         // Frame + inner plate (lighter top half = bevel)
-        Color frame = locked ? Color{120, 50, 45, 255} : ready ? Color{210, 170, 80, 255} : Color{90, 84, 100, 255};
+        Color frame = locked ? Color{120, 50, 45, 255}
+                    : ready  ? Color{static_cast<u8>(210 + 45 * beat),
+                                     static_cast<u8>(170 + 55 * beat),
+                                     static_cast<u8>(80 + 60 * beat), 255}
+                             : Color{90, 84, 100, 255};
         renderer.draw_rect({x - 1.5f, y - 1.5f, S + 3, S + 3}, FRAME_DARK);
         renderer.draw_rect({x - 0.75f, y - 0.75f, S + 1.5f, S + 1.5f}, frame);
         Color plate = slot.is_empty() ? Color{40, 38, 46, 230} :
@@ -691,6 +719,33 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
             if (renderer.shadow_tex != TEXTURE_NONE)
                 renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
             renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
+        } else if (!slot.is_empty()) {
+            // Al quitar la chapa Q/E/F en la pasada de Android la celda se quedo MUDA, y
+            // el usuario probo el APK y no supo como lanzar un milagro. DASH, USAR, ARMA y
+            // ORAR llevan etiqueta; estas tambien, en el mismo hueco donde iba la tecla.
+            // El nombre corto es la PRIMERA palabra —"Fuego" contra "Cuervos" es lo que
+            // distingue una celda de otra— y solo si CABE: `draw_text` no recorta, se sale
+            // por encima de la celda vecina. Se mide, no se estima (`wrap_text` trunca en
+            // silencio y esa trampa ya costo un rato en este proyecto).
+            const char* full = get_miracle_def(slot.miracle).name;
+            char shortname[24];
+            size_t n = 0;
+            while (full[n] && full[n] != ' ' && n + 1 < sizeof(shortname)) { shortname[n] = full[n]; n++; }
+            shortname[n] = '\0';
+
+            const f32 budget = S + 4.0f;      // 22 de celda + los 2 de aire a cada lado
+            f32 ls = 0.55f, lw = renderer.measure_text(shortname, ls);
+            if (lw > budget) { ls = 0.45f; lw = renderer.measure_text(shortname, ls); }
+            const char* label = shortname;
+            if (lw > budget) {
+                // No cabe ni encogido: una etiqueta generica, y solo en la primera celda.
+                // Repetir "MILAGRO" tres veces no anade nada y empasta la fila.
+                if (i != 0) label = nullptr;
+                else { label = tr("MILAGRO", "MIRACLE"); ls = 0.5f; lw = renderer.measure_text(label, ls); }
+            }
+            if (label)
+                renderer.draw_text(label, x + (S - lw) * 0.5f, ky - 3.0f,
+                                   ready ? Color{250, 225, 165, 235} : Color{205, 190, 160, 175}, ls);
         }
 
         // Sobre el slot: normalmente el coste en fe; si falta nivel, la fe que hay que
@@ -726,15 +781,220 @@ Rect HUD::minimap_rect(const FloorMap& fm) {
     return {ox - 2.0f, 2.0f, total_w + 4.0f, total_h + 4.0f};
 }
 
+// =============================================================================
+// Mapa del capitulo: el TERRENO, no una rejilla de salas
+// =============================================================================
+// Desde la zona continua (commit add8a30) un capitulo es UN mapa de hasta 160x88 tiles, no
+// un tablero de salas sueltas. El mapa grande seguia pintando el modelo VIEJO —una celda
+// por sala, con separacion entre ellas— y el usuario, jugando el APK, lo describio como
+// "cuadriculado": estaba describiendo una estructura que ya no existe.
+//
+// Se pintan FAMILIAS de tile, no tipos. Veinticinco colores a 1,4 unidades por tile son
+// ruido; lo que tiene que leerse de un vistazo es por donde se anda, por donde no, y donde
+// hay agua. Lo que si lleva color propio es lo que aparece una vez por mapa (cofre, altar,
+// relato, arco de salida): no compite con nada porque no se repite.
+enum MapFam : int {
+    FAM_GROUND = 0, FAM_PATH, FAM_WATER, FAM_DEEP, FAM_SOLID, FAM_PIT,
+    FAM_DOOR, FAM_CHEST, FAM_ALTAR_GOD, FAM_ALTAR_BAAL, FAM_EVENT, FAM_EXIT, FAM_COUNT
+};
+
+static int tile_family(TileType t) {
+    switch (t) {
+        case TileType::Path: case TileType::Ford: case TileType::Bridge:   return FAM_PATH;
+        case TileType::Water:                                              return FAM_WATER;
+        case TileType::River:                                              return FAM_DEEP;
+        case TileType::Wall: case TileType::Rock: case TileType::Tree:
+        case TileType::Crack: case TileType::Jar:                          return FAM_SOLID;
+        case TileType::Pit:                                                return FAM_PIT;
+        case TileType::DoorNorth: case TileType::DoorSouth:
+        case TileType::DoorEast:  case TileType::DoorWest:
+        case TileType::Doorway:                                            return FAM_DOOR;
+        case TileType::Chest:                                              return FAM_CHEST;
+        case TileType::AltarGod:                                           return FAM_ALTAR_GOD;
+        case TileType::AltarBaal:                                          return FAM_ALTAR_BAAL;
+        case TileType::Event:                                              return FAM_EVENT;
+        case TileType::Exit:                                               return FAM_EXIT;
+        default:                                                           return FAM_GROUND;
+    }
+}
+
+static Color fam_color(int fam) {
+    switch (fam) {
+        case FAM_PATH:       return {158, 133,  94, 255};
+        case FAM_WATER:      return { 74, 138, 172, 255};
+        case FAM_DEEP:       return { 40,  84, 124, 255};
+        case FAM_SOLID:      return { 64,  57,  60, 255};
+        case FAM_PIT:        return { 14,  10,  15, 255};
+        case FAM_DOOR:       return {235, 190,  90, 255};
+        case FAM_CHEST:      return {255, 210,  60, 255};
+        case FAM_ALTAR_GOD:  return {120, 200, 255, 255};
+        case FAM_ALTAR_BAAL: return {190,  90, 220, 255};
+        case FAM_EVENT:      return {255, 226, 150, 255};
+        case FAM_EXIT:       return {120, 255, 160, 255};
+        default:             return {110,  94,  70, 255};   // FAM_GROUND
+    }
+}
+
+// `vis`: 2 = celda pisada, 1 = entrevista (adyacente, Ojos Abiertos, jefe, inicio)
+static Color map_color(int fam, int vis) {
+    Color c = fam_color(fam);
+    if (vis >= 2) return c;
+    return {static_cast<u8>(c.r * 0.42f), static_cast<u8>(c.g * 0.42f),
+            static_cast<u8>(c.b * 0.42f), 255};
+}
+
+static const Color MAP_FOG = {24, 20, 26, 235};
+
+static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room& z) {
+    const FloorMap* fm = ctx.floor_map;
+    const f32 GW = static_cast<f32>(Config::GAME_WIDTH), GH = static_cast<f32>(Config::GAME_HEIGHT);
+    renderer.draw_rect({0, 0, GW, GH}, {0, 0, 0, 185});
+    renderer.draw_text_centered(tr("MAPA DEL CAPÍTULO", "CHAPTER MAP"), 3.0f, {240, 220, 160, 255});
+
+    // Area util: debajo del titulo y el objetivo, encima de las dos lineas de pie. La
+    // escala sale de DIVIDIR, no de una constante: el capitulo 5 y el 10 tienen una fila
+    // de celdas mas (4x4) y con un valor fijo se saldrian por abajo.
+    // AREA_Y = 31 y no 24: justo debajo del panel de vitales, que llega a 30,75. Con 24 el
+    // mapa le cortaba por la mitad el nombre del nivel de fe y parecia un fallo de dibujo.
+    const f32 AREA_X = 13.0f, AREA_Y = 31.0f, AREA_W = 294.0f, AREA_H = 118.0f;
+    const f32 s = std::min(AREA_W / std::max(1, z.tiles_w), AREA_H / std::max(1, z.tiles_h));
+    const f32 mw = z.tiles_w * s, mh = z.tiles_h * s;
+    const f32 mx = AREA_X + (AREA_W - mw) * 0.5f, my = AREA_Y + (AREA_H - mh) * 0.5f;
+    renderer.draw_rect({mx - 1.0f, my - 1.0f, mw + 2.0f, mh + 2.0f}, {50, 42, 34, 245});
+
+    // --- Que celda se conoce ---------------------------------------------------
+    int cur = fm->current_room;
+    if (cur >= 0 && cur < fm->room_count && fm->rooms[cur].interior_of >= 0)
+        cur = fm->rooms[cur].interior_of;
+    int vis[Config::ZONE_CELLS_MAX] = {};
+    for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
+        const auto& node = fm->rooms[i];
+        if (node.interior_of >= 0) continue;          // los interiores no estan en la rejilla
+        bool adjacent = ctx.map_revealed;
+        if (cur >= 0 && cur < fm->room_count)
+            for (int c = 0; c < 4; c++) if (fm->rooms[cur].connections[c] == i) adjacent = true;
+        if (z.cells[i].visited || i == cur)       vis[i] = 2;
+        else if (adjacent || node.type == RoomType::Boss || node.type == RoomType::Start) vis[i] = 1;
+    }
+
+    // --- El terreno, por tramos horizontales -----------------------------------
+    // 160x88 son 14.080 tiles: uno a uno serian 14.080 rects por frame con el mapa abierto.
+    // Cosiendo los tramos del mismo color la cifra baja a unos pocos cientos, y el dibujo es
+    // el mismo porque el terreno viene en manchas, no en damero.
+    auto key_at = [&](int tx, int ty) -> int {
+        const int c = z.cell_of_tile(tx, ty);
+        const int v = (c >= 0 && c < z.cell_count) ? vis[c] : 0;
+        if (v == 0) return -1;                                  // niebla
+        return tile_family(z.tiles[ty][tx]) * 4 + v;
+    };
+    for (int ty = 0; ty < z.tiles_h; ty++) {
+        int x0 = 0;
+        while (x0 < z.tiles_w) {
+            const int k = key_at(x0, ty);
+            int x1 = x0 + 1;
+            while (x1 < z.tiles_w && key_at(x1, ty) == k) x1++;
+            const Color c = (k < 0) ? MAP_FOG : map_color(k / 4, k % 4);
+            renderer.draw_rect({mx + x0 * s, my + ty * s, (x1 - x0) * s, s}, c);
+            x0 = x1;
+        }
+    }
+
+    // --- Rotulos de celda: es lo que contesta "¿que hago aqui?" ----------------
+    for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
+        if (!vis[i]) continue;
+        const auto& node = fm->rooms[i];
+        if (node.interior_of >= 0) continue;
+        const char* label = nullptr;
+        switch (node.type) {
+            case RoomType::Start:    label = tr("INICIO", "START"); break;
+            case RoomType::Boss:     label = tr("JEFE", "BOSS"); break;
+            case RoomType::Treasure: label = tr("TESORO", "TREASURE"); break;
+            case RoomType::Altar:    label = "ALTAR"; break;
+            case RoomType::Elite:    label = tr("ELITE", "ELITE"); break;
+            case RoomType::Event:    label = tr("RELATO", "STORY"); break;
+            default: break;
+        }
+        if (!label) continue;
+        const f32 cx = mx + (node.grid_x + 0.5f) * z.cell_w * s;
+        const f32 cy = my + (node.grid_y + 0.5f) * z.cell_h * s;
+        const f32 lw = renderer.measure_text(label, 0.6f);
+        renderer.draw_rect({cx - lw * 0.5f - 2.0f, cy - 4.0f, lw + 4.0f, 8.0f}, {10, 8, 12, 170});
+        renderer.draw_text(label, cx - lw * 0.5f, cy - 3.0f,
+                           node.type == RoomType::Boss ? Color{255, 150, 140, 250}
+                                                       : Color{228, 216, 194, 235}, 0.6f);
+    }
+
+    // --- El jefe y la salida ----------------------------------------------------
+    if (z.has_arena) {
+        int ax, ay;
+        z.arena_anchor(ax, ay);
+        const f32 bx = mx + (ax + 0.5f) * s, by = my + (ay + 0.5f) * s;
+        renderer.draw_rect({bx - 3.5f, by - 0.75f, 7.0f, 1.5f}, {255, 90, 80, 255});
+        renderer.draw_rect({bx - 0.75f, by - 3.5f, 1.5f, 7.0f}, {255, 90, 80, 255});
+    }
+    if (z.exit_open) {
+        const f32 ex = mx + (z.exit_tx + 0.5f) * s, ey = my + (z.exit_ty + 0.5f) * s;
+        renderer.draw_rect({ex - 2.5f, ey - 2.5f, 5.0f, 5.0f}, {120, 255, 160, 255});
+    }
+
+    // --- Donde esta el profeta --------------------------------------------------
+    // El punto va en su tile de verdad. Dentro de un interior no hay punto que valga: se
+    // marca el centro de su celda de FUERA, que es donde el jugador esta en la rejilla.
+    f32 px = 0.0f, py = 0.0f;
+    bool have = false;
+    if (ctx.player_in_zone) {
+        px = mx + (ctx.player_pos.x / Config::TILE_SIZE) * s;
+        py = my + (ctx.player_pos.y / Config::TILE_SIZE) * s;
+        have = true;
+    } else if (cur >= 0 && cur < fm->room_count) {
+        px = mx + (fm->rooms[cur].grid_x + 0.5f) * z.cell_w * s;
+        py = my + (fm->rooms[cur].grid_y + 0.5f) * z.cell_h * s;
+        have = true;
+    }
+    if (have) {
+        const bool blink = (static_cast<int>(ctx.time * 3.0f) % 2) == 0;
+        renderer.draw_rect({px - 2.5f, py - 2.5f, 5.0f, 5.0f}, {20, 16, 22, 235});
+        renderer.draw_rect({px - 1.5f, py - 1.5f, 3.0f, 3.0f},
+                           blink ? Color{255, 248, 220, 255} : Color{245, 205, 90, 255});
+    }
+
+    // EL OBJETIVO DEL CAPITULO (`ChapterLore::objective`) va aqui abajo y no bajo el titulo:
+    // arriba es donde esta el panel de vitales y un objetivo largo se le montaba encima del
+    // porcentaje de fe. Es lo que convierte el mapa en una respuesta a "¿que hago aqui?".
+    if (ctx.room) {
+        const char* obj = get_chapter_lore(ctx.room->chapter).objective;
+        if (obj && obj[0]) renderer.draw_text_centered(obj, 152.0f, {248, 216, 130, 255}, 0.85f);
+    }
+    renderer.draw_text_centered(tr("Llega al JEFE (la cruz roja) y derrótalo para abrir la salida",
+                                   "Reach the BOSS (red cross) and beat it to open the exit"),
+                                162.0f, {200, 200, 200, 255}, 0.75f);
+    renderer.draw_text_centered(ctx.input && ctx.input->touch_ui
+                                ? tr("Toca el mapa para volver", "Tap the map to go back")
+                                : tr("Suelta TAB para volver", "Release TAB to go back"),
+                                170.0f, {160, 160, 160, 255}, 0.75f);
+}
+
 void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     const FloorMap* fm = ctx.floor_map;
     if (!fm || fm->room_count <= 0) return;
+
+    // El mapa GRANDE pinta el terreno de la zona. La rejilla de celdas de abajo se queda
+    // para el minimapa pequeno (a 10x7 unidades por celda el terreno no dice nada) y como
+    // respaldo si no hay zona construida.
+    const Room* zone = ctx.zone;
+    if (big && zone && zone->cell_count > 1) { draw_zone_map(renderer, ctx, *zone); return; }
 
     f32 cw = big ? 34.0f : 9.0f;
     f32 ch = big ? 18.0f : 6.0f;
     f32 gap = big ? 12.0f : 2.0f;
     f32 total_w = fm->grid_w * (cw + gap) - gap;
     f32 total_h = fm->grid_h * (ch + gap) - gap;
+    // El minimapa pequeno pierde la SEPARACION entre celdas: el capitulo es un territorio
+    // continuo y los huecos lo contaban como salas sueltas, que es lo que el usuario leyo
+    // como "cuadriculado". El rect de fuera no cambia ni un pixel a proposito —lo comparte
+    // `Input::touch_minimap` para que tocarlo abra el mapa grande— asi que las celdas se
+    // ensanchan hasta llenarlo en vez de moverlo.
+    if (!big) { gap = 0.0f; cw = total_w / fm->grid_w; ch = total_h / fm->grid_h; }
     f32 ox = big ? (Config::GAME_WIDTH - total_w) * 0.5f : Config::GAME_WIDTH - total_w - 5.0f;
     f32 oy = big ? (Config::GAME_HEIGHT - total_h) * 0.5f : 4.0f;
 
@@ -899,10 +1159,34 @@ void HUD::draw_message(Renderer& renderer, const HUDContext& ctx) {
     if (!ctx.message || ctx.message_t <= 0.0f) return;
     f32 a = std::min(1.0f, ctx.message_t / 0.4f);
     u8 alpha = static_cast<u8>(255 * a);
-    f32 scale = 1.0f;
-    f32 tw = renderer.measure_text(ctx.message, scale);
-    if (tw > 300.0f) { scale = 0.75f; tw = renderer.measure_text(ctx.message, scale); }
-    f32 y = Config::GAME_HEIGHT - 44.0f;
-    renderer.draw_rect({(Config::GAME_WIDTH - tw) * 0.5f - 4, y - 2, tw + 8, 12}, {0, 0, 0, static_cast<u8>(140 * a)});
-    renderer.draw_text_centered(ctx.message, y, {255, 240, 200, alpha}, scale);
+
+    // Hasta dos lineas, partidas por '\n'. Lo pide la pista de milagro, que tiene que decir
+    // DOS cosas ("toca para lanzarlo" / "manten para ver que hace") y en una linea no cabian
+    // sin bajar la escala hasta lo ilegible. Un mensaje de una sola linea sale exactamente
+    // igual que antes.
+    const char* lines[2] = {ctx.message, nullptr};
+    char buf[192];
+    const char* br = std::strchr(ctx.message, '\n');
+    if (br) {
+        size_t n = std::min(sizeof(buf) - 1, static_cast<size_t>(br - ctx.message));
+        std::memcpy(buf, ctx.message, n);
+        buf[n] = '\0';
+        lines[0] = buf;
+        lines[1] = br + 1;
+    }
+    const int count = lines[1] ? 2 : 1;
+
+    f32 scale = 1.0f, tw = 0.0f;
+    for (int pass = 0; pass < 2; pass++) {
+        tw = 0.0f;
+        for (int i = 0; i < count; i++) tw = std::max(tw, renderer.measure_text(lines[i], scale));
+        if (tw <= 300.0f) break;
+        scale = 0.75f;
+    }
+    const f32 lh = 11.0f * scale;
+    f32 y = Config::GAME_HEIGHT - 44.0f - (count - 1) * lh;
+    renderer.draw_rect({(Config::GAME_WIDTH - tw) * 0.5f - 4, y - 2, tw + 8, 12 + (count - 1) * lh},
+                       {0, 0, 0, static_cast<u8>(140 * a)});
+    for (int i = 0; i < count; i++)
+        renderer.draw_text_centered(lines[i], y + i * lh, {255, 240, 200, alpha}, scale);
 }

@@ -1,0 +1,94 @@
+# Verificacion: el mapa del capitulo pinta el TERRENO (pulido post-APK, 2026-09-11)
+# Uso:  MANTLE.exe --script scripts/mapa_check.txt
+#
+# El usuario jugo el APK y dijo que "el mapa se ve cuadriculado". Tenia razon y era literal:
+# `HUD::draw_minimap` seguia pintando el modelo VIEJO —una celda por sala, con separacion
+# entre ellas— cuando desde el commit add8a30 un capitulo es una ZONA CONTINUA de hasta
+# 160x88 tiles. El mapa describia una estructura que ya no existe.
+#
+# `hold map` + `shot` es la UNICA forma de fotografiar el mapa grande: un `shot` no suelta
+# lo que se este manteniendo (scripts/CLAUDE.md). Pero `shot` solo lo re-arma UN paso fijo
+# (`ap.timer = FIXED_DT`), y si entre ese paso y el render se cuela otro, la tecla ya esta
+# suelta y la captura sale del juego normal. Paso primero por aqui: de seis capturas, DOS
+# salieron sin mapa y dos veces distintas. Por eso hay un `hold map` DETRAS de cada `shot`:
+# el mapa sigue abierto pase lo que pase entre medias.
+#
+# GATE VISUAL, capitulo a capitulo: se reconoce la FORMA del terreno (el arroyo, los
+# acantilados, los caminos) y NO se ven bloques separados. Ademas:
+#   - la niebla: lo no pisado sale apagado o negro, no todo el mapa a la vez;
+#   - Ojos Abiertos (capitulo 6, `learn 7 0` + `press m1`) lo destapa entero;
+#   - el punto del profeta cae donde esta de verdad, y la cruz roja sobre la arena del jefe.
+#
+# GATE DEL LOG: ninguno propio. Lo que si tiene que salir es `Cast miracle: Ojos Abiertos`
+# antes de la captura 66, o esa comparacion no prueba nada.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+
+# --- Capitulo 1: recien empezado, casi todo en niebla ---
+hold map 0.8
+shot 60_mapa_cap1_al_empezar
+hold map 0.4
+wait 0.2
+
+# Andar hasta la celda del jefe destapa el camino: el mapa tiene que CONTAR la exploracion
+goto boss
+wait 1.2
+hold map 0.8
+shot 61_mapa_cap1_explorado
+hold map 0.4
+wait 0.2
+
+# --- Capitulo 4: otro bioma, otra forma de terreno ---
+chapter 4
+wait 2.5
+hold map 0.8
+shot 62_mapa_cap4
+hold map 0.4
+wait 0.2
+
+# --- Capitulo 5: rejilla 4x4 (una fila de celdas mas) ---
+# Es el caso que se sale por abajo si la escala fuera una constante en vez de una division.
+chapter 5
+wait 2.5
+hold map 0.8
+shot 63_mapa_cap5_4x4
+hold map 0.4
+wait 0.2
+
+# --- Capitulo 8: Acto II ---
+chapter 8
+wait 2.5
+hold map 0.8
+shot 64_mapa_cap8
+hold map 0.4
+wait 0.2
+
+# --- Ojos Abiertos: el mapa entero a la vista ---
+chapter 6
+wait 2.5
+faith 100
+hold map 0.8
+shot 65_mapa_cap6_con_niebla
+hold map 0.4
+wait 0.3
+learn 7 0
+wait 0.3
+press m1
+wait 0.8
+hold map 0.8
+shot 66_mapa_cap6_revelado
+hold map 0.4
+wait 0.3
+
+# --- El minimapa pequeno, sin separacion entre celdas ---
+shot 67_minimapa_pequeno
+wait 0.3
+
+quit

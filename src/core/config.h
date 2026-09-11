@@ -185,6 +185,15 @@ constexpr float AIM_ASSIST_PULL     = 0.65f;   // 0 = no corrige, 1 = corrige de
 constexpr float SENSITIVITY_STEP     = 0.14f;   // 1 -> x0.44, 5 -> x1.0, 10 -> x1.70
 constexpr int   SENSITIVITY_DEFAULT  = 5;
 
+// -- Entrada del jefe ---------------------------------------------------------
+// El tramo que faltaba: el profeta ENTRA andando en la arena y solo entonces habla el
+// jefe. Antes se saltaba de golpe a la escena guionizada y el usuario lo describio como
+// un corte brusco (prueba del APK, 2026-09-11). Va aqui porque es tacto, no reglas: lo
+// que se ajusta es como se SIENTE la entrada.
+constexpr float BOSS_APPROACH_MAX   = 2.4f;   // tope duro en segundos (nunca atrapa a nadie)
+constexpr float BOSS_APPROACH_SPEED = 0.72f;  // fraccion de la velocidad normal: entra, no corre
+constexpr float BOSS_APPROACH_LEAD  = 0.45f;  // cuanto se adelanta la camara hacia el jefe
+
 } // namespace Feel
 
 // =============================================================================

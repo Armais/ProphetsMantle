@@ -47,6 +47,12 @@ struct HUDContext {
     const char*     message   = nullptr;   // Small transient message
     f32             message_t = 0.0f;
     f32             time      = 0.0f;
+    // Donde esta el profeta, en coordenadas de ZONA. El mapa grande ya no pinta celdas
+    // sino el terreno, asi que la marca del jugador es un punto, no una casilla encendida.
+    // `player_in_zone` es false dentro de un interior (ahi la posicion es del interior y
+    // no significa nada en el mapa del capitulo): entonces se marca su celda de fuera.
+    Vec2            player_pos = {0, 0};
+    bool            player_in_zone = false;
     bool            show_map  = false;     // Tab held: big map
     bool            map_revealed = false;  // "Ojos Abiertos": todo el capitulo a la vista
     u32             tileset   = TEXTURE_NONE;

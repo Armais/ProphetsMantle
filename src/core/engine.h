@@ -350,6 +350,20 @@ struct Engine {
     int  pending_scene = -1;      // dialogo de jefe pedido por load_room: arranca en el
                                   // siguiente paso de Playing, no en mitad de la transicion
     u32  boss_talk_seen = 0;      // bit por capitulo: el jefe habla una vez por partida
+
+    // La ENTRADA del jefe: mientras `boss_approach_t > 0` el motor lleva al profeta hasta
+    // el sitio exacto en que la escena guionizada lo coloca, con la camara adelantandose
+    // hacia el jefe, y el `pending_scene` espera. El destino es el de la escena A
+    // PROPOSITO: si no coincidiera, `start_scene` teletransportaria al profeta y el corte
+    // seguiria ahi, solo que dos segundos mas tarde.
+    // Comando `entrada` del autoplay: deja pasar el paseo + el dialogo del jefe, que bajo
+    // autoplay se suprimen (los guiones cronometran las peleas). Sin esto la entrada del
+    // jefe seria lo unico del juego que ningun guion puede mirar.
+    bool autoplay_boss_talk = false;
+    f32  boss_approach_t    = 0.0f;
+    Vec2 boss_approach_to   = {0, 0};   // = tile_to_world(anchor + def.player_dx/dy)
+    Vec2 boss_approach_from = {0, 0};   // solo para el avance de la camara
+    Vec2 boss_approach_eye  = {0, 0};   // el jefe: hacia donde se adelanta la camara
     // Relatos del pozo RESUELTOS en esta partida (bit = id de `namespace Ev`). No se guarda:
     // al Continuar, `event_resolved_in_run` lo lee de `event_used` de la sala, que el v9 si
     // guarda y start_chapter rehidrata en room_cache. `codex_events` no vale para esto: es
@@ -377,6 +391,8 @@ struct Engine {
     void enter_cell(int cell);                        // teletransporte al nudo de la celda (goto, arranque, vuelta)
     void update_cells();                              // celda actual, activacion / despawn, arena, camara
     void enter_arena();                               // el profeta pisa la arena: jefe, sellado, banner
+    void start_boss_approach(int scene);              // arma el paseo de entrada hacia el jefe
+    void update_boss_approach(f32 dt);                // lo corre: mundo vivo, input tomado, camara adelantada
     void spawn_cell_enemies(int cell);
     void despawn_cell(int cell);
     void dump_cell_ascii(const Room& r, int cell);    // volcado ASCII de una celda (guiones)

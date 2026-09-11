@@ -49,3 +49,29 @@ pelo y barba oscuros contra calva y naranja contra azul — no el detalle de la 
 - Sin llama, a proposito: la que habia se apilaba encima del pano y era justo lo que lo
   convertia en brasero. Si algun dia vuelve el fuego, necesita un perfil curvo (un solido de
   revolucion): apilando esferas sale un huevo y con cajas afiladas, un avion de papel.
+
+### Icono de Android: adaptativo (2026-09-11)
+
+El usuario probo el APK y dijo **"el icono se ve pequeno"**. Eran dos cosas sumandose, y la
+primera no la vio nadie hasta medir el alfa:
+
+1. **`mark_512.png` trae 122 px de alfa vacio ARRIBA** (bbox `(0,122,512,512)`). `_fit` encuadra
+   por el lienzo, no por el contenido, asi que el dibujo salia pegado al borde de abajo con una
+   banda muerta del 24% encima. `make_android_icons.py` ahora hace `_crop` al alfa **antes** de
+   nada. Quien toque `make_icon.py` o `contact.py` tiene el mismo sesgo esperandole.
+2. **Un `mipmap` heredado en Android 8+ lo encoge el launcher**: lo mete dentro de su mascara y
+   le pone fondo. Por eso hay icono **adaptativo**: `mipmap-anydpi-v26/ic_launcher.xml` con
+   `background` + `foreground`, lienzo de **108 dp** y zona segura de **72 dp** (`CANVAS_DP` /
+   `SAFE_DP`). El arte se escala a llenar esos 72 dp: lo que llena la zona segura llena el icono.
+   Los `mipmap-*dpi/ic_launcher.png` heredados **se quedan** — son los de Android 7 y anteriores
+   (minSdk 21) — pero ahora salen tambien del recorte al alfa.
+
+- Fondo: degradado radial del pardo de `Color::baal_dark` (`BG_IN`/`BG_OUT`). Plano se veia
+  muerto a 48 dp. No compite con el naranja de Elias ni con el azul de Eliseo.
+- **El gate es `make_android_icons.py preview`**, no `contact.py`: en Android lo que se ve NO es
+  el PNG, es el PNG recortado por la mascara del launcher de turno. La tira saca las **tres**
+  (circulo, redondeado, squircle) a 48 y 96 dp, sobre claro y oscuro, mas el heredado al lado
+  para comparar. Verificado el 2026-09-11: con las tres se reconocen las dos cabezas y el manto;
+  el circulo solo recorta las puntas del pano y los hombros.
+- Lo unico que el ancho del arte (512x390 recortado) sacrifica con mascara circular son esas
+  puntas. Si alguna vez hay que salvarlas, se baja `SAFE_DP` — no se reencuadra el render.

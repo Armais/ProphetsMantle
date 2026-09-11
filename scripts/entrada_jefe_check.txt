@@ -1,0 +1,76 @@
+# Verificacion: la ENTRADA del jefe (pulido post-APK, 2026-09-11)
+# Uso:  MANTLE.exe --script scripts/entrada_jefe_check.txt
+#
+# Antes se saltaba de golpe del mundo a la escena guionizada del jefe. Ahora, delante de
+# esa escena, el profeta ENTRA andando en la arena y la camara se adelanta hacia el jefe.
+#
+# `entrada` es OBLIGATORIO y va antes del `walk`: el autoplay suprime el dialogo del jefe
+# (los guiones cronometran las peleas) y con el se suprimiria tambien el paseo, que es
+# justo lo que hay que mirar.
+#
+# GATES DEL LOG, en este orden y sin nada entre medias:
+#     Arena sealed: boss cell N
+#     boss approach start: chapter 1, (x,y) -> (x,y)
+#     boss approach end (completo)
+#     Jefe 1 ...                       <- la escena, SIEMPRE despues del paseo
+# Que la escena jamas salga ANTES de `boss approach start` es el gate que manda: es el
+# corte que se venia a quitar.
+#
+# GATE VISUAL: 80 (recien sellada), 81 (a mitad del paseo) y 82 (primer frame de la
+# escena). El encuadre de 82 tiene que ser el MISMO que el del final del paseo — por eso
+# el destino del paseo es el punto al que `start_scene` teletransporta al profeta y no
+# otro: si no coincidieran, el salto seguiria ahi, dos segundos mas tarde.
+#
+# Geometria (scripts/CLAUDE.md): `goto boss` deja BAJO el recinto; el vano esta en
+# (1568..1632, 192..208) y la celda B es (2,0) en todos los capitulos, asi que
+# `walk 1600 150` es lo que mete al profeta dentro y dispara `enter_arena`.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+entrada
+goto boss
+wait 1.0
+# Hasta el BORDE del vano, sin cruzarlo: `walk` es bloqueante, y con el destino dentro del
+# recinto se comia el paseo entero antes de que el guion pudiera fotografiarlo.
+walk 1600 214
+wait 0.4
+hold up 0.45
+wait 0.10
+shot 80_paseo_inicio
+wait 0.30
+shot 81_paseo_medio
+wait 0.32
+shot 82_paseo_final
+wait 0.35
+shot 83_escena_primer_frame
+wait 0.4
+# Cerrar la escena del cap. 1 ANTES de saltar de capitulo: `chapter` solo obedece en
+# Playing y en Dialogue se descarta EN SILENCIO (una pasada entera perdida creyendo que
+# el paseo del cap. 2 no salia, cuando lo que no salia era el cambio de capitulo).
+press cancel
+wait 1.2
+
+# --- Y se puede SALTAR: Cancel (el boton atras en Android) corta el paseo ---
+# Otro capitulo porque `boss_talk_seen` lleva un bit por capitulo y el 1 ya se ha gastado.
+# Gate: `boss approach end (saltado)` y, justo detras, la escena del jefe del cap. 2. Lo
+# que NO puede pasar es que el profeta se quede andando solo con la caja abierta.
+chapter 2
+wait 2.5
+entrada
+goto boss
+wait 1.0
+walk 1600 214
+wait 0.4
+hold up 0.45
+wait 0.20
+press cancel
+wait 0.35
+shot 84_paseo_saltado
+wait 0.4
+quit

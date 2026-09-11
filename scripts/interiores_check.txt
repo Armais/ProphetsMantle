@@ -52,8 +52,12 @@ hold left 1.0
 wait 0.3
 shot 04_interior_camara
 wait 0.1
+# El `hold map` de DETRAS no sobra: `shot` re-arma el mantenido un solo paso fijo, y si
+# entre ese paso y el render se cuela otro, la captura sale del juego normal y esta prueba
+# no prueba nada (paso justo el 2026-09-11). Ver scripts/CLAUDE.md.
 hold map 0.8
 shot 05_mapa_sin_interior
+hold map 0.4
 wait 0.5
 
 # --- Y de vuelta por la misma puerta ---

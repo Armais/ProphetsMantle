@@ -119,3 +119,42 @@ Y una lección de reparto: `tactil_check.txt` tuvo que mover su sonda de apuntad
 (232, 118) a (232, 100) al aparecer el botón ORAR. **La fila de acción ocupa y 112..134** y
 los botones se comprueban antes que el "tap = ataque", así que cualquier sonda que caiga ahí
 se la come un botón.
+
+## Pulido tras la primera prueba del APK (2026-09-11)
+
+Tres guiones nuevos y un comando nuevo, de los cuatro fallos que el usuario saco jugando el
+APK en su movil:
+
+- **`milagro_pista_check.txt`** (`--touch`): que se vea que los milagros se tocan. Gate: UNA
+  sola linea `Miracle hint shown (chapter 6, ...)` —el capitulo 6 es el gate de verdad,
+  porque con el codigo viejo la pista solo salia en el 1— y ninguna segunda. Las tres celdas
+  solo existen con `meta 6` **antes** de `chapter 6`: las mejoras se aplican al CARGAR el
+  capitulo, no al comprarlas. Y la pista se fotografia **dos veces** (`71a`/`71b`): el
+  contador `miracle_hint_timer` solo corre mientras hay un milagro lanzable, asi que o sale
+  en el frame siguiente a `faith 100` o exactamente 5 s despues, segun con cuanta fe arranque
+  el capitulo. El mensaje dura 4,5 s, o sea que nunca la pillan las dos.
+- **`entrada_jefe_check.txt`**: la entrada del jefe. Pide el comando nuevo **`entrada`**, que
+  deja pasar el paseo y el dialogo del jefe (el autoplay los suprime porque los guiones
+  cronometran las peleas). Gate: el ORDEN `Arena sealed` -> `boss approach start` ->
+  `boss approach end (completo)` -> `Jefe N`, y jamas la escena antes del paseo; mas la rama
+  de `press cancel`, que tiene que dar `boss approach end (saltado)`.
+  Dos trampas que costaron una pasada cada una: **`walk` es bloqueante**, asi que con el
+  destino dentro del recinto se come el paseo entero antes de que el guion pueda
+  fotografiarlo (se anda hasta el BORDE del vano y se cruza con `hold up`); y **`chapter` se
+  descarta EN SILENCIO fuera de `Playing`**, asi que hay que cerrar la escena del capitulo
+  anterior (`press cancel`) antes de saltar al siguiente.
+- **`mapa_check.txt`**: el mapa del capitulo pintando el terreno, en cinco capitulos, con
+  niebla y con Ojos Abiertos.
+
+**Correccion a la regla de `hold map` + `shot`.** El apano de que un `shot` no suelte lo que
+se este manteniendo re-arma el `hold` **un solo paso fijo** (`ap.timer = FIXED_DT`). Si entre
+ese paso y el render se cuela otro, la tecla ya esta suelta y la captura sale del juego
+normal — de seis capturas de mapa, DOS salieron mal, y en dos sitios distintos en dos
+pasadas. La receta robusta es poner **otro `hold map` DETRAS del `shot`**:
+
+```
+hold map 0.8
+shot 6X_lo_que_sea
+hold map 0.4
+wait 0.2
+```

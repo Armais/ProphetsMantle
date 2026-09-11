@@ -150,3 +150,37 @@ ayuda en un estorbo) y los proyectiles hostiles sí le hacen daño. Muere sin da
   `update_enemy_ai`: es el propio discípulo quien se retira del tablero al caer o al agotarse la
   invocación. Persigue lo que elegiría el auto-apuntado y, sin hostiles cerca, escolta al profeta
   a 24 unidades.
+
+### La entrada del jefe (2026-09-11)
+
+El usuario probo el APK y describio un **corte brusco al llegar al jefe**: se saltaba de
+golpe del mundo a la escena guionizada. Faltaba el tramo de antes.
+
+**Donde estaba la costura** (esto es lo que decidio que el track fuera barato): la arena del
+jefe esta DENTRO de la misma zona — no hay carga de sala. `update_cells` ve los pies dentro
+de `arena_rect_world()` y llama a `enter_arena()`, que nace el jefe, sella el vano y deja
+`pending_scene`; el dialogo arranca en el siguiente paso de `Playing`. Todo en el mismo mapa.
+
+- **`boss_approach_t > 0`** es un estado dentro de `Playing`, **no una escena**: el mundo
+  sigue vivo y dibujandose. Se comprueba ANTES que `pending_scene`, o sea que el dialogo
+  espera a que el profeta llegue.
+- El profeta se **empuja con velocidad**, nunca deslizando la posicion: asi `system_movement`
+  le pone el rumbo y `system_animation` la fila de andar, exactamente igual que si caminara
+  el jugador. Frena cerca del destino para no llegar derrapando.
+- **El destino es el punto al que `start_scene` teletransporta al profeta**
+  (`tile_to_world(anchor + def.player_dx/dy)`), y eso no es un detalle: si fuera otro, ese
+  teletransporte se veria como un salto y el corte seguiria ahi, dos segundos mas tarde.
+- `camera.set_room(arena_bounds, **false**)` en `enter_arena`: con `true` el recorte saltaba
+  en el mismo frame en que nacia el jefe, y ese salto era la mitad del corte. Durante el
+  paseo la camara ademas se **adelanta** hacia el jefe con una curva `4k(1-k)` (0 -> pico ->
+  0), para volver al profeta justo al final.
+- **Al acabar, la camara se ASIENTA** (`room_bounds = bounds_goal`): en `Dialogue` nadie la
+  actualiza, asi que un paseo saltado a mitad dejaba el recorte a medio deslizar y la escena
+  empezaba con la cabeza del jefe cortada.
+- **Se puede saltar con `Cancel`** (el boton atras en Android). Y el paseo va **atado al
+  dialogo**: quien vuelve tras morir ya lo vio (`boss_talk_seen`) y lo que quiere es pelear.
+- Los tunables viven en `Config::Feel` (`BOSS_APPROACH_MAX/SPEED/LEAD`) porque son tacto, no
+  reglas. Durante el paseo `input.touch_gameplay` es false: no se dibuja ni se atiende ningun
+  control tactil, que un stick que no responde es peor que ninguno.
+
+Guion: **`scripts/entrada_jefe_check.txt`**, con el comando de autoplay nuevo **`entrada`**.

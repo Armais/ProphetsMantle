@@ -1,0 +1,88 @@
+# Verificacion: que se vea que los milagros se tocan (pulido post-APK, 2026-09-11)
+# Uso:  MANTLE.exe --touch --script scripts/milagro_pista_check.txt
+#
+# --touch es OBLIGATORIO: sin el no hay etiqueta bajo las celdas (en escritorio ahi va la
+# chapa Q/E/F) ni pista a dos lineas, que es justo lo que se verifica.
+#
+# El usuario probo el APK y no supo como lanzar un milagro. Tres cosas se arreglaron y
+# aqui se comprueban las tres:
+#
+#   1. LATIDO. Solo late la celda lanzable AHORA. Las bloqueadas y las que recargan, quietas.
+#   2. ETIQUETA. Bajo cada celda, el nombre corto del milagro (antes: nada, desde que se
+#      quito la chapa Q/E/F por no anunciar teclas que un telefono no tiene).
+#   3. PISTA. `Miracle hint shown` sale la primera vez de CADA partida que un milagro se
+#      puede lanzar de verdad, EN CUALQUIER CAPITULO (antes: solo en el 1, y solo si el
+#      milagro pagable caia en la celda Q).
+#
+# GATES DEL LOG:
+#   - UNA sola linea `Miracle hint shown (chapter 6, slot 0: Sanar Aguas)`. El capitulo 6
+#     es el gate de verdad: con el codigo viejo NO salia ninguna.
+#   - Ni una segunda `Miracle hint shown` en el resto de la partida.
+#   - `Cast miracle: Ojos Abiertos`, que es lo que deja esa celda en recarga para la foto.
+#
+# GATE VISUAL (captura 70): las tres celdas, los tres estados que DE VERDAD ocurren:
+#   Q  Sanar Aguas        tier 1, coste  5  con fe 30 -> LANZABLE (marco de oro latiendo)
+#   E  Ojos Abiertos      tier 2, coste 15  recien lanzado -> EN RECARGA (barrido oscuro)
+#   F  Ejercito Celestial tier 3, coste 22  con fe 30 -> SIN NIVEL (candado + fe objetivo)
+#
+# Por que NO se fotografia "tengo el nivel pero no me llega la fe": con la tabla actual es
+# INALCANZABLE. Cada tier se abre a 10 / 25 / 50 / 75 de fe y sus milagros cuestan 5-8 /
+# 12-15 / 20-25 / 30: el mas caro de cada tier vale siempre menos que el umbral que lo
+# desbloquea, asi que si tienes el nivel, puedes pagarlo. La rama `lock_cost` de
+# `HUD::draw_miracle_slots` (coste en rojo, sin candado) es hoy codigo muerto.
+#
+# Por que el capitulo 6 y no el 1: las tres celdas solo existen con la mejora 6 de El
+# Santuario (Engine, apply_meta_upgrades). `meta 6` va ANTES de `chapter 6` porque las
+# mejoras se aplican al CARGAR el capitulo, no al comprarlas.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+meta 6
+chapter 6
+wait 2.5
+
+learn 5 0
+learn 7 1
+learn 8 2
+faith 100
+wait 0.6
+stats
+
+# DOS capturas de la pista, y no es pereza: `miracle_hint_timer` solo corre mientras hay un
+# milagro lanzable, y cuanto llevaba corrido al llegar aqui depende de la fe con que el
+# capitulo arranque. O la pista sale en el frame siguiente a `faith 100` (contador ya a 0)
+# o exactamente 5 s despues. Una de las dos capturas la pilla; el mensaje dura 4,5 s, asi
+# que nunca las dos.
+shot 71a_pista_pronto
+wait 5.0
+shot 71b_pista_a_los_cinco
+wait 0.4
+
+# Los tres estados: lanzar el de la celda E la deja en recarga (Ojos Abiertos recarga 30 s,
+# de sobra para la foto) y bajar la fe a 30 deja la F sin nivel para un tier 3.
+press m2
+wait 0.6
+faith 30
+wait 0.6
+shot 70_milagros_tres_estados
+wait 0.75
+# Medio ciclo del latido despues (0,75 s: el periodo es 2*pi/4,2 = 1,5 s). Comparando las
+# dos, la celda lanzable tiene que haber cambiado de brillo y las otras dos NO.
+shot 70b_latido_medio_ciclo
+wait 0.3
+
+# Y la pista no se repite: 8 s mas de juego con el milagro igual de lanzable.
+faith 30
+wait 4.0
+faith 30
+wait 4.0
+shot 72_sin_repetir
+wait 0.3
+
+quit

@@ -395,7 +395,9 @@ void Engine::update(f32 dt) {
     if (autoplay.active) update_autoplay(dt);
     // Solo se juega en `Playing`: fuera de ahi el dedo no mueve al profeta ni dispara,
     // solo deja taps para los menus.
-    input.touch_gameplay = (state.scene == GameScene::Playing);
+    // Durante la entrada del jefe el profeta no lo mueve el dedo, asi que no se dibuja ni
+    // se atiende ningun control tactil: un stick que no responde es peor que ninguno.
+    input.touch_gameplay = (state.scene == GameScene::Playing && boss_approach_t <= 0.0f);
     menus.touch_hints = input.touch_ui;   // las lineas de ayuda hablan de teclas o de dedos
     if (input.touch_ui) {
         if (input.touch_gameplay) {
@@ -500,6 +502,9 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Playing: {
+            // La ENTRADA del jefe va DELANTE de todo lo demas de Playing, y sobre todo
+            // delante de `pending_scene`: el dialogo espera a que el profeta haya llegado.
+            if (boss_approach_t > 0.0f) { update_boss_approach(dt); break; }
             // Escena pedida por load_room (el dialogo con el jefe): arranca aqui, con la
             // transicion de sala ya cerrada y antes de que el mundo de un solo paso.
             if (pending_scene >= 0) {
@@ -744,23 +749,44 @@ void Engine::update(f32 dt) {
                 world.healths[player.entity].current = world.healths[player.entity].max;
             }
 
-            // Pista de milagro: una sola vez por partida, en el cap. 1, cuando la Q ya
-            // se puede lanzar de verdad (nada de enseñar un boton bloqueado).
-            if (!miracle_hint_shown && state.current_chapter == 1) {
-                const MiracleSlot& q = player.miracle_slots[0];
-                bool castable = !q.is_empty() && q.is_ready() &&
-                                get_miracle_def(q.miracle).tier <= faith.get_max_miracle_tier() &&
-                                get_miracle_def(q.miracle).faith_cost <= faith.current;
-                if (castable) miracle_hint_timer -= dt;
-                if (miracle_hint_timer <= 0.0f && message_timer <= 0.0f) {
+            // Pista de milagro: una sola vez por partida, la primera vez que CUALQUIER
+            // celda se pueda lanzar de verdad (nada de enseñar un boton bloqueado).
+            // Antes estaba atada al cap. 1 y a la celda Q: quien empezaba por otro
+            // capitulo, o cuyo primer milagro pagable caia en E, no veia la pista nunca —
+            // y el usuario probo el APK sin saber como lanzar un milagro.
+            if (!miracle_hint_shown) {
+                int hint_slot = -1;
+                for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++) {
+                    const MiracleSlot& s = player.miracle_slots[i];
+                    if (s.is_empty() || !s.is_ready()) continue;
+                    auto def = get_miracle_def(s.miracle);
+                    if (def.tier <= faith.get_max_miracle_tier() && def.faith_cost <= faith.current) {
+                        hint_slot = i;
+                        break;
+                    }
+                }
+                if (hint_slot >= 0) miracle_hint_timer -= dt;
+                if (hint_slot >= 0 && miracle_hint_timer <= 0.0f && message_timer <= 0.0f) {
                     miracle_hint_shown = true;
-                    SDL_Log("Miracle hint shown (slot Q: %s)", get_miracle_def(q.miracle).name);
-                    char hint[96];
-                    snprintf(hint, sizeof(hint),
-                             input.touch_ui ? tr("Toca el milagro: %s  ·  %.0f de fe", "Tap the miracle: %s  ·  %.0f faith")
-                                            : tr("Pulsa [Q]: %s  ·  %.0f de fe", "Press [Q]: %s  ·  %.0f faith"),
-                             get_miracle_def(q.miracle).name, get_miracle_def(q.miracle).faith_cost);
-                    show_message(hint, 3.5f);
+                    auto def = get_miracle_def(player.miracle_slots[hint_slot].miracle);
+                    SDL_Log("Miracle hint shown (chapter %d, slot %d: %s)",
+                            state.current_chapter, hint_slot, def.name);
+                    static const char* keys[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
+                    char hint[160];
+                    if (input.touch_ui) {
+                        // Dos lineas a proposito: la segunda es la que nadie descubre solo.
+                        // La ficha por hold (0,4 s) existe desde siempre y no la encontro
+                        // nadie porque no se anunciaba en ninguna parte.
+                        snprintf(hint, sizeof(hint),
+                                 tr("Toca el milagro para lanzarlo: %s  ·  %.0f de fe\nMantenlo pulsado para ver qué hace",
+                                    "Tap the miracle to cast it: %s  ·  %.0f faith\nHold it down to see what it does"),
+                                 def.name, def.faith_cost);
+                    } else {
+                        snprintf(hint, sizeof(hint),
+                                 tr("Pulsa [%s]: %s  ·  %.0f de fe", "Press [%s]: %s  ·  %.0f faith"),
+                                 keys[hint_slot], def.name, def.faith_cost);
+                    }
+                    show_message(hint, 4.5f);
                 }
             }
 
@@ -1002,6 +1028,13 @@ void Engine::render() {
         ctx.message = message_timer > 0.0f ? message_text.c_str() : nullptr;
         ctx.message_t = message_timer;
         ctx.time = world.time;
+        // Solo vale si la sala activa ES la zona: dentro de un interior la posicion del
+        // profeta esta en coordenadas del interior y en el mapa del capitulo seria mentira.
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform) &&
+            ctx.zone == &current_room_data) {
+            ctx.player_pos = world.transforms[player.entity].position;
+            ctx.player_in_zone = true;
+        }
         ctx.show_map = input.is_action_pressed(Action::Map) || input.touch_map_open;
         ctx.map_revealed = player.map_revealed;
         ctx.tileset = tileset_texture;
@@ -1197,6 +1230,7 @@ void Engine::start_new_run() {
     boss_talk_seen = 0;
     run_events_done = 0;
     pending_scene  = -1;
+    boss_approach_t = 0.0f;   // ningun paseo de jefe sobrevive a un reinicio
     if (!autoplay.active) {
         start_scene(Scene::AUDIENCIA);
     } else {
@@ -1425,6 +1459,7 @@ void Engine::start_scene(int id) {
     scene_id      = id;
     scene_step    = -1;
     pending_scene = -1;
+    boss_approach_t = 0.0f;   // ningun paseo de jefe sobrevive a un reinicio
 
     for (Entity& fe : scene_figures) fe = ENTITY_NONE;
     int ax, ay;
@@ -2506,6 +2541,7 @@ void Engine::continue_run() {
     boss_talk_seen = 0;
     run_events_done = 0;
     pending_scene  = -1;
+    boss_approach_t = 0.0f;   // ningun paseo de jefe sobrevive a un reinicio
     state.run_time        = save.data.run_time;
     run_kills = 0;
     run_hits_taken = 0;
@@ -2887,7 +2923,10 @@ void Engine::enter_arena() {
     zone.arena_sealed = true;
     zone.cells[bc].active = true;
     player.took_damage_this_room = false;
-    camera.set_room(zone.arena_bounds_world(), true);
+    // DESLIZANDO, no de golpe: el recorte pasa de la zona entera al recinto en ~0,12 s
+    // (Camera::update). Con `true` la camara daba un salto en el mismo frame en que el
+    // jefe nacia, y ese salto era la mitad del "corte brusco" del que se quejo el usuario.
+    camera.set_room(zone.arena_bounds_world(), false);
     SDL_Log("Arena sealed: boss cell %d", bc);
 
     char buf[64];
@@ -2901,8 +2940,95 @@ void Engine::enter_arena() {
     const u32 talk_bit = 1u << state.current_chapter;
     if (Scene::boss_of(state.current_chapter) >= 0 && !(boss_talk_seen & talk_bit)) {
         boss_talk_seen |= talk_bit;
-        if (autoplay.active) SDL_Log("Dialogo del jefe %d suprimido (autoplay)", state.current_chapter);
-        else                 pending_scene = Scene::boss_of(state.current_chapter);
+        if (autoplay.active && !autoplay_boss_talk)
+            SDL_Log("Dialogo del jefe %d suprimido (autoplay)", state.current_chapter);
+        else {
+            pending_scene = Scene::boss_of(state.current_chapter);
+            // ...y delante de la escena, el paseo. Va atado al dialogo a proposito: quien
+            // vuelve tras morir ya lo vio (`boss_talk_seen`) y lo que quiere es pelear, no
+            // ver otra vez al profeta andando.
+            start_boss_approach(pending_scene);
+        }
+    }
+}
+
+// =============================================================================
+// La entrada del jefe (pulido post-APK, 2026-09-11)
+// =============================================================================
+// El destino NO se inventa: es el punto exacto al que `start_scene` teletransporta al
+// profeta para el dialogo (tres filas bajo el jefe). Si fuera otro, el teletransporte de
+// `start_scene` se veria como un salto y el corte seguiria ahi. El primer frame de la
+// escena y el ultimo del paseo tienen que ser el MISMO encuadre.
+void Engine::start_boss_approach(int scene) {
+    if (player.entity == ENTITY_NONE || !world.has(player.entity, Component::Transform)) return;
+    Room& zone = current_room_data;
+    if (!zone.has_arena) return;
+
+    const SceneDef def = get_scene_def(scene);
+    int ax, ay;
+    zone.arena_anchor(ax, ay);
+    boss_approach_from = world.transforms[player.entity].position;
+    boss_approach_to   = zone.tile_to_world(ax + def.player_dx, ay + def.player_dy);
+    boss_approach_eye  = zone.tile_to_world(ax, ay);
+    boss_approach_t    = Config::Feel::BOSS_APPROACH_MAX;
+    SDL_Log("boss approach start: chapter %d, (%.0f,%.0f) -> (%.0f,%.0f)",
+            state.current_chapter, boss_approach_from.x, boss_approach_from.y,
+            boss_approach_to.x, boss_approach_to.y);
+}
+
+// El mundo sigue vivo y dibujandose: esto NO es una escena. Lo unico que cambia es quien
+// manda sobre el profeta (el motor, no el dedo) y que la camara se adelanta.
+void Engine::update_boss_approach(f32 dt) {
+    boss_approach_t -= dt;
+
+    // Quien ya ha visto esto diez veces no puede quedarse atrapado: Cancel (el boton atras
+    // en Android) corta el paseo y va derecho a la escena.
+    const bool skipped = input.is_action_just_pressed(Action::Cancel);
+
+    Vec2 pos = boss_approach_to;
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        auto& t = world.transforms[player.entity];
+        pos = t.position;
+        Vec2 d = boss_approach_to - pos;
+        const f32 dist = d.length();
+        if (world.has(player.entity, Component::Movement)) {
+            auto& m = world.movements[player.entity];
+            // Se EMPUJA con velocidad, no se desliza la posicion: asi `system_movement` le
+            // pone el rumbo y `system_animation` la fila de andar, igual que si caminara el
+            // jugador. Cerca del destino se frena, para que no llegue derrapando.
+            m.velocity = (dist > 1.0f)
+                       ? d.normalized() * m.speed * Config::Feel::BOSS_APPROACH_SPEED
+                                        * std::min(1.0f, dist / 12.0f)
+                       : Vec2{0, 0};
+            m.knockback = {0, 0};
+        }
+        if (dist <= 2.0f) boss_approach_t = 0.0f;
+    }
+
+    world.update(dt);          // movimiento, rumbo, animacion, proyectiles y efectos
+    renderer.update_shake(dt);
+
+    // La camara no se limita a seguirlo: se ADELANTA hacia el jefe, y vuelve al profeta
+    // justo al final para que el encuadre con el que acaba el paseo sea el mismo con el
+    // que empieza la escena.
+    const f32 total = std::max(1.0f, boss_approach_from.distance_to(boss_approach_to));
+    f32 k = 1.0f - std::min(1.0f, pos.distance_to(boss_approach_to) / total);
+    f32 lead = Config::Feel::BOSS_APPROACH_LEAD * (k * (1.0f - k) * 4.0f);   // 0 -> pico -> 0
+    camera.set_target(Vec2::lerp(pos, boss_approach_eye, lead));
+    camera.update(dt);
+
+    if (skipped || boss_approach_t <= 0.0f) {
+        boss_approach_t = 0.0f;
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement))
+            world.movements[player.entity].velocity = {0, 0};
+        // La camara se ASIENTA aqui, no durante la escena: en Dialogue nadie la actualiza,
+        // asi que un paseo saltado a mitad dejaba el recorte a medio deslizar y la escena
+        // empezaba con la cabeza del jefe cortada por arriba.
+        camera.room_bounds = camera.bounds_goal;
+        camera.set_target(boss_approach_to);
+        camera.position = boss_approach_to;
+        camera.update(0.0f);
+        SDL_Log("boss approach end (%s)", skipped ? "saltado" : "completo");
     }
 }
 
@@ -4248,6 +4374,9 @@ void Engine::update_autoplay(f32 dt) {
             }
             if (c.op == "walk") { ap.walk_target = {c.num, c.num2}; ap.timer = 6.0f; ap.walking = true; break; }
             if (c.op == "god")  { god_mode = !god_mode; continue; }
+            // `entrada`: deja pasar la ENTRADA del jefe (paseo + dialogo), que el autoplay
+            // suprime por defecto. Va antes del `walk` que mete al profeta en la arena.
+            if (c.op == "entrada") { autoplay_boss_talk = true; SDL_Log("Autoplay: entrada del jefe activada"); continue; }
             // Depuracion: sembrar enemigos de un tipo concreto alrededor del jugador.
             // Sin esto, comprobar una conducta del Acto II depende de que el capitulo
             // la sortee (los cuatro tipos se reparten al azar por sala).

@@ -157,3 +157,18 @@ lo que no se pinta).
   Lo que habrá que calibrar en la primera prueba: **tamaño y opacidad de los botones por DPI**
   (22 unidades ≈ 8 mm en 6,5"), layout zurdo, `SDL_GetWindowSafeArea` (notch), si los botones
   deberían salirse al pilar en 20:9, y el stick derecho por defecto en móvil.
+
+### Pulido tras la primera prueba del APK (2026-09-11)
+
+- **`touch_gameplay` se apaga durante la entrada del jefe** (`Engine::boss_approach_t > 0`):
+  ahi al profeta lo lleva el motor, no el dedo, asi que no se dibuja ni se atiende ningun
+  control tactil. Un stick que no responde es peor que ninguno. El paseo se corta con
+  `Action::Cancel`, que en Android es el boton atras. Detalle del estado: `src/core/CLAUDE.md`.
+- **Las celdas de milagro vuelven a estar rotuladas** en tactil, con el nombre corto del
+  milagro en el hueco donde iba la chapa `Q/E/F`. Al quitar esa chapa —correctamente, porque
+  anunciaba teclas que un telefono no tiene— la celda se quedo muda y el usuario probo el APK
+  sin saber que se tocaba. DASH, USAR, ARMA y ORAR llevan etiqueta; estas tambien. El detalle
+  del dibujo esta en `src/ui/CLAUDE.md`.
+- El rect del minimapa pequeno (`HUD::minimap_rect`, que `Input::touch_minimap` comparte para
+  que tocarlo abra el mapa grande) **no ha cambiado** pese a que el minimapa se redibujo: las
+  celdas se ensancharon hasta llenarlo en vez de mover el marco. Ese contrato sigue intacto.
