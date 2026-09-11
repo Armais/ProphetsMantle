@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.24)
+# Rango, no minimo suelto: las politicas siguen en 3.24 donde hay CMake nuevo (escritorio),
+# y a la vez se admite el 3.22.1 que trae el SDK de Android, que es el unico instalado ahi.
+cmake_minimum_required(VERSION 3.22...3.24)
 project(MANTLE VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -6,6 +8,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+
+# OVERRIDE_FIND_PACKAGE es de CMake 3.24. En el 3.22.1 del SDK de Android se omite sin
+# consecuencia: los tres satelites solo llaman a find_package(SDL3) si NO existen ya los
+# targets, y existen, porque FetchContent_MakeAvailable resuelve SDL3 primero.
+set(MANTLE_FC_OVERRIDE "")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+    set(MANTLE_FC_OVERRIDE OVERRIDE_FIND_PACKAGE)
+endif()
 
 # =============================================================================
 # Platform detection
@@ -34,34 +44,43 @@ if(NOT PLATFORM_WEB)
     FetchContent_Declare(
         SDL3
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/build/_deps/sdl3-src
-        OVERRIDE_FIND_PACKAGE
+        ${MANTLE_FC_OVERRIDE}
     )
 
     # SDL3_image (local)
     FetchContent_Declare(
         SDL3_image
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/build/_deps/sdl3_image-src
-        OVERRIDE_FIND_PACKAGE
+        ${MANTLE_FC_OVERRIDE}
     )
 
     # SDL3_mixer (local)
     FetchContent_Declare(
         SDL3_mixer
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/build/_deps/sdl3_mixer-src
-        OVERRIDE_FIND_PACKAGE
+        ${MANTLE_FC_OVERRIDE}
     )
 
     # SDL3_ttf (local: release 3.2.2 + external/freetype clone, branch VER-2-13-2-SDL)
     FetchContent_Declare(
         SDL3_ttf
         SOURCE_DIR ${CMAKE_SOURCE_DIR}/build/_deps/sdl3_ttf-src
-        OVERRIDE_FIND_PACKAGE
+        ${MANTLE_FC_OVERRIDE}
     )
 
-    # Configure SDL options before fetching
+    # Configure SDL options before fetching.
+    # BUILD_SHARED_LIBS se queda OFF SIEMPRE: los tres satelites van estaticos dentro de
+    # libmain.so tambien en Android. Lo unico que cambia alli es el propio SDL3, que
+    # SDLActivity carga por nombre (`System.loadLibrary("SDL3")`) y por eso tiene que ser
+    # un .so de verdad. `sdl3_target_name` de los satelites es SDL3::SDL3, alias del shared.
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    if(PLATFORM_ANDROID)
+        set(SDL_SHARED ON  CACHE BOOL "" FORCE)
+        set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    else()
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON  CACHE BOOL "" FORCE)
+    endif()
     set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
     set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 
@@ -81,6 +100,28 @@ if(NOT PLATFORM_WEB)
     # SDL3_mixer
     set(SDLMIXER_SAMPLES OFF CACHE BOOL "" FORCE)
     set(SDLMIXER_TESTS OFF CACHE BOOL "" FORCE)
+
+    if(PLATFORM_ANDROID)
+        # *_DEPS_SHARED vale ON por defecto en Android (los decodificadores se cargan con
+        # dlopen). Con ON, libpng / vorbisfile / libxmp saldrian como .so sueltos que
+        # AGP empaqueta y que hay que encontrar en el dispositivo: una fuente de fallos
+        # silenciosos a cambio de nada. Estaticos dentro de libmain.so y se acabo.
+        set(SDLIMAGE_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_DEPS_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_VENDORED    ON  CACHE BOOL "" FORCE)
+        # El juego solo reproduce OGG Vorbis y WAV (assets/audio). Todo lo demas fuera:
+        # ademas de tamano, MP3 arrastraria external/mpg123, que no trae CMakeLists.txt.
+        set(SDLMIXER_MP3      OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_MIDI     OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_MOD      OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_GME      OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_FLAC     OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_WAVPACK  OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_OPUS     OFF CACHE BOOL "" FORCE)
+        set(SDLMIXER_VORBIS_STB        ON CACHE BOOL "" FORCE)
+        set(SDLMIXER_VORBIS_VORBISFILE ON CACHE BOOL "" FORCE)
+        set(SDLMIXER_WAVE              ON CACHE BOOL "" FORCE)
+    endif()
 
     # SDL3_ttf: vendored FreeType only (no HarfBuzz shaping, no SVG emoji)
     set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
@@ -137,12 +178,19 @@ else()
     add_executable(${PROJECT_NAME} ${MANTLE_SOURCES})
 endif()
 
-# Output executable to project root (all configs)
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_SOURCE_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
-)
+if(PLATFORM_ANDROID)
+    # SDLActivity carga por nombre las de getLibraries(): {"SDL3", "main"}. De ahi
+    # libmain.so, y de ahi que main.cpp incluya <SDL3/SDL_main.h> (dlsym de "SDL_main").
+    # El directorio de salida lo impone AGP: aqui no se toca.
+    set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME main)
+else()
+    # Output executable to project root (all configs)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY         "${CMAKE_SOURCE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_SOURCE_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}"
+    )
+endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -167,6 +215,14 @@ if(PLATFORM_WEB)
         -sINITIAL_MEMORY=67108864
     )
     set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".html")
+elseif(PLATFORM_ANDROID)
+    # SDL3 compartido (lo carga SDLActivity), los tres satelites dentro de libmain.so.
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        SDL3::SDL3-shared
+        SDL3_image::SDL3_image-static
+        SDL3_mixer::SDL3_mixer-static
+        SDL3_ttf::SDL3_ttf-static
+    )
 else()
     target_link_libraries(${PROJECT_NAME} PRIVATE
         SDL3::SDL3-static

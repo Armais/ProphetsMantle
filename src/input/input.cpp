@@ -30,6 +30,34 @@ void Input::init() {
         }
     }
     SDL_free(joysticks);
+
+    // Vibrador del telefono. Solo en movil: este portatil declara dispositivos hapticos
+    // que no son los del jugador, y abrirlos en escritorio seria vibrar lo que no toca.
+    if (is_mobile()) {
+        if (SDL_InitSubSystem(SDL_INIT_HAPTIC)) {
+            int hcount = 0;
+            SDL_HapticID* haptics = SDL_GetHaptics(&hcount);
+            if (haptics && hcount > 0) {
+                haptic = SDL_OpenHaptic(haptics[0]);
+                if (haptic && !SDL_InitHapticRumble(haptic)) {
+                    SDL_Log("Haptic: rumble unsupported (%s)", SDL_GetError());
+                    SDL_CloseHaptic(haptic);
+                    haptic = nullptr;
+                }
+                if (haptic) SDL_Log("Haptic device opened: %s", SDL_GetHapticName(haptic));
+            }
+            SDL_free(haptics);
+        } else {
+            SDL_Log("Haptic subsystem unavailable: %s", SDL_GetError());
+        }
+    }
+}
+
+void Input::shutdown() {
+    if (haptic) {
+        SDL_CloseHaptic(haptic);
+        haptic = nullptr;
+    }
 }
 
 // Los rects tienen que casar con lo que dibuja HUD::draw_miracle_slots / draw_touch_controls.
@@ -44,14 +72,65 @@ void Input::init_touch_layout(f32 band_below) {
     const bool in_band = (band_below >= 62.0f);
     const f32 H = in_band ? static_cast<f32>(Config::GAME_HEIGHT) + band_below - 6.0f
                           : static_cast<f32>(Config::GAME_HEIGHT);
-    // Fila de arriba: consumible y dash, alineados con las celdas E y Q. A 68 y no a 64
-    // del borde para dejar libre la franja de las placas de coste de los milagros.
-    touch_buttons[0] = {{W - 28.0f, H - 68.0f, S, S}, Action::Dash,       -1};
-    touch_buttons[1] = {{W - 55.0f, H - 68.0f, S, S}, Action::Consumable, -1};
+    // Fila de arriba, de derecha a izquierda: DASH, USAR, ARMA, ORAR. A 68 y no a 64 del
+    // borde para dejar libre la franja de las placas de coste de los milagros. ARMA y ORAR
+    // solo se encienden si el profeta lleva arma secundaria / puede rezar
+    // (Input::set_touch_enabled), asi que en la mayoria de las partidas la fila son dos.
+    touch_buttons[TOUCH_BTN_DASH]   = {{W -  28.0f, H - 68.0f, S, S}, Action::Dash,            -1};
+    touch_buttons[TOUCH_BTN_CONS]   = {{W -  55.0f, H - 68.0f, S, S}, Action::Consumable,      -1};
+    touch_buttons[TOUCH_BTN_WEAPON] = {{W -  82.0f, H - 68.0f, S, S}, Action::AttackSecondary, -1};
+    touch_buttons[TOUCH_BTN_PRAY]   = {{W - 109.0f, H - 68.0f, S, S}, Action::Pray,            -1};
     // Fila de abajo: las tres celdas de milagro del HUD, tal cual
     for (int i = 0; i < Config::MAX_MIRACLE_SLOTS && i < 3; i++)
-        touch_buttons[2 + i] = {{W - 28.0f - i * 27.0f, H - 36.0f, S, S},
+        touch_buttons[TOUCH_BTN_MIRACLE + i] = {{W - 28.0f - i * 27.0f, H - 36.0f, S, S},
                                 static_cast<Action>(static_cast<u32>(Action::Miracle1) + i), i};
+    // Pausa: arriba al centro, en el hueco que dejan el panel de vitales (izquierda) y el
+    // minimapa (derecha). Va SIEMPRE dentro del area de juego, tambien en vertical: es el
+    // unico boton que hay que poder encontrar sin mirar.
+    touch_buttons[TOUCH_BTN_PAUSE]  = {{W * 0.5f - 11.0f, 3.0f, S, 14.0f}, Action::Pause, -1};
+}
+
+// Botones contextuales: los que no aplican se apagan enteros (dibujo y hit-test).
+void Input::set_touch_enabled(bool consumable, int miracle_slots, bool weapon, bool pray, bool pause) {
+    bool on[TOUCH_BUTTON_COUNT] = {};
+    on[TOUCH_BTN_DASH]   = true;
+    on[TOUCH_BTN_CONS]   = consumable;
+    on[TOUCH_BTN_WEAPON] = weapon;
+    on[TOUCH_BTN_PRAY]   = pray;
+    on[TOUCH_BTN_PAUSE]  = pause;
+    for (int i = 0; i < Config::MAX_MIRACLE_SLOTS && i < 3; i++)
+        on[TOUCH_BTN_MIRACLE + i] = (i < miracle_slots);
+    for (int i = 0; i < TOUCH_BUTTON_COUNT; i++) {
+        if (touch_buttons[i].enabled == on[i]) continue;
+        touch_buttons[i].enabled = on[i];
+        // Apagarlo con el dedo encima lo dejaba pulsado para siempre
+        if (!on[i] && touch_buttons[i].down) {
+            touch_buttons[i].down = false;
+            touch_buttons[i].hold = 0.0f;
+            if (touch_buttons[i].slot < 0)
+                actions[static_cast<u32>(touch_buttons[i].action)] = false;
+        }
+    }
+}
+
+// Todo el estado tactil al suelo. Android no entrega los FINGER_UP al irse a segundo
+// plano, y sin esto el profeta volvia de la pausa corriendo y disparando.
+void Input::release_touch() {
+    for (auto& b : touch_buttons) {
+        if (b.down && b.slot < 0) actions[static_cast<u32>(b.action)] = false;
+        b.down = false;
+        b.hold = 0.0f;
+    }
+    for (auto& f : touch_fingers) f.active = false;
+    joystick_move.active = false;
+    joystick_aim.active  = false;
+    touch_aim_active     = false;
+    aim_axis = {0, 0};
+    move_axis = {0, 0};
+    actions[static_cast<u32>(Action::Attack)] = false;
+    tap_active   = false;
+    tap_pending  = false;
+    scroll_accum = 0.0f;
 }
 
 // Un tap sobre un milagro lo lanza; mantenerlo abre su ficha (GDD 4.2). Por eso el
@@ -68,6 +147,7 @@ void Input::update_touch(f32 dt) {
 
 void Input::pre_update() {
     std::memcpy(actions_prev, actions, sizeof(actions));
+    tap_pending = false;   // un tap no sobrevive al frame en que se produjo
     // Las pulsaciones de un frame (tap tactil) se sueltan aqui, ya copiadas al historico
     for (u32 i = 0; i < ACTION_COUNT; i++) {
         if (!touch_pulse[i]) continue;
@@ -167,7 +247,10 @@ void Input::process_keyboard(const SDL_Event& event) {
         case SDL_SCANCODE_F:      actions[static_cast<u32>(Action::Miracle3)]  = pressed; break;
         case SDL_SCANCODE_R:      actions[static_cast<u32>(Action::Consumable)]= pressed; break;
         case SDL_SCANCODE_TAB:    actions[static_cast<u32>(Action::Map)]       = pressed; break;
-        case SDL_SCANCODE_ESCAPE: actions[static_cast<u32>(Action::Pause)]     = pressed;
+        // AC_BACK: el boton "atras" de Android llega como tecla (SDLActivity lo consume).
+        // Hace lo mismo que ESC: pausa en juego, cancela en los menus.
+        case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_AC_BACK:
+                                  actions[static_cast<u32>(Action::Pause)]     = pressed;
                                   actions[static_cast<u32>(Action::Cancel)]    = pressed; break;
         case SDL_SCANCODE_RETURN: actions[static_cast<u32>(Action::Confirm)]   = pressed; break;
         default: break;
@@ -265,8 +348,21 @@ void Input::process_gamepad(const SDL_Event& event) {
 // =============================================================================
 // Touch (from GDD 4.2 - Mobile controls)
 // =============================================================================
-// Los dedos vivos, para el gesto de dos dedos (pausa). Cuatro sobran: el GDD no pide
-// ningun gesto de mas de dos.
+// Nombre del boton tactil, SOLO para el log. Es lo unico que hace comprobable desde un
+// guion que un dedo ha pulsado ARMA y no ORAR: los dos son iconos sin texto y compararlos
+// a ojo en una captura de 320x180 no distingue cual respondio.
+static const char* touch_btn_name(int i) {
+    switch (i) {
+        case TOUCH_BTN_DASH:    return "DASH";
+        case TOUCH_BTN_CONS:    return "USAR";
+        case TOUCH_BTN_WEAPON:  return "ARMA";
+        case TOUCH_BTN_PRAY:    return "ORAR";
+        case TOUCH_BTN_PAUSE:   return "PAUSA";
+        default:                return "MILAGRO";
+    }
+}
+
+// Los dedos vivos. Cuatro sobran: el unico gesto de varios dedos es "stick + apuntar".
 static int find_finger(TouchFinger* list, SDL_FingerID id, bool take_free) {
     for (int i = 0; i < TOUCH_MAX_FINGERS; i++)
         if (list[i].active && list[i].id == id) return i;
@@ -277,10 +373,13 @@ static int find_finger(TouchFinger* list, SDL_FingerID id, bool take_free) {
 }
 
 void Input::process_touch(const SDL_Event& event) {
-    // Convert normalized touch coords to game resolution
+    // El dedo viene normalizado a la VENTANA; hay que descontar el letterbox para caer en
+    // las mismas unidades de juego que dibuja el HUD. Un dedo en la banda negra da valores
+    // fuera de 0..320 / 0..180, que es exactamente lo que la banda inferior del modo
+    // vertical ya asumia (ver render/CLAUDE.md).
     Vec2 touch_pos = {
-        event.tfinger.x * Config::GAME_WIDTH,
-        event.tfinger.y * Config::GAME_HEIGHT
+        (event.tfinger.x - touch_vp.x) / touch_vp.w * Config::GAME_WIDTH,
+        (event.tfinger.y - touch_vp.y) / touch_vp.h * Config::GAME_HEIGHT
     };
 
     bool left_half = (touch_pos.x < Config::GAME_WIDTH * 0.5f);
@@ -289,19 +388,49 @@ void Input::process_touch(const SDL_Event& event) {
         int f = find_finger(touch_fingers, event.tfinger.fingerID, true);
         if (f >= 0) touch_fingers[f] = {event.tfinger.fingerID, true, touch_pos, touch_pos};
 
+        // Candidato a tap: se confirma al SOLTAR si el dedo casi no se ha movido. Es lo
+        // unico que los menus tactiles necesitan saber del tactil.
+        tap_active   = true;
+        tap_finger   = event.tfinger.fingerID;
+        tap_down     = touch_pos;
+        scroll_accum = 0.0f;
+
+        // Fuera de la partida (menus, historia, cartas) el dedo NO mueve al profeta ni
+        // dispara: solo deja el tap para quien lo quiera.
+        if (!touch_ui || !touch_gameplay) return;
+
+        // El mapa grande se cierra con cualquier toque, y ese toque no hace nada mas.
+        if (touch_map_open) {
+            touch_map_open = false;
+            tap_active = false;
+            return;
+        }
+        // Tocar el minimapa abre el mapa grande (mismo rect que dibuja el HUD).
+        if (touch_minimap.w > 0.0f && touch_minimap.contains(touch_pos)) {
+            touch_map_open = true;
+            tap_active = false;
+            return;
+        }
+
         // 1) Los botones se comprueban ANTES que el "tap = ataque": si no, cada milagro
         //    disparaba tambien el cayado.
-        if (touch_ui) {
-            for (auto& b : touch_buttons) {
-                if (b.down || !b.rect.contains(touch_pos)) continue;
-                b.down   = true;
-                b.hold   = 0.0f;
-                b.finger = event.tfinger.fingerID;
-                // Dash y consumible responden al bajar el dedo; los milagros, al subirlo
-                // (hay que distinguir el tap del hold, ver mas abajo).
-                if (b.slot < 0) actions[static_cast<u32>(b.action)] = true;
-                return;
+        for (int bi = 0; bi < TOUCH_BUTTON_COUNT; bi++) {
+            TouchButton& b = touch_buttons[bi];
+            if (!b.enabled || b.down || !b.rect.contains(touch_pos)) continue;
+            SDL_Log("Touch button: %s", touch_btn_name(bi));
+            b.down   = true;
+            b.hold   = 0.0f;
+            b.finger = event.tfinger.fingerID;
+            tap_active = false;   // el boton se lo queda: no es un tap de menu
+            // Dash y arma responden al bajar el dedo; los milagros, al subirlo (hay que
+            // distinguir el tap del hold, ver mas abajo).
+            if (b.slot < 0) {
+                // Pausa y Orar son pulsaciones de UN frame: mantener el dedo encima no
+                // puede pausar dos veces ni encadenar oraciones.
+                if (b.action == Action::Pause || b.action == Action::Pray) pulse(b.action);
+                else actions[static_cast<u32>(b.action)] = true;
             }
+            return;
         }
 
         if (left_half && !joystick_move.active) {
@@ -332,31 +461,39 @@ void Input::process_touch(const SDL_Event& event) {
     }
     else if (event.type == SDL_EVENT_FINGER_MOTION) {
         int f = find_finger(touch_fingers, event.tfinger.fingerID, false);
+        Vec2 prev = (f >= 0) ? touch_fingers[f].pos : touch_pos;
         if (f >= 0) touch_fingers[f].pos = touch_pos;
 
-        // Swipe de dos dedos = pausa. Basta con que UNO de los dos recorra el umbral
-        // mientras hay dos apoyados: pedir que los dos se muevan a la vez fallaba mas
-        // que acertaba.
-        if (touch_ui && !touch_swipe_fired) {
-            int down_count = 0;
-            for (auto& tf : touch_fingers) if (tf.active) down_count++;
-            if (down_count >= 2 && f >= 0 &&
-                (touch_fingers[f].pos - touch_fingers[f].start).length() > TOUCH_SWIPE_PAUSE) {
-                actions[static_cast<u32>(Action::Pause)] = true;
-                touch_pulse[static_cast<u32>(Action::Pause)] = true;
-                touch_swipe_fired = true;
+        // Un dedo que se pasea deja de ser un tap
+        if (tap_active && event.tfinger.fingerID == tap_finger &&
+            (touch_pos - tap_down).length() > TOUCH_TAP_SLOP) {
+            tap_active = false;
+        }
+
+        // Con el juego parado, arrastrar recorre la lista (Codice, Santuario). Scroll
+        // natural: el dedo sube, la seleccion baja.
+        if (!touch_ui || !touch_gameplay) {
+            if (event.tfinger.fingerID == tap_finger) {
+                scroll_accum += touch_pos.y - prev.y;
+                while (scroll_accum <= -TOUCH_SCROLL_STEP) {
+                    pulse(Action::MoveDown);
+                    scroll_accum += TOUCH_SCROLL_STEP;
+                }
+                while (scroll_accum >= TOUCH_SCROLL_STEP) {
+                    pulse(Action::MoveUp);
+                    scroll_accum -= TOUCH_SCROLL_STEP;
+                }
             }
+            return;
         }
 
         // Un dedo que se sale del boton lo suelta: si no, se quedaba pulsado para siempre
-        if (touch_ui) {
-            for (auto& b : touch_buttons) {
-                if (!b.down || b.finger != event.tfinger.fingerID) continue;
-                if (b.rect.contains(touch_pos)) continue;
-                b.down = false;
-                b.hold = 0.0f;
-                if (b.slot < 0) actions[static_cast<u32>(b.action)] = false;
-            }
+        for (auto& b : touch_buttons) {
+            if (!b.down || b.finger != event.tfinger.fingerID) continue;
+            if (b.rect.contains(touch_pos)) continue;
+            b.down = false;
+            b.hold = 0.0f;
+            if (b.slot < 0) actions[static_cast<u32>(b.action)] = false;
         }
 
         if (joystick_move.active && event.tfinger.fingerID == joystick_move.finger_id) {
@@ -375,18 +512,27 @@ void Input::process_touch(const SDL_Event& event) {
     else if (event.type == SDL_EVENT_FINGER_UP) {
         int f = find_finger(touch_fingers, event.tfinger.fingerID, false);
         if (f >= 0) touch_fingers[f].active = false;
-        int still_down = 0;
-        for (auto& tf : touch_fingers) if (tf.active) still_down++;
-        if (still_down == 0) touch_swipe_fired = false;
 
+        // El tap se confirma aqui, tambien con el juego corriendo: es lo que lee la UI.
+        if (tap_active && event.tfinger.fingerID == tap_finger &&
+            (touch_pos - tap_down).length() <= TOUCH_TAP_SLOP) {
+            tap_pending = true;
+            tap_pos     = tap_down;
+        }
+        if (event.tfinger.fingerID == tap_finger) {
+            tap_active   = false;
+            scroll_accum = 0.0f;
+        }
+
+        // Las SUELTAS se atienden siempre, tambien si el juego ya no esta en Playing: el
+        // dedo que estaba disparando al abrir la pausa tiene que soltarse igual.
         if (touch_ui) {
             bool handled = false;
             for (auto& b : touch_buttons) {
                 if (!b.down || b.finger != event.tfinger.fingerID) continue;
                 if (b.slot >= 0 && b.hold < TOUCH_HOLD_INFO) {
                     // Tap corto sobre un milagro: se lanza ahora, un solo frame
-                    actions[static_cast<u32>(b.action)] = true;
-                    touch_pulse[static_cast<u32>(b.action)] = true;
+                    pulse(b.action);
                 } else if (b.slot < 0) {
                     actions[static_cast<u32>(b.action)] = false;
                 }
@@ -488,12 +634,15 @@ Vec2 Input::get_aim_axis() const {
 void Input::rumble(f32 strength, u32 ms) {
     // Puerta unica del ajuste "Vibracion" (GDD 4.2). En un telefono, no poder apagarla es
     // un defecto de accesibilidad y de bateria, no una preferencia estetica.
-    if (!rumble_enabled) return;
-    if (!gamepad || strength <= 0.0f) return;
+    if (!rumble_enabled || strength <= 0.0f) return;
     f32 k = std::min(1.0f, strength);
-    // Motor grave para el peso, agudo para el chasquido: los dos a la vez se sienten
-    // como un golpe, solo el agudo se siente como una notificacion del movil.
-    u16 low  = static_cast<u16>(0xFFFF * k * 0.85f);
-    u16 high = static_cast<u16>(0xFFFF * k);
-    SDL_RumbleGamepad(gamepad, low, high, ms);
+    if (gamepad) {
+        // Motor grave para el peso, agudo para el chasquido: los dos a la vez se sienten
+        // como un golpe, solo el agudo se siente como una notificacion del movil.
+        u16 low  = static_cast<u16>(0xFFFF * k * 0.85f);
+        u16 high = static_cast<u16>(0xFFFF * k);
+        SDL_RumbleGamepad(gamepad, low, high, ms);
+    }
+    // El telefono: un solo motor, asi que la intensidad es el propio `k`.
+    if (haptic) SDL_PlayHapticRumble(haptic, k, ms);
 }

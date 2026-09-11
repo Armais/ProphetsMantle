@@ -218,6 +218,17 @@ struct Renderer {
     Vec2 world_to_screen(Vec2 world_pos) const;
     Vec2 window_to_game(Vec2 window_pos) const;   // Mouse -> 320x180 game coordinates
 
+    // El viewport en FRACCIONES de ventana (0..1). Es lo que necesita el tactil: los
+    // eventos de dedo de SDL vienen normalizados a la ventana entera, no al area de
+    // juego, asi que sin esto un dedo en el borde del mundo se lee dentro del pilar negro.
+    // Mismo sistema de coordenadas que `window_to_game`, expresado sin pixeles.
+    Rect viewport_norm() const {
+        f32 ww = static_cast<f32>(window_w), wh = static_cast<f32>(window_h);
+        if (ww <= 0.0f || wh <= 0.0f || viewport.w <= 0.0f || viewport.h <= 0.0f)
+            return {0.0f, 0.0f, 1.0f, 1.0f};
+        return {viewport.x / ww, viewport.y / wh, viewport.w / ww, viewport.h / wh};
+    }
+
     // Resize handling
     void handle_resize(int new_w, int new_h);
 

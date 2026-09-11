@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MANTLE. Copiado de la plantilla de SDL3 (build/_deps/sdl3-src/android-project) con
+     tres cambios: orientacion apaisada, el nombre COMPLETO de la actividad y solo el
+     permiso de vibracion. versionCode/versionName viven en defaultConfig, no aqui. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    android:installLocation="auto">
+
+    <!-- OpenGL ES 2.0 -->
+    <uses-feature android:glEsVersion="0x00020000" />
+
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <!-- Mandos: soportados, nunca obligatorios -->
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.type.pc"
+        android:required="false" />
+
+    <!-- Lo unico que el juego pide: el vibrador (Input::rumble en movil) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:theme="@style/AppTheme"
+        android:enableOnBackInvokedCallback="false"
+        android:hardwareAccelerated="true" >
+
+        <!-- El nombre va COMPLETO: "SDLActivity" a secas se resolveria contra el paquete
+             de la app (com.mantle.prophet.SDLActivity), que no existe. No hay subclase.
+             screenOrientation="sensorLandscape" es exactamente lo que SDL pide por su
+             cuenta al crear la ventana con SDL_HINT_ORIENTATIONS: si no coinciden, se ve
+             un giro y un re-layout al arrancar. -->
+        <activity android:name="org.libsdl.app.SDLActivity"
+            android:label="@string/app_name"
+            android:screenOrientation="sensorLandscape"
+            android:alwaysRetainTaskState="true"
+            android:launchMode="singleInstance"
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:preferMinimalPostProcessing="true"
+            android:exported="true"
+            >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

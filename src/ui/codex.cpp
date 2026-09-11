@@ -26,6 +26,8 @@ int CodexScreen::entry_count(const SaveData& save, const ItemRegistry& registry)
 
 bool CodexScreen::update(Input& input, const SaveData& save, const ItemRegistry& registry) {
     const int n = entry_count(save, registry);
+    touch_ui = input.touch_ui;   // render() corre despues en el mismo frame
+
 
     if (input.is_action_just_pressed(Action::MoveLeft)) {
         tab = static_cast<CodexTab>((static_cast<int>(tab) + static_cast<int>(CodexTab::COUNT) - 1) %
@@ -43,6 +45,26 @@ bool CodexScreen::update(Input& input, const SaveData& save, const ItemRegistry&
     if (selected < scroll) scroll = selected;
     if (selected >= scroll + VISIBLE_ROWS) scroll = selected - VISIBLE_ROWS + 1;
     scroll = std::max(0, std::min(scroll, std::max(0, n - VISIBLE_ROWS)));
+
+    // --- Toque -----------------------------------------------------------------
+    // Pestana: cambia de pestana. Fila: la SELECCIONA (y con ella su pasaje), no cierra —
+    // la gracia del Codice es leer la ficha, no salir de el. Se sale por "< Volver" o por
+    // el boton atras del telefono (Cancel).
+    Vec2 tp;
+    if (input.take_tap(tp)) {
+        for (int i = 0; i < static_cast<int>(CodexTab::COUNT); i++) {
+            if (!tab_rects[i].contains(tp)) continue;
+            if (i != static_cast<int>(tab)) { tab = static_cast<CodexTab>(i); selected = 0; scroll = 0; }
+            return false;
+        }
+        if (back_rect.w > 0.0f && back_rect.contains(tp)) return true;
+        for (int k = 0; k < row_rect_count; k++) {
+            if (!row_rects[k].contains(tp)) continue;
+            int idx = scroll + k;
+            if (idx < n) selected = idx;
+            return false;
+        }
+    }
 
     return input.is_action_just_pressed(Action::Cancel) ||
            input.is_action_just_pressed(Action::Confirm);
@@ -67,6 +89,7 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     for (int i = 0; i < static_cast<int>(CodexTab::COUNT); i++) {
         bool on = (i == static_cast<int>(tab));
         f32 tw = renderer.measure_text(tabs[i], 0.8f) + 12.0f;
+        tab_rects[i] = {tx, 26.0f, tw, 12.0f};
         if (on) renderer.draw_rect({tx, 26.0f, tw, 12.0f}, {70, 56, 34, 235});
         renderer.draw_rect({tx, on ? 37.0f : 37.5f, tw, on ? 1.5f : 0.5f}, on ? Color{245, 205, 90, 255} : Color{80, 72, 64, 200});
         renderer.draw_text(tabs[i], tx + 6.0f, 28.0f, on ? Color{250, 225, 165, 255} : Color{140, 132, 122, 230}, 0.8f);
@@ -77,7 +100,12 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     const int n = entry_count(save, registry);
     f32 y = 46.0f;
     int shown = 0;
+    row_rect_count = 0;
     for (int i = scroll; i < n && shown < VISIBLE_ROWS; i++, shown++) {
+        if (shown < static_cast<int>(sizeof(row_rects) / sizeof(row_rects[0]))) {
+            row_rects[shown] = {14.0f, y - 1.0f, W - 28.0f, 10.0f};
+            row_rect_count = shown + 1;
+        }
         bool known = false;
         const char* name = "???";
         char buf[64];
@@ -248,6 +276,18 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     renderer.draw_text(count_buf, W - 14.0f - renderer.measure_text(count_buf, 0.7f), 12.0f,
                        {170, 150, 115, 235}, 0.7f);
 
-    renderer.draw_text_centered(tr("[A/D] pestaña   [W/S] mover   [ESC] volver", "[A/D] tab   [W/S] move   [ESC] back"), 171.0f,
-                                {150, 140, 130, 200}, 0.65f);
+    if (touch_ui) {
+        // Un telefono no tiene ESC: sin este boton el Codice seria una trampa para quien
+        // no sepa que el boton atras de Android tambien vale.
+        back_rect = {W - 60.0f, 166.0f, 56.0f, 12.0f};
+        renderer.draw_rect(back_rect, {58, 46, 30, 225});
+        renderer.draw_text(tr("< Volver", "< Back"), back_rect.x + 6.0f, back_rect.y + 2.0f,
+                           {250, 225, 165, 255}, 0.7f);
+        renderer.draw_text(tr("Toca una pestaña o una entrada", "Tap a tab or an entry"), 14.0f, 168.0f,
+                           {150, 140, 130, 200}, 0.65f);
+    } else {
+        back_rect = {0, 0, 0, 0};
+        renderer.draw_text_centered(tr("[A/D] pestaña   [W/S] mover   [ESC] volver", "[A/D] tab   [W/S] move   [ESC] back"), 171.0f,
+                                    {150, 140, 130, 200}, 0.65f);
+    }
 }

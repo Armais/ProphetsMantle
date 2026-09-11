@@ -7,7 +7,8 @@
 # los comandos `touch x y [dedo]` / `drag x y [dedo]` / `untouch x y [dedo]`, en
 # coordenadas de juego (320x180).
 #
-# Botones:  DASH (303,123)  USAR (276,123)   milagros Q (303,155) E (276,155) F (249,155)
+# Botones:  DASH (303,123)  USAR (276,123)  ARMA (249,123)  ORAR (222,123)
+#           milagros Q (303,155) E (276,155) F (249,155)   pausa II (160,10)
 
 wait 1.0
 press confirm
@@ -22,6 +23,8 @@ learn 0 0
 learn 2 1
 learn 9 2
 give 9
+give 0
+meta 5
 wait 0.6
 
 # --- Joystick de movimiento: nace donde baja el dedo, en la mitad izquierda ---
@@ -102,29 +105,31 @@ wait 0.4
 # haciendo que las dos capturas salieran iguales.
 #
 # Ojo con DONDE se toca: la primera version de esta prueba caia sobre un altar del mapa
-# y el adorno del suelo se confundia con la mira. (232, 118) es suelo raso.
+# y el adorno del suelo se confundia con la mira. (232, 100) es suelo raso. Y sobre todo,
+# la sonda NO puede caer en la fila de accion (y 112..134): ahi esta ahora el boton ORAR
+# (x 211..233), que se comprueba antes que el "tap = ataque" y se comia el gesto entero.
 # `rstick 0` explicito: la opcion vive en el guardado y sobrevive entre sesiones, asi que
 # sin esto el caso "sin stick" heredaba el ON de la vuelta anterior.
 rstick 0
 wait 0.2
-touch 232 118
+touch 232 100
 wait 0.1
-drag 233 118
+drag 233 100
 wait 0.3
 shot 98_sin_stick_dcho
 wait 0.1
-untouch 233 118
+untouch 233 100
 wait 0.4
 
 rstick 1
 wait 0.2
-touch 232 118
+touch 232 100
 wait 0.1
-drag 233 118
+drag 233 100
 wait 0.3
 shot 99_con_stick_dcho
 wait 0.1
-untouch 233 118
+untouch 233 100
 wait 0.4
 
 # El reparto de zona con los botones NO se ignora: un dedo que baja DENTRO de una celda
@@ -139,18 +144,33 @@ wait 0.1
 rstick 0
 wait 0.2
 
-# --- Swipe de dos dedos: pausa ---
-touch 120 90 0
-wait 0.15
-touch 175 90 1
-wait 0.15
-drag 175 145 1
+# --- ARMA y ORAR: los dos botones contextuales de la fila de accion ---
+# Solo existen si aplican (`give 0` pone la Honda de David, `meta 5` el Altar Portatil).
+# Gate del log, y por eso existe la linea `Touch button:` — dos iconos sin texto en una
+# captura de 320x180 no dicen cual de los dos respondio:
+#   Touch button: ARMA
+#   Touch button: ORAR   +   Portable altar: prayed in place (+10 faith)
+touch 249 123
+wait 0.2
+untouch 249 123
+wait 0.4
+shot 9B_boton_arma
+wait 0.1
+touch 222 123
+wait 0.2
+untouch 222 123
 wait 0.5
-shot 97_pausa_por_gesto
-wait 0.1
-untouch 175 145 1
-wait 0.1
-untouch 120 90 0
+shot 9C_boton_orar
+wait 0.2
+
+# --- Pausa: el boton II, arriba al centro ---
+# Sustituye al viejo swipe de dos dedos, que chocaba con la postura normal de juego
+# (un dedo en el stick + otro apuntando). Gate: la linea `Scene change: 2 -> 3`.
+touch 160 10
+wait 0.15
+untouch 160 10
+wait 0.5
+shot 97_pausa_por_boton
 wait 0.3
 
 quit

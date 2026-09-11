@@ -51,3 +51,12 @@ tools/blender/blend/
 *.js
 *.html
 !src/**/*.html
+
+# Android (Gradle). `build/` ya cubre android/app/build; esto es lo demas.
+# El wrapper (gradle-wrapper.jar, gradlew, gradlew.bat) y los PNG de res/ SI se versionan:
+# sin ellos el proyecto no compila en otra maquina.
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+*.apk
+*.aab

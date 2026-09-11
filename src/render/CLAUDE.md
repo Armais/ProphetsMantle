@@ -22,7 +22,16 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
   gameplay ve la resolucion). En `tools/`, `render.render_sheet` ya **no** cuantiza por
   defecto (`quantize=False`), que es lo que run.py pedia desde siempre.
 
-### Orientacion VERTICAL en movil (GDD 4.5, 2026-08-25)
+### Orientacion VERTICAL en movil — DORMIDA (GDD 4.5, 2026-08-25)
+
+> **Horizontal forzado desde 2026-09-11.** En movil `Engine::init` pide
+> `SDL_HINT_ORIENTATIONS = "LandscapeLeft LandscapeRight"` y el manifest de Android nace con
+> `screenOrientation="sensorLandscape"`, asi que `bottom_band_units()` devuelve 0 y los
+> botones nunca bajan a la banda. **Nada de esta seccion se ha borrado y sigue compilado y
+> verificado** (`scripts/vertical_check.txt` pasa): es el mecanismo que habria que despertar
+> si algun dia vuelve el vertical, y es tambien lo que explica por que un dedo puede dar
+> coordenadas FUERA de 0..320 / 0..180 sin que eso sea un error.
+
 
 **El area de juego sigue siendo 320x180 y se centra.** Recortar el mundo visible cambiaria
 el juego, no la presentacion. `Renderer::calculate_viewport` ya centraba **cualquier**
@@ -59,3 +68,17 @@ unico que cambia es **donde caben los controles**.
 poder probar esto en un escritorio, sin un telefono delante. Guion:
 `scripts/vertical_check.txt` (`--touch --window 540x960`). Con 540x960 la escala es 1,6875,
 el area de juego mide 540x304 y quedan 328 px = **194 unidades** de banda arriba y abajo.
+
+### El letterbox tambien vale para el DEDO (2026-09-11)
+
+`Renderer::viewport_norm()` devuelve el viewport en **fracciones de ventana**, y el Engine se
+lo pasa a `Input::set_touch_viewport` al crear la ventana y en cada `RESIZED`. Sin eso, los
+eventos `SDL_EVENT_FINGER_*` —que SDL normaliza a la **ventana entera**, no al area de
+juego— se leian ~29 unidades a la izquierda en un movil de 20:9, y la celda Q del HUD
+lanzaba el milagro de la celda E. El raton ya pasaba por `window_to_game`; esto es su
+equivalente para el tactil, y por eso **el hit-test sigue sin saber nada del letterbox**.
+
+Guion: **`scripts/tactil_ancho_check.txt`** (`--touch --window 1200x540`, viewport
+`{120, 0, 960, 540}`). Los comandos `touch/drag/untouch` de siempre **no** habrian cazado
+esto: aplican la inversa exacta de la misma transformacion. Los nuevos
+`touchpx/dragpx/untouchpx` hablan en **pixeles de ventana**, como un dedo.

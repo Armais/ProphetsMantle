@@ -1,0 +1,78 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = "com.mantle.prophet"
+    compileSdk 35
+    ndkVersion = "28.2.13676358"   // el instalado en el SDK de esta maquina
+
+    defaultConfig {
+        applicationId "com.mantle.prophet"   // el mismo bundle que el de iOS en CMakeLists
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_static"
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+
+    // El CMakeLists de la RAIZ, el mismo que compila el escritorio. La plantilla de SDL
+    // trae un interruptor -PBUILD_WITH_CMAKE que cae a ndk-build por defecto: aqui no
+    // existe esa ruta, y olvidar el -P daria un APK sin codigo nativo que arranca y muere.
+    externalNativeBuild {
+        cmake {
+            path '../../CMakeLists.txt'
+            version "3.22.1"   // el unico CMake del SDK de Android; trae su propio ninja
+        }
+    }
+
+    sourceSets.main {
+        // Los .java de org.libsdl.app se leen DESDE las fuentes de SDL, no se copian: una
+        // copia se desincroniza de libSDL3.so en cuanto se actualice SDL, y el Java y el
+        // nativo de SDL tienen que ser de la misma revision.
+        java.srcDirs += ['../../build/_deps/sdl3-src/android-project/app/src/main/java']
+        // assets/ va PLANO en la raiz de los assets del APK: get_asset_path() devuelve ""
+        // en Android, asi que el juego pide "assets/sprites/tiles.png" -> "sprites/..."
+        // relativo al AssetManager. Nada de assets/assets/.
+        assets.srcDirs = ['../../assets']
+    }
+
+    androidResources {
+        // FreeType hace seeks dentro del .ttf y sobre un asset comprimido eso obliga a
+        // descomprimirlo entero. Los .png y los .ogg ya van sin comprimir por defecto.
+        noCompress 'ttf'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // De la plantilla de SDL: los assets se funden DESPUES de compilar lo nativo.
+    applicationVariants.all { variant ->
+        tasks["merge${variant.name.capitalize()}Assets"]
+            .dependsOn("externalNativeBuild${variant.name.capitalize()}")
+    }
+
+    lint {
+        abortOnError = false
+    }
+}
+
+dependencies {
+}

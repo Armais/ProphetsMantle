@@ -1,0 +1,51 @@
+# Verificacion: el tactil responde DONDE se dibuja, en una pantalla ancha (20:9)
+# Uso:  MANTLE.exe --touch --window 1200x540 --script scripts/tactil_ancho_check.txt
+#
+# Por que existe: los eventos de dedo de SDL vienen normalizados a la VENTANA ENTERA, no
+# al area de juego. En 16:9 no se nota (no hay pilares), pero en el 20:9 de un movil el
+# letterbox deja dos pilares negros de 120 px y, sin descontarlos, un dedo puesto ENCIMA
+# del boton dibujado se leia ~29 unidades a la izquierda: la celda Q lanzaba el milagro
+# de la celda E. Los comandos `touch/drag/untouch` NO sirven para cazar esto porque
+# aplican la inversa exacta de la misma transformacion; por eso aqui se usan las
+# variantes `touchpx/dragpx/untouchpx`, que hablan en PIXELES DE VENTANA como un dedo.
+#
+# Ventana 1200x540 -> escala entera 3, viewport {120, 0, 960, 540}.
+# Celda Q (milagro 1) dibujada en unidades de juego (292..314, 144..166), centro (303,155)
+#   -> pixeles de ventana: 120 + 303*3 = 1029 , 155*3 = 465
+#
+# GATE (leer el log, no las capturas):
+#   1) tiene que salir   Cast miracle: Cuervos de Querit
+#      Si sale "Fuego del Cielo" el desfase del letterbox ha vuelto (celda E en vez de Q).
+#   2) el toque en el pilar izquierdo (px 40) NO puede lanzar ningun milagro.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+faith 100
+learn 0 0
+learn 2 1
+learn 9 2
+wait 0.6
+
+# --- El pilar negro no es el juego: un dedo ahi no puede pulsar un boton ---
+touchpx 40 465
+wait 0.15
+untouchpx 40 465
+wait 0.5
+shot A0_pilar_izquierdo
+wait 0.1
+
+# --- Celda Q, tocada en los pixeles EXACTOS en los que se dibuja ---
+touchpx 1029 465
+wait 0.15
+untouchpx 1029 465
+wait 0.7
+shot A1_milagro_q_en_20_9
+wait 0.3
+
+quit

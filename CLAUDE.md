@@ -26,6 +26,37 @@ cmake --build build --config Release
 
 The executable is output to the project root (`MANTLE.exe`, see `RUNTIME_OUTPUT_DIRECTORY` in CMakeLists.txt) so that the relative `assets/` path resolves; `build/Release/MANTLE.exe` is a stale copy.
 
+### Android (APK de depuracion, arm64-v8a)
+
+```bat
+build_android.bat            :: compila -> android\app\build\outputs\apk\debug\app-debug.apk
+build_android.bat install    :: ademas lo instala por adb y lo lanza
+```
+
+El proyecto Gradle vive en **`android/`** y llama al **mismo `CMakeLists.txt` de la raiz**
+(`externalNativeBuild.cmake.path '../../CMakeLists.txt'`). Lo que hay que saber antes de
+tocarlo:
+
+- **CMake 3.22.1** — el unico que trae el SDK de Android, y por eso la raiz declara
+  `cmake_minimum_required(VERSION 3.22...3.24)` y `OVERRIDE_FIND_PACKAGE` se pasa solo con
+  CMake >= 3.24. No hace falta instalar nada: ese CMake trae su propio `ninja.exe`.
+- **JDK**: el `JAVA_HOME` del sistema apunta a un JDK de Unity desinstalado. `build_android.bat`
+  usa el **JBR de Android Studio** (`C:\Program Files\Android\Android Studio\jbr`).
+- **NDK 28.2.13676358**, Gradle **8.10.2** (ya cacheado; la plantilla de SDL pide la 8.12, que
+  habria que descargar), AGP 8.7.3, compile/target SDK 35, minSdk 21.
+- En Android **SDL3 se compila SHARED** (`libSDL3.so`, que `SDLActivity` carga por nombre) y
+  la del juego se llama **`libmain.so`** (`OUTPUT_NAME main`): son las dos de
+  `SDLActivity.getLibraries()`. Por eso `src/main.cpp` incluye `<SDL3/SDL_main.h>`. Los tres
+  satelites (image/mixer/ttf) y sus dependencias van **estaticos** dentro de `libmain.so`.
+- Los `.java` de `org.libsdl.app` **no se copian**: `sourceSets` los lee de
+  `build/_deps/sdl3-src/android-project/`, para que Java y nativo no se desincronicen.
+- `assets/` se empaqueta **plano** en la raiz de los assets del APK: `get_asset_path()`
+  devuelve `""` en Android y el AssetManager ya tiene `assets/` por raiz.
+- El log del motor sale con la etiqueta **`SDL/APP`**, no `MANTLE`:
+  `adb logcat -s SDL:V SDL/APP:V SDL/ERROR:V AndroidRuntime:E DEBUG:F`.
+- **Horizontal forzado** (2026-09-11): `SDL_HINT_ORIENTATIONS` + `screenOrientation="sensorLandscape"`.
+  Los controles tactiles de menus y HUD estan en `src/input/CLAUDE.md`.
+
 Detalle del icono, el logo y su empaquetado: `tools/branding/CLAUDE.md`.
 
 ### IMPORTANT: Always build after finishing an implementation

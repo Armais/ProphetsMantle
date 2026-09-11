@@ -37,6 +37,15 @@ struct CodexScreen {
     int selected = 0;
     int scroll   = 0;
 
+    // Rects tactiles, apuntados al PINTAR (de ahi el `mutable`: render es const y es el
+    // unico sitio que sabe donde ha quedado cada pestana, que se mide por texto). Sin
+    // esto el hit-test tendria que recalcular anchos de texto y se separaria del dibujo.
+    mutable Rect tab_rects[static_cast<int>(CodexTab::COUNT)] = {};
+    mutable Rect row_rects[8] = {};       // VISIBLE_ROWS filas de la ventana
+    mutable int  row_rect_count = 0;
+    mutable Rect back_rect = {0, 0, 0, 0};   // "< Volver", solo en tactil
+    bool touch_ui = false;                   // lo pone update() desde Input
+
     // true = el jugador ha pedido cerrar
     bool update(Input& input, const SaveData& save, const ItemRegistry& registry);
     // `portraits` puede ser TEXTURE_NONE: el Codice se dibuja igual, solo que sin retrato.

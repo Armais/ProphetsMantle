@@ -66,8 +66,24 @@ struct MenuSystem {
     // nullptr = se vio (o aun no aplica).
     const char* victory_note = nullptr;
 
+    // Toque en los menus (movil). Cada render_* apunta el rect de SUS filas y `update`
+    // busca ahi el tap: una sola formula, la misma que pinta. Tocar una fila la elige Y la
+    // confirma; en Opciones, la mitad izquierda baja el valor y la derecha lo sube.
+    static constexpr int MAX_ROW_RECTS = 9;
+    Rect row_rects[MAX_ROW_RECTS] = {};
+    int  row_rect_count = 0;
+    MenuScreen rect_screen = MenuScreen::Title;   // pantalla a la que pertenecen los rects
+    // Las lineas de ayuda hablan de teclas o de dedos. Lo pone el Engine desde
+    // Input::touch_ui: "[ENTER] Seleccionar" en un telefono no ayuda a nadie.
+    bool touch_hints = false;
+
     void update(Input& input);
     void render(Renderer& renderer);
+
+private:
+    // Apunta el rect de la fila i tal como se acaba de dibujar (y = linea, step = paso).
+    void mark_row(int i, f32 y, f32 step);
+public:
 
 private:
     void render_title(Renderer& renderer);

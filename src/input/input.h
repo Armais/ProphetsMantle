@@ -36,7 +36,7 @@ enum class Action : u32 {
     Consumable,     // R / X
 
     // UI
-    Pause,          // Esc / Start / Swipe 2 dedos
+    Pause,          // Esc / Start / Boton II / Atras de Android
     Map,            // Tab / Select
     Interact,       // Y
     Pray,           // D-Pad Up
@@ -77,23 +77,37 @@ struct VirtualJoystick {
 // franja de la derecha que no pisa ni el minimapa (arriba) ni la barra de jefe (centro
 // abajo, x 80..240).
 //
-//        [Cons] [Dash]     y 116..138
-//   [F]  [ E ]  [ Q ]      y 144..166
+//                    [ II ]                 y 3..17  (arriba, centrado)
+//   [Orar] [Arma] [Cons] [Dash]    y 112..134
+//           [F]   [ E ]  [ Q ]     y 144..166
 //
+// ORAR y ARMA solo existen si el profeta puede rezar / lleva arma secundaria: por eso
+// cada boton lleva `enabled`, que apaga a la vez el DIBUJO y el HIT-TEST. Antes el
+// hit-test probaba los cinco rects aunque el HUD no pintara ninguno, y quedaban huecos
+// muertos donde el dedo no hacia nada ni disparaba.
 struct TouchButton {
     Rect   rect   = {0, 0, 0, 0};
     Action action = Action::COUNT;
     int    slot   = -1;     // slot de milagro (0..2); -1 = no es un milagro
     SDL_FingerID finger = 0;
     bool   down   = false;
+    bool   enabled = true;  // false = ni se dibuja ni responde
     f32    hold   = 0.0f;   // segundos pulsado
 };
 
-constexpr int TOUCH_BUTTON_COUNT = 5;    // dash, consumible, milagro 1-3
+// dash, consumible, milagro 1-3, arma secundaria, orar, pausa
+constexpr int TOUCH_BUTTON_COUNT = 8;
+constexpr int TOUCH_BTN_DASH     = 0;
+constexpr int TOUCH_BTN_CONS     = 1;
+constexpr int TOUCH_BTN_MIRACLE  = 2;   // 2, 3, 4
+constexpr int TOUCH_BTN_WEAPON   = 5;
+constexpr int TOUCH_BTN_PRAY     = 6;
+constexpr int TOUCH_BTN_PAUSE    = 7;
 constexpr int TOUCH_MAX_FINGERS  = 4;
 constexpr f32 TOUCH_HOLD_INFO    = 0.4f; // hold sobre un milagro = ficha, no lanzarlo
 constexpr f32 TOUCH_DRAG_AIM     = 6.0f; // unidades que hay que arrastrar para apuntar
-constexpr f32 TOUCH_SWIPE_PAUSE  = 30.0f;// unidades de swipe a 2 dedos para pausar
+constexpr f32 TOUCH_TAP_SLOP     = 6.0f; // un dedo que se mueve mas que esto no es un tap
+constexpr f32 TOUCH_SCROLL_STEP  = 10.0f;// unidades de arrastre por paso de lista
 
 struct TouchFinger {
     SDL_FingerID id     = 0;
@@ -120,6 +134,10 @@ struct Input {
     SDL_Gamepad* gamepad = nullptr;
     SDL_JoystickID gamepad_id = 0;
 
+    // Vibrador del telefono (SDL3 trae backend haptico en Android). Solo se abre en movil:
+    // en escritorio la vibracion sigue siendo cosa del mando y nada cambia.
+    SDL_Haptic* haptic = nullptr;
+
     // Touch (mobile)
     VirtualJoystick joystick_move;
     VirtualJoystick joystick_aim;  // Apuntado manual: hold + drag en la mitad derecha
@@ -136,7 +154,35 @@ struct Input {
     int  touch_info_slot   = -1;      // slot cuya ficha se esta mostrando (hold), -1 = ninguna
     bool touch_aim_active  = false;   // hay un dedo apuntando a mano en la mitad derecha
     SDL_FingerID touch_aim_finger = 0;
-    bool touch_swipe_fired = false;   // el swipe de 2 dedos ya ha pausado esta vez
+
+    // Solo en `Playing` hay stick, ataque por tap y botones. Con esto apagado el dedo no
+    // mueve al profeta desde un menu, pero las SUELTAS se siguen procesando siempre: si no,
+    // el dedo que estaba disparando al pausar se quedaba pulsado al volver.
+    bool touch_gameplay = false;
+
+    // Tap para la UI: un dedo que baja y sube casi en el mismo sitio. Lo consume
+    // `take_tap`, y `pre_update` lo tira si nadie lo recogio (un tap no dura dos frames).
+    bool tap_pending = false;
+    Vec2 tap_pos     = {0, 0};
+    Vec2 tap_down    = {0, 0};
+    SDL_FingerID tap_finger = 0;
+    bool tap_active  = false;
+    f32  scroll_accum = 0.0f;      // arrastre vertical acumulado con el juego parado
+
+    // Minimapa tocable: tocarlo abre/cierra el mapa grande. El rect lo escribe Engine con
+    // HUD::minimap_rect, para que dibujo y hit-test salgan de la MISMA formula.
+    Rect touch_minimap  = {0, 0, 0, 0};
+    bool touch_map_open = false;
+
+    // Viewport del renderer en fracciones de ventana. Los eventos de dedo de SDL estan
+    // normalizados a la VENTANA, no al area de juego: sin esta transformacion un movil de
+    // 20:9 responde a los botones ~200 px a la derecha de donde se dibujan. El raton ya
+    // pasaba por Renderer::window_to_game; esto es su equivalente para el tactil.
+    // {0,0,1,1} = sin letterbox (lo que hacia el codigo viejo).
+    Rect touch_vp = {0.0f, 0.0f, 1.0f, 1.0f};
+    void set_touch_viewport(Rect vp) {
+        if (vp.w > 0.0f && vp.h > 0.0f) touch_vp = vp;
+    }
 
     // Ajustes del jugador (GDD 4.2). Los escribe Engine::apply_settings_from_save desde
     // SaveData; Input no sabe que existe un fichero de guardado.
@@ -169,6 +215,7 @@ struct Input {
 
     // Init
     void init();
+    void shutdown();   // cierra el haptico; el mando lo cierra SDL_Quit
     // Rects de los botones tactiles, en unidades de juego. `band_below` son las unidades
     // de banda negra que hay bajo el area de juego (0 en apaisado): si caben, los botones
     // BAJAN a la banda, que es donde estan los pulgares en un movil en vertical y donde no
@@ -176,6 +223,27 @@ struct Input {
     // contrato es lo que impide que el dibujo y el hit-test se separen.
     void init_touch_layout(f32 band_below = 0.0f);
     f32  touch_band = 0.0f;       // la banda con la que se monto el layout actual
+    // Enciende/apaga los botones contextuales. Lo llama Engine::update cada paso: el HUD
+    // y el hit-test leen el MISMO `enabled`, asi que no pueden desincronizarse.
+    void set_touch_enabled(bool consumable, int miracle_slots, bool weapon, bool pray, bool pause);
+
+    // Consume el tap pendiente (coordenadas de juego). Devuelve false si no hay ninguno.
+    bool take_tap(Vec2& out) {
+        if (!tap_pending) return false;
+        tap_pending = false;
+        out = tap_pos;
+        return true;
+    }
+    // Pulsacion de un solo frame, como un tap sobre un milagro. La usa la UI tactil para
+    // hablar el mismo idioma que el teclado (Confirm, MoveLeft/Right...) sin que ningun
+    // menu tenga que saber que existe el tactil.
+    void pulse(Action a) {
+        actions[static_cast<u32>(a)] = true;
+        touch_pulse[static_cast<u32>(a)] = true;
+    }
+    // Suelta TODO el estado tactil. Al irse a segundo plano Android no entrega los
+    // FINGER_UP y el profeta volvia corriendo y disparando.
+    void release_touch();
     void update_touch(f32 dt);    // temporizadores de hold (ficha del milagro)
 
     // Per-frame
@@ -200,9 +268,10 @@ struct Input {
     // Device detection
     bool has_gamepad() const { return gamepad != nullptr; }
 
-    // Rumble (GDD: solo mando; teclado y tactil no se enteran). `strength` 0..1,
-    // `ms` la duracion. Sin mando conectado es una llamada vacia, asi que el motor
-    // puede pedirlo sin preguntar antes.
+    // Rumble. `strength` 0..1, `ms` la duracion. En escritorio es el mando; en movil, el
+    // vibrador del propio telefono. Sin ninguno de los dos es una llamada vacia, asi que
+    // el motor puede pedirlo sin preguntar antes. `rumble_enabled` sigue siendo la UNICA
+    // puerta del ajuste: apaga los dos caminos.
     void rumble(f32 strength, u32 ms);
 
 private:

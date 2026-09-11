@@ -69,6 +69,9 @@ struct ChoiceCard {
 
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,
                        int count, int selected, u32 tileset);
+// Rect de la carta i, en unidades de juego. Lo usan el DIBUJO y el hit-test tactil: una
+// sola formula, para que tocar una carta no dependa de recordar el reparto.
+Rect choice_card_rect(int i, int count);
 // `defs[i]` may be null if an offer could not be rolled.
 // `act_one`: en el Acto II ya no hay a quien heredar, asi que la etiqueta se calla.
 // `held_relic`: nombre de la reliquia que se lleva puesta, o nullptr. Las reliquias van a
@@ -93,9 +96,15 @@ struct DialogueView {
     int  option_count = 0;
     int  selected     = 0;
     bool more_lines   = false;                  // Quedan lineas: el pie dice "seguir"
+    bool touch        = false;                  // pie con gestos en vez de teclas
 };
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits = TEXTURE_NONE);
+// Idem para las opciones del encuentro (y del Ascenso, que usa la misma pantalla). El
+// alto de la caja depende de cuantas lineas ocupe el texto, asi que el rect no se puede
+// recalcular a ciegas: lo apunta draw_dialogue y esto lo devuelve. Rect vacio si esa
+// opcion no se ha pintado.
+Rect dialogue_option_rect(int i);
 
 struct HUD {
     bool visible = true;
@@ -109,6 +118,9 @@ struct HUD {
     // Idem: en vertical las celdas de milagro se pintan en la banda, fuera del mundo.
     void draw_miracle_slots(Renderer& renderer, const Player& player, const HUDContext& ctx,
                             const FaithSystem& faith);
+    // Rect del minimapa pequeno. Publico porque el Engine se lo pasa a Input para que
+    // tocarlo abra el mapa grande: dibujo y hit-test salen de la MISMA formula.
+    static Rect minimap_rect(const FloorMap& fm);
 
 private:
     void draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDContext& ctx);

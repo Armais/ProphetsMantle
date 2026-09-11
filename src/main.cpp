@@ -16,6 +16,9 @@
 // =============================================================================
 
 #include "core/engine.h"
+// SDL_main.h hace `#define main SDL_main`. En Android es obligatorio: SDLActivity busca el
+// simbolo SDL_main por dlsym dentro de libmain.so y muere si no lo encuentra.
+#include <SDL3/SDL_main.h>
 #include <cstring>
 #include <cstdio>
 

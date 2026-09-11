@@ -56,6 +56,13 @@ static void web_main_loop() {
 // Init
 // =============================================================================
 bool Engine::init(const char* title) {
+#if defined(MANTLE_PLATFORM_MOBILE)
+    // Horizontal forzado (decision 2026-09-11). SDL lo traduce a
+    // SCREEN_ORIENTATION_USER_LANDSCAPE al crear la ventana; el manifest ademas nace con
+    // screenOrientation="sensorLandscape" para que no haya un giro visible al arrancar.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
+
     // SDL init
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         SDL_Log("Failed to init SDL: %s", SDL_GetError());
@@ -155,6 +162,7 @@ bool Engine::init(const char* title) {
     // El reparto de los botones tactiles depende de cuanta banda negra deje el letterbox,
     // y eso solo se sabe con la ventana ya creada.
     input.init_touch_layout(renderer.bottom_band_units());
+    input.set_touch_viewport(renderer.viewport_norm());
 
     if (!audio.init()) {
         SDL_Log("Failed to init audio (continuing without sound)");
@@ -256,6 +264,7 @@ void Engine::load_sprites() {
 // Shutdown
 // =============================================================================
 void Engine::shutdown() {
+    input.shutdown();
     audio.shutdown();
     renderer.shutdown();
     world.clear();
@@ -330,6 +339,7 @@ void Engine::handle_events() {
                 // Girar el telefono cambia cuanta banda negra hay, y con ella si los
                 // botones tactiles caben fuera del mundo o no.
                 input.init_touch_layout(renderer.bottom_band_units());
+                input.set_touch_viewport(renderer.viewport_norm());
                 break;
 
             case SDL_EVENT_KEY_DOWN:
@@ -337,6 +347,35 @@ void Engine::handle_events() {
                     screenshot_requested = true;
                 }
                 input.process_event(event);
+                break;
+
+            // --- Ciclo de vida (Android / iOS) ---------------------------------
+            // El sistema puede matar la app sin avisar otra vez, asi que aqui se guarda
+            // SIEMPRE: es el ultimo momento garantizado. SDL ya pausa el audio y bloquea
+            // el bucle por su cuenta, de eso no hay que ocuparse.
+            case SDL_EVENT_WILL_ENTER_BACKGROUND:
+            case SDL_EVENT_TERMINATING:
+                SDL_Log("Lifecycle: entering background (scene %d)", static_cast<int>(state.scene));
+                if (state.scene == GameScene::Playing) change_scene(GameScene::Paused);
+                if (state.scene == GameScene::Paused) {
+                    populate_save_data();
+                    save.save();
+                }
+                // Android no entrega los FINGER_UP al irse: sin esto el profeta volvia
+                // corriendo y disparando.
+                input.release_touch();
+                break;
+
+            case SDL_EVENT_DID_ENTER_FOREGROUND:
+                // El reloj ha seguido corriendo con la app parada: sin rearmarlo, el primer
+                // frame de vuelta traeria un dt enorme.
+                last_time = SDL_GetPerformanceCounter();
+                input.release_touch();
+                SDL_Log("Lifecycle: back in foreground");
+                break;
+
+            case SDL_EVENT_LOW_MEMORY:
+                SDL_Log("Lifecycle: LOW MEMORY warning from the system");
                 break;
 
             default:
@@ -354,6 +393,27 @@ void Engine::handle_events() {
 // =============================================================================
 void Engine::update(f32 dt) {
     if (autoplay.active) update_autoplay(dt);
+    // Solo se juega en `Playing`: fuera de ahi el dedo no mueve al profeta ni dispara,
+    // solo deja taps para los menus.
+    input.touch_gameplay = (state.scene == GameScene::Playing);
+    menus.touch_hints = input.touch_ui;   // las lineas de ayuda hablan de teclas o de dedos
+    if (input.touch_ui) {
+        if (input.touch_gameplay) {
+            // Botones contextuales. Las condiciones son las MISMAS que usa el gameplay:
+            // ORAR repite la del "Altar Portatil" (mejora 5), ARMA la del arma equipada.
+            input.set_touch_enabled(player.consumable_slot != UINT32_MAX,
+                                    player.active_slot_count,
+                                    player.weapon_slot != UINT32_MAX,
+                                    progression.is_unlocked(5) && !portable_altar_used,
+                                    true);
+            input.touch_minimap = HUD::minimap_rect(floor_map);
+        } else {
+            // Fuera de la partida no hay botones que tocar (ni huecos muertos)
+            input.set_touch_enabled(false, 0, false, false, false);
+            input.touch_minimap = {0, 0, 0, 0};
+            input.touch_map_open = false;
+        }
+    }
     input.update_touch(dt);   // hold sobre un boton de milagro = su ficha
     audio.update(dt);   // recuperacion del ducking de la musica
     if (voice_cooldown > 0.0f) voice_cooldown -= dt;   // espera entre exclamaciones
@@ -374,6 +434,7 @@ void Engine::update(f32 dt) {
 
     switch (state.scene) {
         case GameScene::Intro:
+            { Vec2 tp; if (input.take_tap(tp)) input.pulse(Action::Confirm); }
             if (cinematic.update(input, dt, renderer)) {
                 if (cine_then == CineThen::Play) {
                     // Intro de capitulo: se ve una vez por partida, sus capas no vuelven
@@ -394,6 +455,7 @@ void Engine::update(f32 dt) {
             if (menus.current == MenuScreen::Settings) {
                 update_settings();
             } else if (menus.current == MenuScreen::Controls) {
+                menus.update(input);   // en tactil, un toque en cualquier sitio confirma
                 if (input.is_action_just_pressed(Action::Confirm) ||
                     input.is_action_just_pressed(Action::Cancel)) {
                     menus.current = MenuScreen::Title;
@@ -694,7 +756,9 @@ void Engine::update(f32 dt) {
                     miracle_hint_shown = true;
                     SDL_Log("Miracle hint shown (slot Q: %s)", get_miracle_def(q.miracle).name);
                     char hint[96];
-                    snprintf(hint, sizeof(hint), tr("Pulsa [Q]: %s  ·  %.0f de fe", "Press [Q]: %s  ·  %.0f faith"),
+                    snprintf(hint, sizeof(hint),
+                             input.touch_ui ? tr("Toca el milagro: %s  ·  %.0f de fe", "Tap the miracle: %s  ·  %.0f faith")
+                                            : tr("Pulsa [Q]: %s  ·  %.0f de fe", "Press [Q]: %s  ·  %.0f faith"),
                              get_miracle_def(q.miracle).name, get_miracle_def(q.miracle).faith_cost);
                     show_message(hint, 3.5f);
                 }
@@ -707,6 +771,7 @@ void Engine::update(f32 dt) {
                 faith.on_pray();
                 if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
                     world.healths[player.entity].heal(10.0f);
+                SDL_Log("Portable altar: prayed in place (+10 faith)");
                 show_message(tr("Oras donde estás  +10 Fe", "You pray where you stand  +10 Faith"), 2.0f);
                 audio.play_sfx(SfxID::FaithGain);
             }
@@ -808,6 +873,9 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Story:
+            // En tactil, un toque en cualquier sitio pasa de linea (story.update ya lee
+            // Confirm). Saltar la escena entera sigue siendo Cancel = el boton atras.
+            { Vec2 tp; if (input.take_tap(tp)) input.pulse(Action::Confirm); }
             if (story.update(input, dt, renderer)) finish_story();
             break;
 
@@ -839,6 +907,7 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Victory:
+            menus.update(input);   // en tactil, un toque en cualquier sitio confirma
             if (input.is_action_just_pressed(Action::Confirm)) {
                 save.delete_save();
                 change_scene(GameScene::MainMenu);
@@ -933,7 +1002,7 @@ void Engine::render() {
         ctx.message = message_timer > 0.0f ? message_text.c_str() : nullptr;
         ctx.message_t = message_timer;
         ctx.time = world.time;
-        ctx.show_map = input.is_action_pressed(Action::Map);
+        ctx.show_map = input.is_action_pressed(Action::Map) || input.touch_map_open;
         ctx.map_revealed = player.map_revealed;
         ctx.tileset = tileset_texture;
         ctx.registry = &item_registry;
@@ -1004,6 +1073,7 @@ void Engine::render() {
             DialogueView v;
             v.speaker  = def.speaker;
             v.portrait = def.portrait;
+            v.touch    = input.touch_ui;
             if (dialogue.resolved) {
                 v.body = dialogue.result;
             } else if (dialogue.choosing) {
@@ -1965,6 +2035,28 @@ void Engine::update_sanctuary() {
         sanctuary_scroll = sanctuary_sel - SANCTUARY_ROWS + 1;
     sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
 
+    // Toque: la fila que se toca se elige Y se compra. Los rects son los MISMOS que pinta
+    // render_sanctuary (filas visibles desde y=48, paso 14,5; "Volver" al pie).
+    Vec2 tp;
+    if (input.take_tap(tp)) {
+        const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
+        const int last  = std::min(n, first + SANCTUARY_ROWS);
+        const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+        bool hit = false;
+        for (int i = first; i < last; i++) {
+            f32 y = 48.0f + (i - first) * 14.5f;
+            if (!Rect{12.0f, y - 1.5f, W - 24.0f, 15.0f}.contains(tp)) continue;
+            sanctuary_sel = i;
+            hit = true;
+            break;
+        }
+        if (!hit && Rect{100.0f, 150.0f, 120.0f, 14.0f}.contains(tp)) {
+            sanctuary_sel = n;   // "Volver"
+            hit = true;
+        }
+        if (hit) input.pulse(Action::Confirm);
+    }
+
     if (input.is_action_just_pressed(Action::Cancel)) { change_scene(GameScene::MainMenu); return; }
     if (!input.is_action_just_pressed(Action::Confirm)) return;
 
@@ -2044,8 +2136,11 @@ void Engine::render_sanctuary() {
     bool back_on = (sanctuary_sel >= n);
     renderer.draw_text_centered(back_on ? tr("> Volver", "> Back") : tr("  Volver", "  Back"), 156.0f,
                                 back_on ? Color::elias_gold() : Color{140, 130, 120, 235}, 0.85f);
-    renderer.draw_text_centered(tr("[W/S] mover   [ENTER] comprar   [ESC] volver",
-                                   "[W/S] move   [ENTER] buy   [ESC] back"), 170.0f,
+    renderer.draw_text_centered(input.touch_ui
+                                    ? tr("Toca una mejora para comprarla   ·   arrastra para recorrer",
+                                         "Tap an upgrade to buy it   ·   drag to scroll")
+                                    : tr("[W/S] mover   [ENTER] comprar   [ESC] volver",
+                                         "[W/S] move   [ENTER] buy   [ESC] back"), 170.0f,
                                 {130, 122, 112, 200}, 0.65f);
     (void)H;
 }
@@ -3035,6 +3130,25 @@ void Engine::update_dialogue(f32 dt) {
         if (input.is_action_just_pressed(Action::MoveDown))
             dialogue.selected = (dialogue.selected + 1) % opt_count;
     }
+
+    // Toque. Con decision en pantalla hacen falta DOS toques (el primero elige, el segundo
+    // decide): una decision del GDD no puede perderse por un dedo mal puesto. Sin decision,
+    // tocar en cualquier sitio pasa de linea.
+    Vec2 tp;
+    if (input.take_tap(tp)) {
+        if (dialogue.choosing && !dialogue.resolved) {
+            for (int i = 0; i < opt_count && i < 2; i++) {
+                Rect r = dialogue_option_rect(i);
+                if (r.w <= 0.0f || !r.contains(tp)) continue;
+                if (i == dialogue.selected) confirm = true;
+                else { dialogue.selected = i; audio.play_sfx(SfxID::MenuSelect, 0.6f); }
+                break;
+            }
+        } else {
+            confirm = true;
+        }
+    }
+
     if (!confirm) return;
 
     if (!dialogue.choosing) {
@@ -3429,6 +3543,18 @@ void Engine::update_item_choice(f32 dt) {
         audio.play_sfx(SfxID::MenuSelect, 0.6f);
     }
 
+    // Toque: dos toques. El primero elige la carta, el segundo la toma. Una carta es una
+    // decision de partida entera; tomarla con un dedo resbalado no puede pasar.
+    Vec2 tp;
+    if (input.take_tap(tp)) {
+        for (int i = 0; i < choice.count; i++) {
+            if (!choice_card_rect(i, choice.count).contains(tp)) continue;
+            if (i == choice.selected) take = true;
+            else { choice.selected = i; audio.play_sfx(SfxID::MenuSelect, 0.6f); }
+            break;
+        }
+    }
+
     if (take || input.is_action_just_pressed(Action::Confirm) ||
         input.is_action_just_pressed(Action::Attack)) {
         char buf[128];
@@ -3651,6 +3777,11 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "touch")   { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
         else if (c.op == "drag")    { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
         else if (c.op == "untouch") { ss >> c.num >> c.num2 >> c.num3; }   // x y [dedo]
+        // Variantes en PIXELES DE VENTANA: la unica prueba de extremo a extremo de que el
+        // dibujo y el hit-test caen en el mismo sitio (ver tactil_ancho_check.txt).
+        else if (c.op == "touchpx")   { ss >> c.num >> c.num2 >> c.num3; } // px py [dedo]
+        else if (c.op == "dragpx")    { ss >> c.num >> c.num2 >> c.num3; } // px py [dedo]
+        else if (c.op == "untouchpx") { ss >> c.num >> c.num2 >> c.num3; } // px py [dedo]
         else if (c.op == "say")   { std::getline(ss, c.arg); }
         else if (c.op == "stats") { std::getline(ss, c.arg); }
         else if (c.op == "feel")  { std::getline(ss, c.arg); }   // etiqueta del tramo medido
@@ -3989,14 +4120,26 @@ void Engine::update_autoplay(f32 dt) {
             }
             // Toque sintetico en coordenadas de juego (320x180). `dedo` (tercer numero,
             // 0 por defecto) permite dos dedos a la vez para el gesto de pausa.
-            if (c.op == "touch" || c.op == "drag" || c.op == "untouch") {
+            if (c.op == "touch" || c.op == "drag" || c.op == "untouch" ||
+                c.op == "touchpx" || c.op == "dragpx" || c.op == "untouchpx") {
+                bool px = (c.op.size() > 2 && c.op.compare(c.op.size() - 2, 2, "px") == 0);
                 SDL_Event ev{};
-                ev.type = (c.op == "touch")  ? SDL_EVENT_FINGER_DOWN
-                        : (c.op == "drag")   ? SDL_EVENT_FINGER_MOTION
-                                             : SDL_EVENT_FINGER_UP;
+                ev.type = (c.op == "touch" || c.op == "touchpx") ? SDL_EVENT_FINGER_DOWN
+                        : (c.op == "drag"  || c.op == "dragpx")  ? SDL_EVENT_FINGER_MOTION
+                                                                 : SDL_EVENT_FINGER_UP;
                 ev.tfinger.fingerID = static_cast<SDL_FingerID>(1 + static_cast<int>(c.num3));
-                ev.tfinger.x = c.num / static_cast<f32>(Config::GAME_WIDTH);
-                ev.tfinger.y = c.num2 / static_cast<f32>(Config::GAME_HEIGHT);
+                if (px) {
+                    // Pixeles de ventana: el guion no sabe nada del letterbox, y por eso
+                    // esta variante SI detecta un desfase entre donde se dibuja y donde
+                    // responde. Las otras tres aplican la inversa exacta y nunca lo verian.
+                    ev.tfinger.x = c.num  / static_cast<f32>(renderer.window_w);
+                    ev.tfinger.y = c.num2 / static_cast<f32>(renderer.window_h);
+                } else {
+                    // Unidades de juego -> ventana: la inversa de lo que hace process_touch.
+                    Rect vp = input.touch_vp;
+                    ev.tfinger.x = vp.x + c.num  / static_cast<f32>(Config::GAME_WIDTH)  * vp.w;
+                    ev.tfinger.y = vp.y + c.num2 / static_cast<f32>(Config::GAME_HEIGHT) * vp.h;
+                }
                 input.process_event(ev);
                 SDL_Log("touch %s (%.0f,%.0f) finger %d", c.op.c_str(), c.num, c.num2,
                         1 + static_cast<int>(c.num3));

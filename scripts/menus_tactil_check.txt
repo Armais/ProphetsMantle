@@ -1,0 +1,90 @@
+# Verificacion: los menus se manejan CON EL DEDO (Android, 2026-09-11)
+# Uso:  MANTLE.exe --touch --script scripts/menus_tactil_check.txt
+#
+# Por que existe: hasta esta pasada toda la navegacion era MoveUp/Down/Confirm/Cancel y el
+# tactil no emitia ninguna de las cuatro. En un telefono no se podia ni pulsar "Nueva
+# Partida": el juego arrancaba y se quedaba mirando. La regresion a proteger es esa.
+#
+# Regla: tocar una fila = elegirla Y confirmarla. En Opciones, la mitad IZQUIERDA de la
+# fila baja el valor y la DERECHA lo sube. En las decisiones (cartas, encuentros) hacen
+# falta DOS toques: el primero elige, el segundo decide.
+#
+# Reparto (unidades de juego, las mismas que pinta cada render_*):
+#   Titulo    fila i -> y = 87 + i*10,2    (0 Nueva Partida ... 5 Opciones)
+#   Opciones  fila i -> y = 52 + i*15      (0 Musica, 3 Sensibilidad, 7 Volver con --touch)
+#   Cartas    choice_card_rect: 3 cartas de 92 de ancho, centro de la 2a en x=160, y=77
+#
+# GATES (log):
+#   1. SAVEDUMP final:  musica=0.40  sens=6      <- ajustado a dedo, mitad izq/dcha
+#   2. `Scene change` al tocar "Nueva Partida"   <- la fila del titulo responde
+#   3. `Item taken:` tras tocar DOS veces la misma carta
+
+wait 1.0
+defaults
+wait 0.3
+
+# --- Titulo: tocar la fila "Opciones" (la 5) ---
+touch 160 141
+wait 0.1
+untouch 160 141
+wait 0.5
+shot M0_opciones_por_toque
+wait 0.1
+
+# --- Musica (fila 0, y=52): cuatro toques en la MITAD IZQUIERDA, 0,80 -> 0,40 ---
+touch 80 57
+wait 0.1
+untouch 80 57
+wait 0.25
+touch 80 57
+wait 0.1
+untouch 80 57
+wait 0.25
+touch 80 57
+wait 0.1
+untouch 80 57
+wait 0.25
+touch 80 57
+wait 0.1
+untouch 80 57
+wait 0.4
+
+# --- Sensibilidad (fila 3, y=97): un toque en la MITAD DERECHA, 5 -> 6 ---
+touch 240 100
+wait 0.1
+untouch 240 100
+wait 0.4
+shot M1_opciones_ajustadas
+wait 0.1
+
+# --- "Volver" (fila 7, y=157): esa fila SI confirma en vez de ajustar ---
+touch 160 160
+wait 0.1
+untouch 160 160
+wait 0.6
+savedump
+wait 0.2
+
+# --- Titulo: "Nueva Partida" (fila 0, y=87) ---
+touch 160 90
+wait 0.1
+untouch 160 90
+wait 2.5
+
+# --- Cartas de objeto: DOS toques sobre la MISMA carta (la del centro) ---
+cards
+wait 0.5
+shot M2_cartas
+wait 0.1
+touch 160 77
+wait 0.1
+untouch 160 77
+wait 0.4
+shot M3_carta_elegida
+wait 0.1
+touch 160 77
+wait 0.1
+untouch 160 77
+wait 0.6
+
+quit

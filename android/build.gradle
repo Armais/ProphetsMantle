@@ -1,0 +1,22 @@
+// MANTLE para Android. Copiado de build/_deps/sdl3-src/android-project (misma revision que
+// el SDL nativo que se compila) y adaptado; ver android/app/build.gradle.
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.3'
+    }
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

@@ -65,7 +65,7 @@ inline const char* get_asset_path() {
 #if defined(MANTLE_PLATFORM_WEB)
     return "/assets/";
 #elif defined(MANTLE_PLATFORM_ANDROID)
-    return "";  // Android uses SDL_RWFromFile with asset manager
+    return "";  // Android: SDL_IOFromFile va al AssetManager, cuya raiz ES assets/ del APK
 #else
     return "assets/";
 #endif

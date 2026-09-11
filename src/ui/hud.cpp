@@ -95,6 +95,16 @@ static TileSprite category_icon(ItemCategory c) {
     }
 }
 
+// Reparto de las cartas. Lo usan el DIBUJO y el hit-test tactil: la carta que se toca es
+// la que se ve, sin dos copias de la formula. Alto generoso (la carta crece al elegirse).
+constexpr f32 CARD_W = 92.0f, CARD_H = 78.0f, CARD_GAP = 8.0f, CARD_TOP = 38.0f;
+Rect choice_card_rect(int i, int count) {
+    if (count <= 0) return {0, 0, 0, 0};
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 x0 = (W - (CARD_W * count + CARD_GAP * (count - 1))) * 0.5f;
+    return {x0 + i * (CARD_W + CARD_GAP) - 2.0f, CARD_TOP - 5.0f, CARD_W + 4.0f, CARD_H + 10.0f};
+}
+
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,
                        int count, int selected, u32 tileset) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
@@ -103,7 +113,7 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
 
     renderer.draw_text_centered(title, 12, {245, 205, 90, 255}, 1.3f);
 
-    constexpr f32 CARD_W = 92.0f, CARD_H = 78.0f, GAP = 8.0f, TOP = 38.0f;
+    constexpr f32 GAP = CARD_GAP, TOP = CARD_TOP;
     const f32 x0 = (W - (CARD_W * count + GAP * (count - 1))) * 0.5f;
     // Everything inside a card centres on the card, not on the screen
     auto centred = [&renderer](const char* s, f32 cx, f32 y, Color c, f32 sc) {
@@ -161,6 +171,14 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
 // =============================================================================
 // Encuentro biblico: caja de dialogo sobre el mundo congelado
 // =============================================================================
+// Rects de las dos opciones, apuntados al pintar. Solo hay un dialogo en pantalla a la
+// vez, asi que un solo juego basta; y es la unica forma de que el hit-test caiga donde
+// esta el texto, porque el alto de la caja lo decide el ajuste de lineas.
+static Rect g_dialogue_opt[2] = {};
+Rect dialogue_option_rect(int i) {
+    return (i >= 0 && i < 2) ? g_dialogue_opt[i] : Rect{0, 0, 0, 0};
+}
+
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
@@ -214,10 +232,13 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
         renderer.draw_text(lines[i].c_str(), text_x, by + 8.0f + i * 9.0f, {224, 216, 204, 250}, 0.8f);
 
     // Opciones
+    g_dialogue_opt[0] = g_dialogue_opt[1] = {0, 0, 0, 0};
     if (view.option_count > 0) {
         f32 oy = by + 8.0f + n * 9.0f + 4.0f;
         for (int i = 0; i < view.option_count && i < 2; i++) {
             bool on = (i == view.selected);
+            g_dialogue_opt[i] = {text_x - 3.0f, oy + i * 11.0f - 2.0f,
+                                 (bx + bw - 5.0f) - (text_x - 3.0f), 12.0f};
             Color c = on ? Color{250, 215, 130, 255} : Color{160, 152, 142, 235};
             // El borde derecho es el de siempre (bx+bw-5): sin retrato la banda tiene que
             // quedar exactamente donde estaba antes de que existiera este campo.
@@ -233,10 +254,16 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
                                    on ? Color{240, 130, 110, 255} : Color{150, 90, 80, 220}, 0.7f);
             }
         }
-        renderer.draw_text_centered(tr("[W/S] elegir     [ENTER] decidir", "[W/S] choose     [ENTER] decide"), H - 6.0f, {160, 150, 140, 200}, 0.65f);
+        renderer.draw_text_centered(view.touch
+                                        ? tr("Toca una opción; vuelve a tocarla para decidir",
+                                             "Tap an option; tap it again to decide")
+                                        : tr("[W/S] elegir     [ENTER] decidir", "[W/S] choose     [ENTER] decide"),
+                                    H - 6.0f, {160, 150, 140, 200}, 0.65f);
     } else {
         f32 blink = 0.55f + 0.45f * std::sin(time * 3.4f);
-        const char* prompt = view.more_lines ? tr("[ENTER] seguir", "[ENTER] continue") : tr("[ENTER] continuar", "[ENTER] continue");
+        const char* prompt = view.touch ? tr("toca para seguir", "tap to continue")
+                           : view.more_lines ? tr("[ENTER] seguir", "[ENTER] continue")
+                                             : tr("[ENTER] continuar", "[ENTER] continue");
         renderer.draw_text_centered(prompt, H - 6.0f, {200, 185, 160, static_cast<u8>(210 * blink)}, 0.65f);
     }
     (void)tileset;
@@ -367,16 +394,23 @@ void HUD::draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUD
 
 // Small icon row under the vitals: one cell per item taken this run. The held consumable
 // gets a highlighted frame and its key, since it is the only one the player can trigger.
+// Icono por arma: la piedra de la Honda y la vara florecida no son lo mismo. Y NO puede
+// ser la flecha generica de la categoria: en tactil el boton ARMA queda pegado al de DASH,
+// que ya es una flecha, y los dos salian identicos.
+static TileSprite weapon_icon(u32 weapon_slot) {
+    return (weapon_slot == 1) ? TileSprite::Grass : TileSprite::Rock;
+}
+
 void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDContext& ctx) {
     if (ctx.tileset == TEXTURE_NONE || !ctx.registry) return;
+    const bool touch = (ctx.input && ctx.input->touch_ui);
 
     // Arma equipada: celda propia con su tecla y el barrido de recarga, porque es lo
     // unico del inventario que se dispara aparte del consumible.
     constexpr f32 WS = 12.0f, WY = 33.0f;
     if (player.weapon_slot != UINT32_MAX) {
         bool ready = player.secondary_cd <= 0.0f;
-        // Icono por arma: la piedra de la Honda y la vara florecida no son lo mismo
-        TileSprite wicon = (player.weapon_slot == 1) ? TileSprite::Grass : TileSprite::Arrow;
+        TileSprite wicon = weapon_icon(player.weapon_slot);
         renderer.draw_rect({2.0f, WY - 1.0f, WS + 2, WS + 2}, ready ? Color{245, 205, 90, 235} : Color{90, 80, 70, 220});
         renderer.draw_rect({3.0f, WY, WS, WS}, {22, 16, 26, 230});
         renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
@@ -385,11 +419,15 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
             f32 k = std::min(1.0f, player.secondary_cd / 0.9f);
             renderer.draw_rect({3.0f, WY, WS, WS * k}, {10, 8, 14, 170});
         }
-        // Tecla en placa, como la del consumible: es la unica pista de que el arma se dispara
+        // Tecla en placa, como la del consumible: es la unica pista de que el arma se dispara.
+        // En tactil no se pinta: ahi el arma tiene su propio boton (ARMA) y una chapa con
+        // una tecla de PC solo puede confundir.
         f32 kx = 3.0f + WS + 2.0f;
-        if (renderer.shadow_tex != TEXTURE_NONE)
-            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 1.0f, WY + 1.0f, 10, 10}, {0, 0, 0, 180});
-        renderer.draw_text("I", kx + 2.0f, WY + 2.0f, ready ? Color{250, 220, 130, 245} : Color{120, 110, 100, 200}, 0.7f);
+        if (!touch) {
+            if (renderer.shadow_tex != TEXTURE_NONE)
+                renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 1.0f, WY + 1.0f, 10, 10}, {0, 0, 0, 180});
+            renderer.draw_text("I", kx + 2.0f, WY + 2.0f, ready ? Color{250, 220, 130, 245} : Color{120, 110, 100, 200}, 0.7f);
+        }
         // El nombre del arma, la primera vez que se lleva: sin esto la celda es un icono mudo
         if (ctx.registry) {
             const ItemDef* wd = ctx.registry->get(player.weapon_slot);
@@ -433,7 +471,8 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         x += S + 2.0f;
         shown++;
     }
-    if (player.consumable_slot != UINT32_MAX)
+    // En tactil el consumible se usa con el boton USAR, no con la R
+    if (player.consumable_slot != UINT32_MAX && !(ctx.input && ctx.input->touch_ui))
         renderer.draw_text("R", x + 1.0f, Y + 1.5f, {245, 205, 90, 230}, 0.6f);
 }
 
@@ -483,11 +522,15 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         renderer.draw_rect({t.x - 1, t.y - 5, 2, 10}, {255, 235, 175, 235});
     }
 
-    // --- Dash y consumible ---
-    for (int i = 0; i < 2 && i < TOUCH_BUTTON_COUNT; i++) {
-        const TouchButton& b = in->touch_buttons[i];
+    // --- Fila de accion: DASH, USAR, ARMA, ORAR (los que apliquen) ---
+    static const int action_btns[4] = {TOUCH_BTN_DASH, TOUCH_BTN_CONS,
+                                       TOUCH_BTN_WEAPON, TOUCH_BTN_PRAY};
+    for (int k = 0; k < 4; k++) {
+        const TouchButton& b = in->touch_buttons[action_btns[k]];
+        if (!b.enabled) continue;   // `enabled` manda en el dibujo Y en el hit-test
         bool cons = (b.action == Action::Consumable);
-        if (cons && player.consumable_slot == UINT32_MAX) continue;   // no hay nada que usar
+        bool weap = (b.action == Action::AttackSecondary);
+        bool pray = (b.action == Action::Pray);
 
         renderer.draw_rect({b.rect.x - 1, b.rect.y - 1, b.rect.w + 2, b.rect.h + 2},
                            b.down ? Color{250, 225, 160, 225} : Color{200, 180, 140, 120});
@@ -497,6 +540,10 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         if (cons && ctx.registry) {
             const ItemDef* d = ctx.registry->get(player.consumable_slot);
             if (d) icon = category_icon(d->category);
+        } else if (weap) {
+            icon = weapon_icon(player.weapon_slot);
+        } else if (pray) {
+            icon = TileSprite::AltarGod;
         }
         renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon),
                                   {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6},
@@ -508,10 +555,28 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         }
         // La etiqueta va ENCIMA: debajo de estos botones estan las placas de coste de las
         // celdas de milagro y los dos textos se pisaban.
-        const char* label = cons ? tr("USAR", "USE") : "DASH";
+        const char* label = cons ? tr("USAR", "USE")
+                          : weap ? tr("ARMA", "WEAPON")
+                          : pray ? tr("ORAR", "PRAY")
+                                 : "DASH";
         f32 lw = renderer.measure_text(label, 0.55f);
         renderer.draw_text(label, b.rect.x + (b.rect.w - lw) * 0.5f, b.rect.y - 6.0f,
                            {225, 205, 165, 200}, 0.55f);
+    }
+
+    // --- Pausa: dos barritas, arriba al centro. Sustituye al swipe de dos dedos, que
+    // chocaba con "stick + apuntar" (dos dedos en pantalla es la postura normal). ---
+    {
+        const TouchButton& b = in->touch_buttons[TOUCH_BTN_PAUSE];
+        if (b.enabled) {
+            renderer.draw_rect({b.rect.x - 1, b.rect.y - 1, b.rect.w + 2, b.rect.h + 2},
+                               b.down ? Color{250, 225, 160, 225} : Color{200, 180, 140, 110});
+            renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 140)});
+            Color bar = b.down ? Color::white() : Color{230, 225, 215, 200};
+            f32 cx = b.rect.center().x;
+            renderer.draw_rect({cx - 4.0f, b.rect.y + 3.0f, 3.0f, b.rect.h - 6.0f}, bar);
+            renderer.draw_rect({cx + 1.0f, b.rect.y + 3.0f, 3.0f, b.rect.h - 6.0f}, bar);
+        }
     }
 
     // --- Ficha del milagro: mantener pulsada su celda en vez de lanzarlo (GDD) ---
@@ -619,11 +684,14 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         // Ready glow line
         if (ready) renderer.draw_rect({x, y + S - 1.0f, S, 1.0f}, {255, 220, 120, 200});
 
-        // Key hint badge under the slot
+        // Key hint badge under the slot. En tactil la celda ES el boton: la chapa con la
+        // tecla sobra y ademas cae fuera de la pantalla cuando los botones bajan a la banda.
         f32 kx = x + S * 0.5f, ky = y + S + 5.0f;
-        if (renderer.shadow_tex != TEXTURE_NONE)
-            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
-        renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
+        if (!tin) {
+            if (renderer.shadow_tex != TEXTURE_NONE)
+                renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
+            renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
+        }
 
         // Sobre el slot: normalmente el coste en fe; si falta nivel, la fe que hay que
         // alcanzar precedida de "+", que es la informacion que de verdad hace falta.
@@ -647,6 +715,17 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
 // Minimap: top-right. Each room a small cell; visited = filled, current = bright,
 // boss = red with skull-ish mark, treasure/altar = gold/blue dot when visited or adjacent.
 // -----------------------------------------------------------------------------
+// El marco del minimapa pequeno, tal cual se dibuja mas abajo (el `else` de `big`).
+// Existe para que Input pueda saber donde esta sin copiar la formula.
+Rect HUD::minimap_rect(const FloorMap& fm) {
+    if (fm.room_count <= 0) return {0, 0, 0, 0};
+    const f32 cw = 9.0f, ch = 6.0f, gap = 2.0f;
+    f32 total_w = fm.grid_w * (cw + gap) - gap;
+    f32 total_h = fm.grid_h * (ch + gap) - gap;
+    f32 ox = Config::GAME_WIDTH - total_w - 5.0f;
+    return {ox - 2.0f, 2.0f, total_w + 4.0f, total_h + 4.0f};
+}
+
 void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     const FloorMap* fm = ctx.floor_map;
     if (!fm || fm->room_count <= 0) return;
@@ -755,7 +834,9 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     char buf[48];
     if (dx == 0 && dy == 0) {
         bool cleared = ctx.zone && ctx.zone->boss_cell >= 0 && ctx.zone->cells[ctx.zone->boss_cell].cleared;
-        snprintf(buf, sizeof(buf), cleared ? tr("Salida abierta", "Exit open") : tr("!! JEFE !!", "!! BOSS !!"));
+        // "%s" y no el texto como formato: clang de Android compila con -Wformat-security
+        // como ERROR, y un literal traducible nunca deberia hacer de cadena de formato.
+        snprintf(buf, sizeof(buf), "%s", cleared ? tr("Salida abierta", "Exit open") : tr("!! JEFE !!", "!! BOSS !!"));
     } else {
         // e.g. "Jefe: 2N 1E"
         char part1[12] = "", part2[12] = "";
@@ -768,7 +849,11 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     f32 tw = renderer.measure_text(buf, 0.75f);
     f32 y = 4.0f + fm->grid_h * 8.0f + 3.0f;
     renderer.draw_text(buf, Config::GAME_WIDTH - tw - 5.0f, y, {230, 215, 170, 255}, 0.75f);
-    renderer.draw_text(tr("TAB: mapa", "TAB: map"), Config::GAME_WIDTH - renderer.measure_text(tr("TAB: mapa", "TAB: map"), 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
+    // En tactil el minimapa se TOCA para abrir el mapa grande: anunciar una tecla que el
+    // telefono no tiene es la misma clase de error que las chapas Q/E/F.
+    const char* maph = (ctx.input && ctx.input->touch_ui) ? tr("Toca: mapa", "Tap: map")
+                                                          : tr("TAB: mapa", "TAB: map");
+    renderer.draw_text(maph, Config::GAME_WIDTH - renderer.measure_text(maph, 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
 }
 
 void HUD::draw_boss_bar(Renderer& renderer, const HUDContext& ctx) {

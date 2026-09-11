@@ -7,6 +7,12 @@
 #include "core/i18n.h"
 #include "game/items.h"
 
+void MenuSystem::mark_row(int i, f32 y, f32 step) {
+    if (i < 0 || i >= MAX_ROW_RECTS) return;
+    row_rects[i] = {40.0f, y - 2.0f, static_cast<f32>(Config::GAME_WIDTH) - 80.0f, step};
+    if (i + 1 > row_rect_count) row_rect_count = i + 1;
+}
+
 void MenuSystem::update(Input& input) {
     if (input.is_action_just_pressed(Action::MoveUp)) {
         selected_option = (selected_option - 1 + option_count) % std::max(1, option_count);
@@ -14,9 +20,38 @@ void MenuSystem::update(Input& input) {
     if (input.is_action_just_pressed(Action::MoveDown)) {
         selected_option = (selected_option + 1) % std::max(1, option_count);
     }
+
+    // --- Toque ---------------------------------------------------------------
+    Vec2 p;
+    if (!input.take_tap(p)) return;
+
+    // Pantallas sin filas: tocar en cualquier sitio acepta y sale.
+    if (current == MenuScreen::Controls || current == MenuScreen::Victory) {
+        input.pulse(Action::Confirm);
+        return;
+    }
+    // Los rects se apuntan al PINTAR, asi que el primer frame de una pantalla nueva aun
+    // lleva los de la anterior. Sin esta guarda, entrar en Opciones y tocar de inmediato
+    // pulsaba la fila que hubiera debajo en el menu de antes.
+    if (rect_screen != current) return;
+
+    for (int i = 0; i < row_rect_count && i < option_count; i++) {
+        if (!row_rects[i].contains(p)) continue;
+        selected_option = i;
+        if (current == MenuScreen::Settings && settings_row_at(i) != ROW_BACK) {
+            // Mitad izquierda baja, mitad derecha sube. Lo consume Engine::update_settings,
+            // que ya sabe que hacer con MoveLeft/MoveRight en cada fila.
+            input.pulse(p.x < Config::GAME_WIDTH * 0.5f ? Action::MoveLeft : Action::MoveRight);
+        } else {
+            input.pulse(Action::Confirm);
+        }
+        return;
+    }
 }
 
 void MenuSystem::render(Renderer& renderer) {
+    row_rect_count = 0;
+    rect_screen    = current;
     switch (current) {
         case MenuScreen::Title:     render_title(renderer); break;
         case MenuScreen::PauseMenu: render_pause(renderer); break;
@@ -90,6 +125,7 @@ void MenuSystem::render_title(Renderer& renderer) {
             snprintf(buf, sizeof(buf), "%s%s", prefix, options[i]);
         }
         renderer.draw_text_centered(buf, 87.0f + i * 10.2f, c, 0.95f);
+        mark_row(i, 87.0f + i * 10.2f, 10.2f);
     }
 
 
@@ -99,7 +135,9 @@ void MenuSystem::render_title(Renderer& renderer) {
         snprintf(buf, sizeof(buf), tr("%d ofrendas", "%d offerings"), offerings);
         renderer.draw_text_centered(buf, 160, {200, 175, 115, 220}, 0.75f);
     }
-    renderer.draw_text_centered(tr("[ENTER] Seleccionar", "[ENTER] Select"), 170, {100, 90, 80, 180}, 0.8f);
+    renderer.draw_text_centered(touch_hints ? tr("Toca una opción", "Tap an option")
+                                            : tr("[ENTER] Seleccionar", "[ENTER] Select"),
+                                170, {100, 90, 80, 180}, 0.8f);
 }
 
 void MenuSystem::render_pause(Renderer& renderer) {
@@ -118,7 +156,10 @@ void MenuSystem::render_pause(Renderer& renderer) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%s%s", (i == selected_option) ? "> " : "  ", options[i]);
         renderer.draw_text_centered(buf, 80.0f + i * 14.0f, c);
+        mark_row(i, 80.0f + i * 14.0f, 14.0f);
     }
+    if (touch_hints)
+        renderer.draw_text_centered(tr("Toca una opción", "Tap an option"), 150, {100, 90, 80, 180}, 0.8f);
 }
 
 void MenuSystem::render_game_over(Renderer& renderer) {
@@ -140,11 +181,13 @@ void MenuSystem::render_game_over(Renderer& renderer) {
         char line[64];
         snprintf(line, sizeof(line), "%s%s", (i == selected_option) ? "> " : "  ", options[i]);
         renderer.draw_text_centered(line, 118.0f + i * 14.0f, c);
+        mark_row(i, 118.0f + i * 14.0f, 14.0f);
     }
 
     renderer.draw_text_centered(tr("Tu partida sigue guardada al principio del capítulo", "Your run is still saved at the chapter start"),
                                 152, {125, 110, 98, 210}, 0.7f);
-    renderer.draw_text_centered(tr("[W/S] elegir   [ENTER] aceptar   [R] reintentar", "[W/S] choose   [ENTER] accept   [R] retry"),
+    renderer.draw_text_centered(touch_hints ? tr("Toca una opción", "Tap an option")
+                                            : tr("[W/S] elegir   [ENTER] aceptar   [R] reintentar", "[W/S] choose   [ENTER] accept   [R] retry"),
                                 168, {100, 90, 80, 190}, 0.75f);
 }
 
@@ -161,7 +204,9 @@ void MenuSystem::render_victory(Renderer& renderer) {
     renderer.draw_text_centered(buf, 110, {170, 180, 200, 255}, 0.9f);
     if (victory_note)
         renderer.draw_text_centered(victory_note, 128, {190, 160, 110, 225}, 0.75f);
-    renderer.draw_text_centered(tr("[ENTER] Volver al menú", "[ENTER] Back to menu"), 150, {120, 130, 150, 220});
+    renderer.draw_text_centered(touch_hints ? tr("Toca para volver al menú", "Tap to go back to the menu")
+                                            : tr("[ENTER] Volver al menú", "[ENTER] Back to menu"),
+                                150, {120, 130, 150, 220});
 }
 
 void MenuSystem::render_settings(Renderer& renderer) {
@@ -245,10 +290,14 @@ void MenuSystem::render_settings(Renderer& renderer) {
             snprintf(buf, sizeof(buf), "%s%s", prefix, label);
         }
         renderer.draw_text_centered(buf, y, c);
+        mark_row(i, y, 15.0f);
     }
 
-    renderer.draw_text_centered(tr("[</>] Ajustar   [ENTER] Volver",
-                                   "[</>] Adjust   [ENTER] Back"), 168, {100, 90, 80, 180});
+    renderer.draw_text_centered(touch_hints ? tr("Toca izquierda/derecha de la fila para ajustar",
+                                                 "Tap the left/right half of a row to adjust")
+                                            : tr("[</>] Ajustar   [ENTER] Volver",
+                                                 "[</>] Adjust   [ENTER] Back"),
+                                168, {100, 90, 80, 180}, touch_hints ? 0.8f : 1.0f);
 }
 
 void MenuSystem::render_controls(Renderer& renderer) {
@@ -258,6 +307,27 @@ void MenuSystem::render_controls(Renderer& renderer) {
 
     Color label = {200, 180, 140, 255};
     Color value = {140, 130, 120, 255};
+
+    // En un telefono no hay ni una sola de las teclas de abajo: la pantalla de ayuda tiene
+    // que contar los gestos que existen de verdad, o es peor que no tenerla.
+    if (touch_hints) {
+        renderer.draw_text_centered(tr("Moverse", "Move"), 40, label);
+        renderer.draw_text_centered(tr("Pulgar en la mitad izquierda: el stick nace ahí", "Left half: the stick appears under your thumb"), 51, value, 0.8f);
+
+        renderer.draw_text_centered(tr("Atacar y apuntar", "Attack and aim"), 65, label);
+        renderer.draw_text_centered(tr("Toca la mitad derecha; mantén y arrastra para apuntar", "Tap the right half; hold and drag to aim"), 76, value, 0.8f);
+
+        renderer.draw_text_centered(tr("Botones", "Buttons"), 90, label);
+        renderer.draw_text_centered(tr("DASH · USAR · ARMA · ORAR (solo los que apliquen)", "DASH · USE · WEAPON · PRAY (only those that apply)"), 101, value, 0.8f);
+
+        renderer.draw_text_centered(tr("Milagros", "Miracles"), 115, label);
+        renderer.draw_text_centered(tr("Toca su celda para lanzarlo; mantén para ver su ficha", "Tap its cell to cast; hold to read its card"), 126, value, 0.8f);
+
+        renderer.draw_text_centered(tr("Mapa: toca el minimapa     Pausa: II o el botón atrás", "Map: tap the minimap     Pause: II or the back button"), 142, value, 0.8f);
+        renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 156, label, 0.75f);
+        renderer.draw_text_centered(tr("Toca para volver", "Tap to go back"), 170, {100, 90, 80, 180}, 0.85f);
+        return;
+    }
 
     renderer.draw_text_centered(tr("Movimiento", "Movement"), 50, label);
     renderer.draw_text_centered(tr("WASD / Flechas", "WASD / Arrows"), 62, value);
