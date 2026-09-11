@@ -562,6 +562,20 @@ bool SaveSystem::load() {
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
+    if (version == 9) {
+        // v9 -> v10: MISMA forma de fichero (ver save.h); solo se descarta el resumen de
+        // salas, que con la zona continua ya no significa lo mismo. El resto (meta, equipo,
+        // capitulo) sigue tal cual: el capitulo rebobina a su celda de inicio.
+        SDL_ReadIO(file, &data, sizeof(SaveData));
+        SDL_CloseIO(file);
+        SDL_memset(data.room_flags, 0, sizeof(data.room_flags));
+        SDL_memset(data.room_open,  0, sizeof(data.room_open));
+        data.current_room = -1;
+        SDL_Log("Save file v9 migrated to v%u (%s): estado de sala descartado, el capitulo rebobina",
+                SAVE_VERSION, save_path.c_str());
+        save();   // se reescribe ya en el formato nuevo
+        return true;
+    }
     if (version != SAVE_VERSION) {
         SDL_CloseIO(file);
         SDL_Log("Save file version %u is not supported (expected %u) - ignoring it", version, SAVE_VERSION);

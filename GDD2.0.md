@@ -283,8 +283,8 @@ van sobre negro y no la necesitan.
 
 | | **Exterior** | **Interior** |
 |---|---|---|
-| Tamaño | 2x2 pantallas (40x22 tiles, 640x352 unidades) | 1 pantalla (20x11), como hasta ahora |
-| Cámara | Sigue al profeta, recortada contra la zona | Clavada |
+| Tamaño | **UNA zona continua por capítulo** (2026-09-10): las celdas de 2x2 pantallas (40x22 tiles) cosidas en 160x66 / 160x88 tiles | 1 pantalla (20x11), como hasta ahora |
+| Cámara | Sigue al profeta, recortada contra la zona entera | Clavada |
 | Borde | Del bioma: acantilado, matorral y roca, o ribera | Muro de verdad |
 | Ejemplos | Querit, los campos de Jezreel, la ribera del Jordán | Palacio de Acab, templo de Baal, cueva de Horeb, casa de la Sunamita |
 
@@ -296,12 +296,23 @@ inmóvil y sale gratis el comportamiento de siempre.
 de generación por biomas, colgado de una sala exterior por una puerta. Su nodo va detrás de la
 rejilla, así que el minimapa lo salta y el guardado —que guarda un índice— no cambió de formato.
 
+**Hecho el 2026-09-10: la zona continua.** Decisión del usuario: *"el mapa sea una exploración
+libre, no por cuadrados"*. Las salas dejan de existir como espacio jugable: cada celda de la
+rejilla se sigue generando igual (mapas fijos, §3.4) pero se cose en un solo mapa sin anillos,
+sin fundidos ni transiciones por borde. Los enemigos de una celda nacen al acercarse y se
+reponen al alejarse (ALTTP). **La arena del jefe vive dentro de la celda B**: un recinto de una
+pantalla con cerco de piedras y un vano de cuatro tiles que se sella al entrar; se ve desde
+fuera antes de pisarlo. El jefe del Carmelo es desde el mismo día **un grupo**: sumo sacerdote y
+corro de profetas con barra compartida (el capítulo termina cuando cae el último; los 450 son
+reposición desde el pueblo, no un número en pantalla). Detalle: `docs/mundo-exterior.md`.
+
 ### 3.2 Bordes por bioma
 
 `BiomeStyle::border` con tres valores:
 
-- **`Cliff`** — cañón, montaña, cueva. Lo que hay hoy: pared de roca. Correcto en el Querit
-  (es un cauce encajonado), en el Carmelo y en Horeb.
+- **`Cliff`** — pared de roca. Desde el 2026-09-10 **ningún exterior lo usa**: el usuario pidió
+  quitar los muros del capítulo 1 y de todo escenario al aire libre. Queda como valor del
+  bioma por defecto y para escenarios cerrados.
 - **`Natural`** — desierto, campos, ribera. Franja de dos tiles de roca suelta, matorral,
   palmeras secas y hierba alta. Bloquea, pero **se lee como que el terreno sigue**. Y el lado
   conectado se abre **casi entero**, no por un vano de seis tiles: un campo abierto no es un
@@ -309,8 +320,10 @@ rejilla, así que el minimapa lo salta y el guardado —que guarda un índice—
 - **`Masonry`** — ciudad, casa noble, campamento sitiado. Sillería de verdad, vano estrecho y
   antorchas. Aquí el muro **sí** significa algo.
 
-Reparto: 1 Cliff · 2 Natural · 3 Cliff · 4 Cliff · 5 Natural · 6 Masonry · 7 Natural ·
-8 Masonry · 9 Natural · 10 Masonry.
+Reparto: 1 Natural · 2 Natural · 3 Natural · 4 Natural · 5 Natural · 6 Masonry · 7 Natural ·
+8 Masonry · 9 Natural · 10 Masonry. La sillería se queda solo en las ciudades (Jericó, Sunem,
+Samaria sitiada). El terreno de roca es una propiedad aparte (`BiomeStyle::rocky`, 1/3/4):
+de ella dependen los huecos del Carro de Fuego y las grietas, no del borde.
 
 Los "edificios" del interior de la sala (bloques de piedra) **no se restringen**: al mirarlo,
 los únicos capítulos que los tienen ya son aldeas, ciudades y cuevas — en los campos abiertos
@@ -320,8 +333,9 @@ huérfanos.
 
 ### 3.3 Tamaño del capítulo
 
-- Rejilla de **4x3** salas en la mayoría de capítulos, **4x4** en el 5 y el 10.
-- 12 salas de 2x2 pantallas = ~48 pantallas por capítulo, contra las 9 de hoy.
+- Rejilla de **4x3** celdas en la mayoría de capítulos, **4x4** en el 5 y el 10, **cosidas en
+  un solo mapa** desde 2026-09-10 (160x66 / 160x88 tiles).
+- 12 celdas de 2x2 pantallas = ~48 pantallas por capítulo, contra las 9 del v1.0.
 - **No todas están en el camino al jefe.** Eso es lo que convierte explorar en una decisión.
 - Reparto de tipos por mapa (FIJO por configuración desde 2026-08-27, ver §3.4): en 4x3,
   TODOS los relatos del pozo (3-4) · 1 Tesoro · 1 Altar · 2 Elite · resto normales; en 4x4,
@@ -414,8 +428,9 @@ El PNJ del encuentro se dibujaba con la celda de **antorcha** del tileset. Eso s
 | Tema | v1.0 | 2.0 |
 |---|---|---|
 | Referencia | ninguna declarada | *A Link to the Past* |
-| Sala | 1 pantalla, cámara fija | exterior 2x2 pantallas con cámara; interior 1 pantalla |
-| Bordes | muro sólido en todas | según bioma; sillería solo en construido |
+| Sala | 1 pantalla, cámara fija | exterior: **una zona continua por capítulo** con cámara (2026-09-10); interior 1 pantalla |
+| Bordes | muro sólido en todas | según bioma; sillería solo en ciudades (6, 8, 10) y solo en el perímetro |
+| Jefe | sala aparte de 1 pantalla | recinto dentro de la celda B, sellado al entrar; el del Carmelo es un grupo con barra compartida |
 | Capítulo | 3x3 salas | 4x3 / 4x4 |
 | Encuentros | 1 por capítulo | 3-4 por capítulo, sorteados de un pozo |
 | Cobertura bíblica | los episodios de titular | **todo** Elías y Eliseo en 1-2 Reyes |

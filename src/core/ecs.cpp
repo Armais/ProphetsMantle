@@ -432,12 +432,14 @@ void ECSWorld::update(f32 dt) {
     // Enemy AI and collision are driven by the Engine (need faith / room context)
 }
 
-int ECSWorld::count_living_enemies() const {
+int ECSWorld::count_living_enemies(int cell) const {
     int n = 0;
     for (u32 e = 0; e < entity_count; e++) {
         if (!masks[e].any()) continue;
         if (!has(static_cast<Entity>(e), Component::EnemyAI)) continue;
         if (enemy_ais[e].ally) continue;   // los discipulos no cuentan: sellarian la sala
+        // Por celda de ORIGEN, no por posicion. Un enemigo sin celda (-1) cuenta en todas.
+        if (cell >= 0 && enemy_ais[e].home_cell >= 0 && enemy_ais[e].home_cell != cell) continue;
         if (has(static_cast<Entity>(e), Component::Health) && !healths[e].is_alive()) continue;
         n++;
     }

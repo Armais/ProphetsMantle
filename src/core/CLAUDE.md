@@ -17,7 +17,7 @@ With special `Transition` state for room changes and `Ascension` for Act I→II 
 
 El fundido de sala:
 
-- `Engine::room_fade` (0.3 s black veil under the HUD) plays on every `load_room`; particles are tinted `TileSprite::Star` sprites.
+- `Engine::room_fade` (0.3 s black veil under the HUD) plays on chapter start and on the interior door (zona continua: ya no hay fundido entre celdas); particles are tinted `TileSprite::Star` sprites.
 ### Tacto / *game feel* (`Config::Feel`, pasada del 2026-08-25)
 
 Todos los tunables de tacto viven en **un solo sitio**, `namespace Config::Feel` de

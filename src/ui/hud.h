@@ -25,8 +25,21 @@
 
 struct HUDContext {
     const FloorMap* floor_map = nullptr;
-    const Room*     room      = nullptr;
+    const Room*     room      = nullptr;   // la activa: la zona, o el interior
+    // La ZONA del capitulo (Engine::zone_ptr): el minimapa lee visited/cleared de sus
+    // celdas. Dentro de un interior sigue siendo la zona de fuera; null fuera de partida.
+    const Room*     zone      = nullptr;
+    // Barra del jefe. La rellena el Engine (update_boss_bar): con un jefe solo es su vida;
+    // con el jefe en GRUPO (cap. 3, el corro de Baal) es la suma de la cabeza y del corro,
+    // el maximo se fija al nacer el grupo y la barra SIGUE mientras quede alguien aunque
+    // la cabeza haya caido. `boss` sigue siendo la cabeza (auto-mira, escena Live).
     Entity          boss      = ENTITY_NONE;
+    f32             boss_hp   = 0.0f;
+    f32             boss_hp_max = 0.0f;        // 0 = sin barra
+    int             boss_heads = 0;            // vivos (cabeza + miembros)
+    bool            boss_group = false;        // pinta una marca por cabeza viva bajo la barra
+    bool            boss_invulnerable = false;
+    const char*     boss_name = nullptr;
     int             chapter   = 1;
     const char*     banner    = nullptr;   // Big centred title (chapter start)
     const char*     subbanner = nullptr;   // Smaller line under the banner
@@ -101,7 +114,7 @@ private:
     void draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDContext& ctx);
     void draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUDContext& ctx);
     void draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big);
-    void draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss);
+    void draw_boss_bar(Renderer& renderer, const HUDContext& ctx);
     void draw_banner(Renderer& renderer, const HUDContext& ctx);
     void draw_message(Renderer& renderer, const HUDContext& ctx);
     void draw_objective(Renderer& renderer, const HUDContext& ctx);

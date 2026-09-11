@@ -1,0 +1,55 @@
+# Verificacion del JEFE EN GRUPO del Carmelo (2026-09-10): sumo sacerdote + corro de
+# profetas de Baal con barra compartida (enemies.cpp spawn_boss_group). El capitulo
+# termina cuando cae el ultimo, aunque la cabeza haya caido antes.
+# Uso:  MANTLE.exe --script scripts/carmelo_check.txt
+#
+# GATES DEL LOG (lo que manda):
+#   - "Loaded room N [x,y] (El Monte Carmelo) - Boss [0 enemies]", luego "Arena sealed:
+#     boss cell 2" y "Dialogo del jefe 3 suprimido": el grupo ha nacido al pisar la arena.
+#   - Seis lineas "Baal prophet slot k at (x,y)" (5 al nacer + la primera reposicion).
+#   - Al menos DOS lineas "Boss group: N alive (head ...)" con N descendente. La ultima
+#     tiene que ser "Boss group: 0 alive (head down)".
+#   - Una linea con "JEFE DERROTADO" o "BOSS DEFEATED" no sale en el log (es un banner):
+#     el gate de fin es el "Achievement unlocked: Ante el Rey" si es la primera vez, o la
+#     captura 03 con el arco dorado / el banner. Y la linea "Game saved" tras el 0 alive.
+#
+# CAPTURAS (mirar cada una):
+#   - 01: la cabeza de pie en lo alto de la arena y CINCO profetas en corro debajo; la
+#     barra dice "Los 450 Profetas de Baal" con SEIS marcas bajo ella.
+#   - 02: tras 12 s de bot, el corro mermado (menos marcas) y la barra bajada; puede
+#     haber reposiciones (la cabeza rellena uno cada 5 s).
+#   - 03: arena limpia con el banner de JEFE DERROTADO y sin barra.
+
+defaults
+wait 1.0
+press confirm
+wait 3.2
+press confirm
+wait 3.2
+press confirm
+wait 1.4
+god
+
+chapter 3
+wait 1.0
+press confirm
+wait 1.2
+# zona continua: `goto boss` deja en el nudo bajo el recinto; se entra andando por el vano
+goto boss
+wait 0.5
+walk 1600 150
+wait 1.5
+shot 01_corro_en_pie
+wait 0.1
+
+bot 12
+wait 0.3
+shot 02_corro_mermado
+wait 0.1
+
+killall
+wait 0.6
+shot 03_jefe_derrotado
+wait 0.2
+say ---- fin: mirar las lineas "Boss group:" del log ----
+quit

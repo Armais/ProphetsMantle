@@ -211,8 +211,123 @@ static Entity summon(ECSWorld& world, Entity boss, EnemyType type, int max_alive
     Vec2 boss_pos = world.transforms[boss].position;
     Vec2 at = free_spot_near(world, boss_pos, 26.0f, seed, boss_pos);
     Entity s = spawn_enemy(world, type, at, world.enemy_textures[static_cast<u32>(type)], chapter);
-    if (s != ENTITY_NONE) spawn_particles(world, at, {200, 120, 255, 255}, 8, 70.0f, 0.3f);
+    if (s != ENTITY_NONE) {
+        world.enemy_ais[s].home_cell = world.enemy_ais[boss].home_cell;   // hereda la celda del invocador
+        spawn_particles(world, at, {200, 120, 255, 255}, 8, 70.0f, 0.3f);
+    }
     return s;
+}
+
+// =============================================================================
+// El corro del Carmelo (1 R 18:26-29)
+// =============================================================================
+// Un sumo sacerdote (la cabeza, `is_boss`) y sus profetas (`boss_group`) "saltando
+// alrededor del altar" (18:26). El capitulo termina cuando cae el ultimo: la sala se
+// limpia por `count_living_enemies() == 0`, asi que un grupo encaja por construccion.
+// "Los 450" se transmiten como REPOSICION — la cabeza rellena el corro desde el pueblo,
+// uno cada pocos segundos —, no como numero en pantalla.
+static constexpr int BAAL_RING_SLOTS  = 6;
+static constexpr f32 BAAL_RING_RADIUS = 44.0f;
+static constexpr f32 BAAL_RING_LEASH  = 120.0f;   // mas lejos del corro, lo persiguen
+
+static f32 ring_slot_angle(int slot) { return slot * (6.28318f / BAAL_RING_SLOTS); }
+
+int count_boss_group(const ECSWorld& world) {
+    int n = 0;
+    for (u32 i = 0; i < world.entity_count; i++) {
+        if (!world.is_alive(i) || !world.has(i, Component::EnemyAI)) continue;
+        if (!world.enemy_ais[i].boss_group) continue;
+        if (world.has(i, Component::Health) && !world.healths[i].is_alive()) continue;
+        n++;
+    }
+    return n;
+}
+
+// Primer hueco libre del corro (por fase): la reposicion ocupa el sitio del caido
+static int free_ring_slot(const ECSWorld& world) {
+    for (int s = 0; s < BAAL_RING_SLOTS; s++) {
+        const f32 want = ring_slot_angle(s);
+        bool taken = false;
+        for (u32 i = 0; i < world.entity_count && !taken; i++) {
+            if (!world.is_alive(i) || !world.has(i, Component::EnemyAI) || !world.enemy_ais[i].boss_group) continue;
+            if (world.has(i, Component::Health) && !world.healths[i].is_alive()) continue;
+            taken = std::fabs(world.enemy_ais[i].ring_phase - want) < 0.01f;
+        }
+        if (!taken) return s;
+    }
+    return -1;
+}
+
+static Entity spawn_baal_prophet(ECSWorld& world, Vec2 center, int slot, int chapter) {
+    const f32 a = ring_slot_angle(slot);
+    Vec2 want = center + Vec2{std::cos(a), std::sin(a)} * BAAL_RING_RADIUS;
+    Vec2 at = want;
+    if (world.active_room && !world.active_room->is_walkable_world(want + Vec2{0, 8}))
+        at = free_spot_near(world, want, 18.0f, slot, center);
+    Entity m = spawn_enemy(world, EnemyType::ProfetaDeBaal, at,
+                           world.enemy_textures[static_cast<u32>(EnemyType::ProfetaDeBaal)], chapter);
+    if (m == ENTITY_NONE) return m;
+    auto& ai = world.enemy_ais[m];
+    ai.boss_group   = true;
+    ai.boss_pattern = static_cast<u8>(BossPattern::ProfetasDeBaal);
+    ai.name         = tr("Profeta de Baal", "Prophet of Baal");
+    ai.ring_center  = center;
+    ai.ring_phase   = a;
+    ai.phase        = 0;
+    ai.shoot_timer  = 1.2f + 0.4f * slot;   // escalonados: el corro no dispara a la vez
+    world.transforms[m].scale = {1.15f, 1.15f};
+    world.healths[m].max *= 1.6f;
+    world.healths[m].current = world.healths[m].max;
+    SDL_Log("Baal prophet slot %d at (%.0f,%.0f)%s", slot, at.x, at.y,
+            (at.x != want.x || at.y != want.y) ? " (recolocado)" : "");
+    return m;
+}
+
+Entity spawn_boss_group(ECSWorld& world, EnemyType type, Vec2 position, Vec2 ring_center,
+                        u32 texture_id, int chapter, const char* boss_name, BossPattern pattern) {
+    Entity head = spawn_boss(world, type, position, texture_id, chapter, boss_name, pattern);
+    if (head == ENTITY_NONE || pattern != BossPattern::ProfetasDeBaal) return head;
+    // El nombre del GRUPO ("Los 450 Profetas de Baal") va en la barra; el de la cabeza, aqui
+    world.enemy_ais[head].name = tr("Sumo sacerdote de Baal", "High priest of Baal");
+    world.enemy_ais[head].ring_center = ring_center;
+    // Cinco de pie al abrir la pelea; el sexto hueco lo rellena la cabeza
+    for (int s = 0; s < BAAL_RING_SLOTS - 1; s++) spawn_baal_prophet(world, ring_center, s, chapter);
+    return head;
+}
+
+// Miembro del corro: baila alrededor del altar a velocidad angular constante con un
+// vaiven de radio, tira un Darkbolt cuando el profeta esta a tiro, y al flaquear entra
+// en el mismo frenesi que la cabeza (18:28: se hieren solos). Si el profeta se aleja del
+// corro lo persigue — sin esto se le tirotea desde fuera sin que nadie se mueva.
+static void update_baal_prophet(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_player,
+                                f32 dist, f32 dmg, f32 dt) {
+    auto& ai = world.enemy_ais[e];
+    auto& movement = world.movements[e];
+    auto& health = world.healths[e];
+    const bool frenzy = health.ratio() < 0.5f;
+    if (frenzy && ai.phase == 0) {
+        ai.phase = 1;
+        movement.speed *= 1.35f;
+        spawn_particles(world, world.transforms[e].position, {200, 40, 40, 255}, 12, 80.0f, 0.5f);
+    }
+    if (frenzy) health.current = std::max(1.0f, health.current - health.max * 0.012f * dt);
+
+    if (player_pos.distance_to(ai.ring_center) > BAAL_RING_LEASH) {
+        chase(world, e, to_player, dist, dt, 40.0f);
+    } else {
+        const f32 omega = frenzy ? 1.4f : 0.9f;
+        const f32 a = ai.ring_phase + world.time * omega;
+        const f32 r = BAAL_RING_RADIUS + 8.0f * std::sin(world.time * 3.0f + ai.ring_phase);
+        Vec2 target = ai.ring_center + Vec2{std::cos(a), std::sin(a)} * r;
+        Vec2 d = target - world.transforms[e].position;
+        f32 l = d.length();
+        movement.velocity = (l > 1.0f) ? d * (std::min(movement.speed, l * 4.0f) / l) : Vec2{0, 0};
+    }
+    if (dist < ai.attack_range * 1.5f && ai.shoot_timer <= 0.0f &&
+        has_line_of_sight(world, world.transforms[e].position, player_pos)) {
+        ai.shoot_timer = frenzy ? 1.8f : 2.6f;
+        shoot_at(world, e, to_player, ProjectileKind::Darkbolt, dmg, 120.0f, 260.0f);
+    }
 }
 
 // =============================================================================
@@ -310,10 +425,18 @@ static void update_boss_ai(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_p
             spawn_particles(world, world.transforms[e].position, {200, 40, 40, 255}, 16, 90.0f, 0.5f);
         }
         if (frenzy) health.current = std::max(1.0f, health.current - health.max * 0.012f * dt);  // se hieren solos
+        // Repone el corro desde el pueblo (los 450): UNO cada 5 s, al hueco del caido.
+        // Nacen ya como miembros (`boss_group`) para que cuenten en la barra.
         if (ai.special_timer <= 0.0f) {
-            ai.special_timer = frenzy ? 2.5f : 4.5f;
-            summon(world, e, EnemyType::ProfetaDeBaal, 8, chapter, 1);
-            summon(world, e, EnemyType::ProfetaDeBaal, 8, chapter, 5);
+            ai.special_timer = frenzy ? 3.0f : 5.0f;
+            const int slot = free_ring_slot(world);
+            if (slot >= 0 && count_boss_group(world) < BAAL_RING_SLOTS) {
+                Entity m = spawn_baal_prophet(world, ai.ring_center, slot, chapter);
+                if (m != ENTITY_NONE) {
+                    world.enemy_ais[m].home_cell = ai.home_cell;   // cuenta en la celda del jefe
+                    spawn_particles(world, world.transforms[m].position, {200, 120, 255, 255}, 8, 70.0f, 0.3f);
+                }
+            }
         }
         if (ai.shoot_timer <= 0.0f) {
             ai.shoot_timer = frenzy ? 1.6f : 3.0f;
@@ -623,6 +746,11 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
             update_boss_ai(world, e, player_pos, to_player, dist, dmg, dt);
             continue;
         }
+        // ---- Corro del jefe (cap. 3): miembros con barra compartida ----
+        if (ai.boss_group) {
+            update_baal_prophet(world, e, player_pos, to_player, dist, dmg, dt);
+            continue;
+        }
 
         // ---- Regular enemies think at intervals ----
         ai.think_timer -= dt;
@@ -769,6 +897,7 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
             Entity c = spawn_enemy(world, type, at, world.enemy_textures[static_cast<u32>(type)], chapter);
             if (c == ENTITY_NONE) break;
             world.enemy_ais[c].split_generation = gen;
+            world.enemy_ais[c].home_cell = ai.home_cell;   // los hijos cuentan en la celda del padre
             world.healths[c].max *= 0.55f;
             world.healths[c].current = world.healths[c].max;
             world.combats[c].damage *= 0.70f;

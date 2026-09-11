@@ -48,7 +48,8 @@ god
 # "El Fuego Responde": derribar el altar de Baal de la sala inicial
 # =========================================================================
 say ---- altar de Baal ----
-walk 392 188
+# coordenadas de ZONA: celda de inicio (2,2) = +(1280,704)
+walk 1672 892
 wait 0.5
 hold up 0.4
 hold attack 2.5
@@ -149,15 +150,23 @@ wait 2.0
 # el mismo instante).
 # =========================================================================
 say ---- sala limpia con la fe apagada ----
+# Zona continua (2026-09-10): con semilla 404 la celda 8 [0,2] trae 5 soldados + 1 profeta
+# (= 8 de fe por bajas). Para quedar < 10 hay que ANULAR el +2 de "sin dano": se apaga
+# `god` (es un toggle, viene encendido desde el arranque), se siembra un soldado que pegue,
+# y se vuelve a encender antes de vaciar la fe y limpiar (8 + 1 del sembrado = 9).
 seed 404
 chapter 1
 wait 3.0
 press confirm
 wait 2.5
+goto 8
+wait 0.4
+god
+spawn 0 1
+wait 2.5
+god
 faith 0
 wait 0.2
-goto 1
-wait 0.4
 killall
 wait 2.0
 seed 20260825
@@ -230,7 +239,11 @@ wait 1.0
 # "Ante el Rey": el jefe del capitulo (`goto boss`: el indice depende de la rejilla)
 # =========================================================================
 say ---- jefe de capitulo ----
+# zona continua: se entra ANDANDO en la arena (goto boss deja en el nudo)
 goto boss
+wait 0.5
+walk 1600 150
+wait 1.5
 wait 2.5
 killall
 wait 2.5

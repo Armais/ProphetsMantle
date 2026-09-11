@@ -147,7 +147,8 @@ enum class RoomType : u8 {
     Event,       // Story/NPC event (widow, etc.)
     Start,
     Exit,
-    Interior     // Dentro de un edificio: UNA pantalla, muros de verdad y camara clavada
+    Interior,    // Dentro de un edificio: UNA pantalla, muros de verdad y camara clavada
+    Zone         // El mapa CONTINUO de un capitulo: las celdas de la rejilla cosidas en un lienzo
 };
 
 inline bool is_combat_room(RoomType t) {
@@ -189,34 +190,37 @@ struct BiomeStyle {
     TileSprite details[3];    // Decals scattered over plain floor tiles
     int  detail_pct;          // % of plain floor tiles that get a decal
     BorderStyle border;       // Como se cierra el borde de la sala
+    bool rocky;               // Terreno de roca: huecos (Carro de Fuego) y grietas del bioma. Independiente del
+                              // borde desde 2026-09-10: el Querit, el Carmelo y Horeb cierran en Natural (ALTTP:
+                              // el exterior no tiene muros) pero siguen siendo canon, montana y ladera.
 };
 
 inline BiomeStyle get_biome_style(int chapter) {
     using TS = TileSprite;
     Color w = Color::white();
     switch (chapter) {
-        case 1:  return {w, w, w, w, {60, 48, 36, 255}, TS::Tree, 6, 3, 4, 7, true, false, 0,                                                                       // Arroyo Querit: sandy canyon
-                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 32, BorderStyle::Cliff};
+        case 1:  return {w, w, w, w, {60, 48, 36, 255}, TS::Tree, 6, 3, 4, 7, true, false, 0,                                                                       // Arroyo Querit: sandy canyon (borde Natural, terreno rocoso)
+                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 32, BorderStyle::Natural, true};
         case 2:  return {{240, 228, 200, 255}, w, {225, 215, 170, 255}, {215, 205, 190, 255}, {58, 50, 40, 255}, TS::Palm, 3, 3, 3, 3, false, true, 2,              // Sarepta: village on sand
-                         TS::FloorA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftB}, 22, BorderStyle::Natural};
-        case 3:  return {{200, 200, 210, 255}, {210, 220, 235, 255}, {190, 200, 200, 255}, {180, 180, 190, 255}, {40, 40, 48, 255}, TS::TreeDead, 3, 8, 1, 2, false, false, 0, // Carmelo: rocky mountain
-                         TS::StoneA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftA}, 30, BorderStyle::Cliff};
-        case 4:  return {{150, 135, 140, 255}, {150, 150, 190, 255}, {140, 130, 140, 255}, {130, 120, 130, 255}, {24, 20, 26, 255}, TS::TreeDead, 2, 8, 0, 1, false, true, 1,  // Horeb: dark cave
-                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 30, BorderStyle::Cliff};
+                         TS::FloorA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftB}, 22, BorderStyle::Natural, false};
+        case 3:  return {{200, 200, 210, 255}, {210, 220, 235, 255}, {190, 200, 200, 255}, {180, 180, 190, 255}, {40, 40, 48, 255}, TS::TreeDead, 3, 8, 1, 2, false, false, 0, // Carmelo: rocky mountain (borde Natural, terreno rocoso)
+                         TS::StoneA, {TS::DetPebbles, TS::DetCrack, TS::DetTuftA}, 30, BorderStyle::Natural, true};
+        case 4:  return {{150, 135, 140, 255}, {150, 150, 190, 255}, {140, 130, 140, 255}, {130, 120, 130, 255}, {24, 20, 26, 255}, TS::TreeDead, 2, 8, 0, 1, false, true, 1,  // Horeb: ladera del monte; la cueva es el INTERIOR (borde Natural, terreno rocoso)
+                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 30, BorderStyle::Natural, true};
         case 5:  return {{235, 245, 215, 255}, w, {215, 240, 190, 255}, {200, 210, 180, 255}, {40, 52, 34, 255}, TS::Tree, 7, 1, 5, 9, false, false, 0,             // El Llamado: meadows
-                         TS::GrassA, {TS::DetTuftA, TS::DetFlowers, TS::DetTuftB}, 45, BorderStyle::Natural};
+                         TS::GrassA, {TS::DetTuftA, TS::DetFlowers, TS::DetTuftB}, 45, BorderStyle::Natural, false};
         case 6:  return {{180, 170, 180, 255}, {120, 150, 110, 255}, {170, 165, 170, 255}, {170, 165, 175, 255}, {36, 34, 40, 255}, TS::TreeDead, 2, 4, 2, 2, true, true, 2,  // Jerico: corrupt city
-                         TS::StoneA, {TS::DetCrack, TS::DetMoss, TS::DetBones}, 30, BorderStyle::Masonry};
+                         TS::StoneA, {TS::DetCrack, TS::DetMoss, TS::DetBones}, 30, BorderStyle::Masonry, false};
         case 7:  return {{220, 205, 180, 255}, w, {215, 205, 175, 255}, {205, 195, 180, 255}, {52, 46, 38, 255}, TS::Palm, 3, 3, 3, 4, false, true, 2,              // Aceite: poor village
-                         TS::FloorA, {TS::DetPebbles, TS::DetTwigs, TS::DetTuftB}, 24, BorderStyle::Natural};
+                         TS::FloorA, {TS::DetPebbles, TS::DetTwigs, TS::DetTuftB}, 24, BorderStyle::Natural, false};
         case 8:  return {{232, 224, 214, 255}, w, {225, 215, 200, 255}, {225, 215, 205, 255}, {50, 44, 42, 255}, TS::Palm, 3, 2, 4, 3, false, true, 3,              // Sunamita: noble house (clean paving)
-                         TS::StoneA, {TS::DetMoss, TS::DetCrack, TS::DetFlowers}, 14, BorderStyle::Masonry};
+                         TS::StoneA, {TS::DetMoss, TS::DetCrack, TS::DetFlowers}, 14, BorderStyle::Masonry, false};
         case 9:  return {{225, 235, 215, 255}, {200, 220, 240, 255}, {205, 215, 195, 255}, {200, 200, 190, 255}, {44, 48, 40, 255}, TS::Tree, 4, 3, 3, 6, true, false, 0,  // Jordan: green banks
-                         TS::GrassA, {TS::DetTuftA, TS::DetPebbles, TS::DetFlowers}, 40, BorderStyle::Natural};
+                         TS::GrassA, {TS::DetTuftA, TS::DetPebbles, TS::DetFlowers}, 40, BorderStyle::Natural, false};
         case 10: return {{175, 170, 175, 255}, w, {165, 160, 165, 255}, {160, 155, 165, 255}, {30, 28, 34, 255}, TS::TreeDead, 2, 4, 1, 1, false, true, 3,          // Ciudad sitiada
-                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 34, BorderStyle::Masonry};
+                         TS::StoneA, {TS::DetBones, TS::DetCrack, TS::DetPebbles}, 34, BorderStyle::Masonry, false};
         default: return {w, w, w, w, {60, 48, 36, 255}, TS::Tree, 5, 3, 3, 5, true, false, 0,
-                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 30, BorderStyle::Cliff};
+                         TS::FloorA, {TS::DetTuftA, TS::DetPebbles, TS::DetTwigs}, 30, BorderStyle::Cliff, true};
     }
 }
 
@@ -287,49 +291,84 @@ enum SecretKind : u32 {
     SECRET_WATER = 1u << 3,   // charca que se seca (Sanar Aguas)
 };
 
+// =============================================================================
+// Zona continua (2026-09-10): la CELDA es la unidad de generacion, la ZONA lo que se juega
+// =============================================================================
+// Un capitulo era una rejilla de salas de 40x22 con anillo, vano y fundido en cada cruce.
+// Ahora cada celda se genera igual que antes (mapas fijos: generacion pura por (capitulo,
+// celda), `Engine::generate_pristine_cell`) sobre un Room TEMPORAL y se BLITEA en un Room
+// grande (`RoomType::Zone`, hasta 160x88 tiles) en `(gx*40, gy*22)`. Una pasada de costuras
+// (`open_seams`) abre las dos filas/columnas de anillo de cada costura interior; la franja
+// irregular se queda, como los setos de A Link to the Past. El perimetro conserva el borde
+// del bioma. La camara recorta contra la zona entera; no hay transicion por bordes ni
+// fundido entre celdas (el fundido queda para la PUERTA del interior).
+//
+// La arena del jefe vive DENTRO de la celda B (`stamp_arena`): un recinto de una pantalla
+// de suelo con un cerco de piedras y un vano de 4 tiles abajo, sellado mientras el jefe
+// vive (`arena_sealed`: un flag, no tiles — el diff del guardado no lo ve).
+//
+// Todo el estado que era "de la sala" es ahora "de la celda" (`CellState`): un interior o
+// un escenario de escena son UNA celda (cells[0]).
+
+struct EnemySpawn {
+    EnemyType type;
+    Vec2 position;
+};
+
+struct CellState {
+    bool visited      = false;
+    bool cleared      = false;
+    bool altar_used   = false;   // AltarGod already prayed at
+    bool chest_opened = false;
+    bool event_used   = false;   // Encuentro de la celda Event ya resuelto
+    bool active       = false;   // Sus enemigos estan sembrados (celda viva, ALTTP)
+    int  event_id     = -1;      // id de `namespace Ev` (game/events.h); -1 = ninguno
+    int  hub_tx = 0, hub_ty = 0; // El nudo de las sendas: donde aparece el profeta al teletransportar
+    std::vector<EnemySpawn> spawns;   // Coordenadas de ZONA (blit_cell las desplaza)
+};
+
 struct Room {
     RoomType type = RoomType::Normal;
     int chapter = 1;
-    // Que encuentro guarda esta sala (id de `namespace Ev`, game/events.h). -1 = ninguno.
-    // Lo reparte `FloorMap::generate` y viaja en el nodo, no en el capitulo: hay 2-3 salas
-    // Event por mapa y cada una cuenta una escena DISTINTA del pozo del capitulo.
-    int event_id = -1;
-    // Puerta a un interior (o de vuelta). `has_doorway` dice si esta sala tiene una y
-    // `door_tx/door_ty` donde. En un INTERIOR esta siempre en el centro del muro sur.
+    // Puerta a un interior (o de vuelta). `has_doorway` dice si hay una y `door_tx/door_ty`
+    // donde (en la zona, coordenadas de ZONA). En un INTERIOR va en el centro del muro sur.
     bool has_doorway = false;
     int  door_tx = 0, door_ty = 0;
 
-    // Tamano REAL de esta sala en tiles. La matriz se dimensiona al maximo (una sala
-    // exterior, 2x2 pantallas) y un espacio de una pantalla — la arena del jefe, y los
-    // interiores de la fase siguiente — usa solo su esquina. Todo bucle sobre el mapa va
+    // Tamano REAL en tiles. La matriz se dimensiona al maximo (la zona, 4x4 celdas) y una
+    // celda, un interior o un escenario usan solo su esquina. Todo bucle sobre el mapa va
     // contra `tiles_w`/`tiles_h`, nunca contra las constantes.
     int tiles_w = Config::ROOM_TILES_X;
     int tiles_h = Config::ROOM_TILES_Y;
     BorderStyle border = BorderStyle::Cliff;
 
-    TileType tiles[Config::ROOM_TILES_Y][Config::ROOM_TILES_X] = {};
+    TileType tiles[Config::ZONE_TILES_Y][Config::ZONE_TILES_X] = {};
 
-    // Enemy spawns
-    struct EnemySpawn {
-        EnemyType type;
-        Vec2 position;
-    };
+    // Lo que GENERA una celda (coordenadas locales). En la zona viajan a `cells[i].spawns`
+    // al coser (blit_cell), ya en coordenadas de zona.
     std::vector<EnemySpawn> enemy_spawns;
 
-    // Doors (connections to other rooms)
+    // Aberturas del borde de una CELDA al generarla (lados conectados). En la zona no
+    // significan nada: las costuras se abren en open_seams.
     bool door_north = false;
     bool door_south = false;
     bool door_east  = false;
     bool door_west  = false;
 
-    // State
-    bool cleared      = false;
-    bool visited      = false;
-    bool exits_locked = false;   // Combat in progress: border openings are sealed
-    bool exit_open    = false;   // Chapter exit arch placed (boss defeated)
-    bool altar_used   = false;   // AltarGod already prayed at
-    bool chest_opened = false;
-    bool event_used   = false;   // Encuentro de la sala Event ya resuelto
+    // --- Celdas ------------------------------------------------------------------------
+    int cells_x = 1, cells_y = 1, cell_count = 1;
+    int cell_w = Config::ROOM_TILES_X, cell_h = Config::ROOM_TILES_Y;
+    CellState cells[Config::ZONE_CELLS_MAX];
+
+    // --- Arena del jefe (zona) -----------------------------------------------------------
+    bool has_arena    = false;
+    bool arena_sealed = false;   // el vano no se pisa ni se atraviesa a tiros
+    int  boss_cell    = -1;
+    int  arena_x0 = 0, arena_y0 = 0;                          // esquina del CERCO (tiles de zona)
+    int  arena_gap_x0 = 0, arena_gap_x1 = 0, arena_gap_y = 0;  // el vano, en el cerco de abajo
+
+    // --- Arco de salida del capitulo (zona) ----------------------------------------------
+    bool exit_open = false;
     int  exit_tx = 10, exit_ty = 2;   // Arch tile (valid when exit_open)
 
     void generate(RoomType room_type, int chapter, int difficulty, int event = -1,
@@ -343,7 +382,22 @@ struct Room {
     bool find_free_tile_near(int tx, int ty, int& out_x, int& out_y) const;
     // Nearest walkable ground position for a feet point inside a solid tile (returns false if none)
     bool nearest_walkable_world(Vec2 feet, Vec2& out_feet) const;
-    void place_exit();           // Boss defeated: open the arch at the top centre
+    void place_exit();           // Boss defeated: open the arch (en la arena, si la hay)
+
+    // Celdas
+    int  cell_of_tile(int tx, int ty) const;       // -1 fuera del mapa
+    int  cell_of_world(Vec2 p) const;
+    Rect cell_rect_world(int cell) const;
+    // Arena: el SUELO del recinto (20x11 tiles), sin el cerco; el ancla es el tile del jefe
+    // (y de la escena Live del dialogo)
+    Rect arena_rect_world() const;
+    Rect arena_bounds_world() const;   // el recinto CON el cerco: el recorte de la camara (se ve el vano sellado)
+    void arena_anchor(int& tx, int& ty) const;
+    bool is_arena_gap(int tx, int ty) const;
+    bool in_arena_ring(int tx, int ty) const;
+    // Coser una celda generada en local en (gx, gy); `index` es su nodo de la rejilla
+    void blit_cell(const Room& cell, int gx, int gy, int index);
+    void open_seams();
 
     // Abre en `radius` todo lo que `kinds` permita y apunta en `out_loot` DONDE ha aparecido
     // un hallazgo. Devuelve cuantas celdas se han abierto (0 = la llave no valia aqui).
@@ -352,22 +406,23 @@ struct Room {
     // mismo mapa de hallazgos y no hay nada que guardar.
     bool tile_hides_loot(int tx, int ty) const;
 
-    // Rendering: ground pass (floor, water, walls) then props into the y-sorted draw list
-    void render_ground(Renderer& renderer, u32 tileset, f32 time) const;
-    // `npc_tex` es assets/sprites/npcs.png: quien espera en la sala de encuentro. Sin ella
+    // Rendering: solo el rectangulo VISIBLE (`view`, unidades de mundo) mas un margen. La
+    // zona son hasta 14.000 tiles y pintarla entera cada frame no tiene sentido.
+    void render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) const;
+    // `npc_tex` es assets/sprites/npcs.png: quien espera en la celda de encuentro. Sin ella
     // (o si el locutor es una escena y no una persona) el sitio lo sigue marcando una hoguera.
-    void collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex = TEXTURE_NONE,
-                       u32 npc_tex = TEXTURE_NONE, f32 time = 0.0f) const;
-    void render_exit_barriers(Renderer& renderer, f32 time) const;
+    void collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
+                       u32 npc_tex, f32 time, Rect view) const;
+    void render_exit_barriers(Renderer& renderer, f32 time) const;   // la banda roja del vano sellado
 
-    // Tamano de la sala en unidades de juego (lo que ve la camara y las transiciones)
+    // Tamano en unidades de juego (lo que ve la camara)
     f32 world_w() const { return static_cast<f32>(tiles_w * Config::TILE_SIZE); }
     f32 world_h() const { return static_cast<f32>(tiles_h * Config::TILE_SIZE); }
 
-    // Aberturas del borde: las "puertas" de una sala al aire libre. En bioma `Natural` el
-    // lado conectado se abre CASI ENTERO (solo se cierran las esquinas): un vano de seis
-    // tiles en mitad de un campo lo convierte en un corral con puerta. En `Cliff` y
-    // `Masonry` el paso es estrecho, que es donde un vano significa algo.
+    // Aberturas del borde de una CELDA al generarla. En bioma `Natural` el lado conectado se
+    // abre CASI ENTERO (solo se cierran las esquinas): un vano de seis tiles en mitad de un
+    // campo lo convierte en un corral con puerta. En `Cliff` y `Masonry` el paso es
+    // estrecho, que es donde un vano significa algo. (Luego open_seams abre el resto.)
     int gap_x0() const { return border == BorderStyle::Natural ? 2 : tiles_w / 2 - 3; }
     int gap_x1() const { return border == BorderStyle::Natural ? tiles_w - 3 : tiles_w / 2 + 2; }
     int gap_y0() const { return border == BorderStyle::Natural ? 2 : tiles_h / 2 - 2; }
@@ -431,9 +486,13 @@ struct FloorMap {
     int grid_w = 3;
     int grid_h = 3;
 
-    // Room cache for persistence (re-entering a visited room restores from cache)
-    Room room_cache[MAX_ROOMS];
-    bool room_generated[MAX_ROOMS] = {};
+    // Dos ranuras (zona continua): 0 = la ZONA del capitulo (mientras el profeta esta en
+    // un interior o en un escenario de escena), 1 = el INTERIOR (mientras esta fuera). Un
+    // Room son ~15 KB: una ranura por nodo serian 375 KB para guardar flags. El estado de
+    // cada celda vive en `Room::cells` de la zona.
+    Room room_cache[2];
+    bool room_generated[MAX_ROOMS] = {};   // nodo generado (las celdas, todas a la vez al construir la zona)
+    bool zone_built = false;
 
     void generate(int chapter);
     int room_at(int gx, int gy) const;  // Find room index by grid coords, -1 if none

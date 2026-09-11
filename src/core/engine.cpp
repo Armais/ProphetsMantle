@@ -481,9 +481,9 @@ void Engine::update(f32 dt) {
                 input.rumble(Config::Feel::RUMBLE_DASH, 90);
             }
 
-            // Check room transition before physics/AI (player may have crossed border)
+            // Gracia de la puerta (ver use_doorway). Las transiciones por borde ya no
+            // existen: el capitulo es una zona continua.
             if (room_change_grace > 0.0f) room_change_grace -= dt;
-            try_room_transition();
 
             world.update(dt);
             update_enemy_ai(world, dt);
@@ -721,6 +721,7 @@ void Engine::update(f32 dt) {
                 }
             }
 
+            update_cells();
             update_room_state();
             check_achievements();
             renderer.update_shake(dt);
@@ -867,11 +868,16 @@ void Engine::render() {
         // — sin ese corte se irian con el profeta, porque `world_to_screen` se aplica a todo
         // lo que dibuja el Renderer, `draw_text` incluido.
         renderer.begin_world(camera.position);
-        current_room_data.render_ground(renderer, tileset_texture, world.time);
+        // Solo lo que se ve (mas un margen): la zona son hasta 160x88 tiles y pintarla
+        // entera cada frame serian 14.000 celdas por pasada.
+        const Rect view = {camera.position.x - Config::GAME_WIDTH * 0.5f,
+                           camera.position.y - Config::GAME_HEIGHT * 0.5f,
+                           static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)};
+        current_room_data.render_ground(renderer, tileset_texture, world.time, view);
 
         draw_list.clear();
         current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
-                                        npc_texture, world.time);
+                                        npc_texture, world.time, view);
         world.collect_draws(draw_list, renderer);
         renderer.draw_sorted(draw_list);
 
@@ -912,7 +918,14 @@ void Engine::render() {
         HUDContext ctx;
         ctx.floor_map = &floor_map;
         ctx.room = &current_room_data;
+        ctx.zone = zone_ptr();
         ctx.boss = boss_entity;
+        ctx.boss_hp = boss_bar_hp;
+        ctx.boss_hp_max = boss_bar_max;
+        ctx.boss_heads = boss_bar_heads;
+        ctx.boss_group = boss_group_max > 0.0f;
+        ctx.boss_invulnerable = boss_bar_invulnerable;
+        ctx.boss_name = boss_bar_name;
         ctx.chapter = state.current_chapter;
         ctx.banner = banner_timer > 0.0f ? banner_text.c_str() : nullptr;
         ctx.subbanner = subbanner_text.empty() ? nullptr : subbanner_text.c_str();
@@ -1112,6 +1125,7 @@ void Engine::start_new_run() {
     // fotografia prologo + carta); la audiencia la fuerza el comando `audiencia`.
     start_chapter(1, ChapterAnnounce::None);
     boss_talk_seen = 0;
+    run_events_done = 0;
     pending_scene  = -1;
     if (!autoplay.active) {
         start_scene(Scene::AUDIENCIA);
@@ -1163,21 +1177,22 @@ void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
 
     floor_map.generate(chapter);
 
-    // Continuar (v9): las salas con estado guardado se pre-generan y restauran YA, no al
-    // pisarlas. El minimapa (y el mapa de TAB) leen room_cache[i].visited, asi que con la
-    // restauracion perezosa una partida continuada arrancaba con el mapa entero en blanco.
+    boss_entity = ENTITY_NONE;
+    reset_boss_bar();
+    spawn_tx = spawn_ty = -1;
+    // Construye la ZONA entera (y, al Continuar, re-aplica el estado guardado de cada
+    // celda) y deja al profeta en el nudo de la celda de inicio.
+    load_room(floor_map.current_room);
+    // Continuar (v9/v10): el interior con estado guardado se pre-genera y restaura YA, para
+    // que su altar rezado o su cofre abierto no vuelvan a nacer sin usar.
     if (apply_saved_rooms) {
-        for (int i = 0; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
-            if (save.data.room_flags[i] == 0) continue;
-            generate_pristine_room(i, floor_map.room_cache[i]);
-            apply_saved_room_state(i, floor_map.room_cache[i]);
+        for (int i = floor_map.grid_w * floor_map.grid_h; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
+            if (floor_map.rooms[i].type != RoomType::Interior || save.data.room_flags[i] == 0) continue;
+            generate_pristine_cell(i, floor_map.room_cache[1]);
+            apply_saved_interior_state(i, floor_map.room_cache[1]);
             floor_map.room_generated[i] = true;
         }
     }
-
-    entry_direction = Direction::None;  // Center spawn at chapter start
-    boss_entity = ENTITY_NONE;
-    load_room(floor_map.current_room);
 
     // `announce`: que se lee antes de jugar (el mundo ya esta cargado detras).
     // `Cinematic` = la intro animada de la primera entrada natural; bajo autoplay o sin
@@ -1342,8 +1357,12 @@ void Engine::start_scene(int id) {
     pending_scene = -1;
 
     for (Entity& fe : scene_figures) fe = ENTITY_NONE;
-    int ax = current_room_data.tiles_w / 2, ay = 3;   // ancla: en la arena, el tile del jefe
+    int ax, ay;
+    current_room_data.arena_anchor(ax, ay);   // ancla: en la arena, el tile del jefe
     if (def.stage != StageKind::Live) {
+        // El escenario se genera SOBRE current_room_data: la zona se guarda antes de
+        // pisarla (finish_scene -> load_room la restaura de la ranura 0).
+        if (current_room_data.type == RoomType::Zone) floor_map.room_cache[0] = current_room_data;
         // start_chapter ya sembro lo que hubiera en la sala inicial: saldria dibujado
         // dentro del escenario. Se barre igual que hace load_room.
         for (u32 e = 0; e < MAX_ENTITIES; e++) {
@@ -1351,6 +1370,7 @@ void Engine::start_scene(int id) {
                 world.destroy(static_cast<Entity>(e));
         }
         boss_entity = ENTITY_NONE;
+        reset_boss_bar();
         world.popups.clear();
 
         Room& room = current_room_data;
@@ -1376,8 +1396,8 @@ void Engine::start_scene(int id) {
         room.door_north = room.door_south = room.door_east = room.door_west = false;
         room.has_doorway = false;
         room.enemy_spawns.clear();
-        room.cleared = true;
-        room.visited = true;
+        room.cells[0].cleared = true;
+        room.cells[0].visited = true;
         world.active_room = &room;
         camera.set_room({0, 0, room.world_w(), room.world_h()});
     }
@@ -1434,15 +1454,33 @@ void Engine::start_scene(int id) {
     scene_next();
 }
 
+// ¿Se resolvio ese relato del pozo EN ESTA PARTIDA? Dos fuentes: la mascara de la sesion
+// (tambien la llena el comando `event` del autoplay) y `event_used` de la sala que lo cuenta
+// (lo que sobrevive al Continuar: start_chapter rehidrata room_cache desde el v9).
+bool Engine::event_resolved_in_run(int ev) const {
+    if (ev < 0 || ev >= 64) return false;
+    if ((run_events_done >> ev) & 1ull) return true;
+    const Room* zone = zone_ptr();
+    if (!zone) return false;
+    for (int i = 0; i < zone->cell_count && i < floor_map.room_count; i++) {
+        const auto& node = floor_map.rooms[i];
+        if (node.type == RoomType::Event && node.event_id == ev && zone->cells[i].event_used) return true;
+    }
+    return false;
+}
+
 // Siguiente caja de la escena, o el cierre si ya no quedan.
 void Engine::scene_next() {
     const SceneDef def = get_scene_def(scene_id);
     scene_step++;
     if (scene_step < def.count) {
-        const int line = def.first_line + scene_step;
+        int line = def.first_line + scene_step;
+        // El jefe responde a lo jugado: primera caja alternativa si el relato se resolvio
+        const bool variant = (scene_step == 0 && def.alt_first_line >= 0 && event_resolved_in_run(def.alt_event));
+        if (variant) line = def.alt_first_line;
         open_dialogue(Sc::LINE_BASE + line);              // dark = false: se ve el escenario
         if (scene_manual) dialogue.auto_timer = 0.0f;     // parada, como chintro
-        SDL_Log("%s: parada %d/%d (id %d)", def.tag, scene_step + 1, def.count, line);
+        SDL_Log("%s: parada %d/%d (id %d)%s", def.tag, scene_step + 1, def.count, line, variant ? " variante" : "");
         return;
     }
     finish_scene(false);
@@ -1479,7 +1517,7 @@ void Engine::finish_scene(bool skipped) {
 
     if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
         world.transforms[player.entity].facing = Direction::Down;
-    entry_direction = Direction::None;   // como lo deja start_chapter: aparece en el centro
+    spawn_tx = spawn_ty = -1;   // como lo deja start_chapter: aparece en el nudo de su celda
     load_room(floor_map.current_room);
 
     if (def.then == SceneThen::ChapterIntro) {
@@ -1720,9 +1758,9 @@ void Engine::update_music() {
         case GameScene::Paused:
         case GameScene::Choice:
         case GameScene::Dialogue: {
-            bool boss_room = floor_map.room_count > 0 &&
-                             floor_map.rooms[floor_map.current_room].type == RoomType::Boss &&
-                             !current_room_data.cleared;
+            // El tema del jefe suena mientras la arena esta sellada (zona continua)
+            const Room* zone = zone_ptr();
+            bool boss_room = current_room_data.type == RoomType::Zone && zone && zone->arena_sealed;
             if (boss_room) want = MusicID::BossTheme;
             else want = (state.current_act == Act::Act_I) ? MusicID::Exploration : MusicID::EliseoCombat;
             break;
@@ -2100,43 +2138,136 @@ void Engine::populate_save_data() {
 // (chapter_seed, indice de sala) y genera. La usan load_room (primera visita) y
 // capture_room_states (copia pristina para el diff del guardado); si alguna vez divergen,
 // el guardado restauraria salas que no son las que se jugaron.
-void Engine::generate_pristine_room(int room_index, Room& out) {
-    const auto& node = floor_map.rooms[room_index];
+void Engine::generate_pristine_cell(int node_index, Room& out) {
+    const auto& node = floor_map.rooms[node_index];
     out.door_north = (node.connections[0] >= 0);
     out.door_south = (node.connections[1] >= 0);
     out.door_east  = (node.connections[2] >= 0);
     out.door_west  = (node.connections[3] >= 0);
     int difficulty = (state.current_chapter - 1) % Config::CHAPTERS_ACT_I + 1;   // 1..5 per act
-    srand(chapter_seed ^ ((static_cast<u32>(room_index) + 1u) * 2654435761u));
+    srand(chapter_seed ^ ((static_cast<u32>(node_index) + 1u) * 2654435761u));
     out.generate(node.type, state.current_chapter, difficulty, node.event_id,
                  node.interior_room >= 0);
 }
 
-// Vuelca a save.data el estado de cada sala ya generada: un byte de flags + UN BIT por celda
-// alterada desde la generacion. El diff se calcula REGENERANDO la sala en limpio — la
-// generacion es pura, asi que la copia pristina sale gratis y el diff caza CUALQUIER mecanica
-// que toque tiles sin llevar contabilidad aparte. No se guarda el tilemap: el terreno se
-// regenera identico y solo viajan las celdas que el jugador cambio.
+// La ZONA del capitulo: cada celda de la rejilla generada en limpio (pura por (capitulo,
+// celda), igual que siempre) y cosida en su sitio; luego las costuras. Es una funcion pura
+// de (chapter_seed, capitulo, rejilla): la misma zona en cada arranque, al Continuar y en
+// cada guardado (pristine_zone la cachea para el diff).
+void Engine::build_pristine_zone(Room& zone) {
+    const int gw = floor_map.grid_w, gh = floor_map.grid_h;
+    const BiomeStyle biome = get_biome_style(state.current_chapter);
+    zone.type       = RoomType::Zone;
+    zone.chapter    = state.current_chapter;
+    zone.border     = biome.border;
+    zone.cells_x    = gw;
+    zone.cells_y    = gh;
+    zone.cell_w     = Config::ROOM_TILES_X;
+    zone.cell_h     = Config::ROOM_TILES_Y;
+    zone.cell_count = std::min(gw * gh, Config::ZONE_CELLS_MAX);
+    zone.tiles_w    = gw * zone.cell_w;
+    zone.tiles_h    = gh * zone.cell_h;
+    zone.has_doorway = false;
+    zone.has_arena = false;
+    zone.arena_sealed = false;
+    zone.boss_cell = -1;
+    zone.exit_open = false;
+    zone.door_north = zone.door_south = zone.door_east = zone.door_west = false;
+    zone.enemy_spawns.clear();
+    for (auto& cs : zone.cells) cs = CellState{};
+    SDL_memset(zone.tiles, static_cast<int>(TileType::Floor), sizeof(zone.tiles));
+
+    static Room cell_tmp;   // ~15 KB: fuera de la pila
+    for (int i = 0; i < zone.cell_count && i < floor_map.room_count; i++) {
+        const auto& node = floor_map.rooms[i];
+        if (node.grid_x < 0 || node.grid_y < 0) continue;
+        generate_pristine_cell(i, cell_tmp);
+        zone.blit_cell(cell_tmp, node.grid_x, node.grid_y, i);
+    }
+    zone.open_seams();
+    SDL_Log("Zone built: %dx%d cells (%dx%d tiles), boss cell %d, arena %s, door %s",
+            gw, gh, zone.tiles_w, zone.tiles_h, zone.boss_cell,
+            zone.has_arena ? "yes" : "no", zone.has_doorway ? "yes" : "no");
+}
+
+const Room& Engine::pristine_zone() {
+    static Room pz;
+    static u32 pz_seed = 0;
+    static int pz_chapter = -1, pz_gw = 0, pz_gh = 0;
+    if (pz_seed != chapter_seed || pz_chapter != state.current_chapter ||
+        pz_gw != floor_map.grid_w || pz_gh != floor_map.grid_h) {
+        build_pristine_zone(pz);
+        pz_seed = chapter_seed;
+        pz_chapter = state.current_chapter;
+        pz_gw = floor_map.grid_w;
+        pz_gh = floor_map.grid_h;
+    }
+    return pz;
+}
+
+Room* Engine::zone_ptr() {
+    if (current_room_data.type == RoomType::Zone) return &current_room_data;
+    return floor_map.zone_built ? &floor_map.room_cache[0] : nullptr;
+}
+
+const Room* Engine::zone_ptr() const {
+    if (current_room_data.type == RoomType::Zone) return &current_room_data;
+    return floor_map.zone_built ? &floor_map.room_cache[0] : nullptr;
+}
+
+// Vuelca a save.data el estado de cada CELDA de la zona (y del interior): un byte de flags +
+// UN BIT por tile alterado desde la generacion, en coordenadas LOCALES de la celda (stride
+// Config::ROOM_TILES_X, como siempre). El diff se calcula contra la zona PRISTINA
+// (pristine_zone, cacheada: regenerar 16 celdas por guardado daria un tiron en mitad de la
+// pelea), asi que caza CUALQUIER mecanica que toque tiles sin contabilidad aparte. No se
+// guarda el tilemap: el terreno se regenera identico y solo viajan las celdas cambiadas.
 void Engine::capture_room_states() {
     static_assert(FloorMap::MAX_ROOMS <= SAVE_MAX_ROOMS, "SaveData::room_flags se queda corto");
+    static_assert(Config::ZONE_CELLS_MAX <= SAVE_MAX_ROOMS, "SaveData::room_flags se queda corto para la zona");
     SDL_memset(save.data.room_flags, 0, sizeof(save.data.room_flags));
     SDL_memset(save.data.room_open,  0, sizeof(save.data.room_open));
-    for (int i = 0; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
-        if (!floor_map.room_generated[i]) continue;
-        // La sala activa vive en current_room_data y su cache puede ir por detras
-        const Room& r = (i == floor_map.current_room) ? current_room_data
-                                                      : floor_map.room_cache[i];
+
+    const Room* zone = zone_ptr();
+    if (zone && floor_map.zone_built) {
+        const Room& pz = pristine_zone();
+        for (int i = 0; i < zone->cell_count && i < SAVE_MAX_ROOMS && i < floor_map.room_count; i++) {
+            const CellState& cs = zone->cells[i];
+            u8 f = 0;
+            if (cs.visited)      f |= 1u << 0;
+            if (cs.cleared)      f |= 1u << 1;
+            if (cs.altar_used)   f |= 1u << 2;
+            if (cs.chest_opened) f |= 1u << 3;
+            if (cs.event_used)   f |= 1u << 4;
+            if (i == zone->boss_cell && zone->exit_open) f |= 1u << 5;
+            save.data.room_flags[i] = f;
+
+            const auto& node = floor_map.rooms[i];
+            const int ox = node.grid_x * zone->cell_w, oy = node.grid_y * zone->cell_h;
+            u8* bits = save.data.room_open[i];
+            for (int y = 0; y < zone->cell_h; y++)
+                for (int x = 0; x < zone->cell_w; x++)
+                    if (zone->tiles[oy + y][ox + x] != pz.tiles[oy + y][ox + x]) {
+                        int cell = y * Config::ROOM_TILES_X + x;
+                        bits[cell >> 3] |= static_cast<u8>(1u << (cell & 7));
+                    }
+        }
+    }
+    // El interior (nodo detras de la rejilla), si se ha generado en esta sesion
+    for (int i = floor_map.grid_w * floor_map.grid_h; i < floor_map.room_count && i < SAVE_MAX_ROOMS; i++) {
+        if (floor_map.rooms[i].type != RoomType::Interior || !floor_map.room_generated[i]) continue;
+        const Room& r = (i == floor_map.current_room && current_room_data.type == RoomType::Interior)
+                      ? current_room_data : floor_map.room_cache[1];
+        const CellState& cs = r.cells[0];
         u8 f = 0;
-        if (r.visited)      f |= 1u << 0;
-        if (r.cleared)      f |= 1u << 1;
-        if (r.altar_used)   f |= 1u << 2;
-        if (r.chest_opened) f |= 1u << 3;
-        if (r.event_used)   f |= 1u << 4;
-        if (r.exit_open)    f |= 1u << 5;
+        if (cs.visited)      f |= 1u << 0;
+        if (cs.cleared)      f |= 1u << 1;
+        if (cs.altar_used)   f |= 1u << 2;
+        if (cs.chest_opened) f |= 1u << 3;
+        if (cs.event_used)   f |= 1u << 4;
         save.data.room_flags[i] = f;
 
-        static Room pristine;   // los tiles pesan ~1 KB por sala: mejor fuera de la pila
-        generate_pristine_room(i, pristine);
+        static Room pristine;   // ~15 KB: fuera de la pila
+        generate_pristine_cell(i, pristine);
         u8* bits = save.data.room_open[i];
         for (int y = 0; y < r.tiles_h; y++)
             for (int x = 0; x < r.tiles_w; x++)
@@ -2145,48 +2276,75 @@ void Engine::capture_room_states() {
                     bits[cell >> 3] |= static_cast<u8>(1u << (cell & 7));
                 }
     }
-    // generate_pristine_room deja el rand() global sembrado con la semilla de la ULTIMA sala
+    // La generacion pristina deja el rand() global sembrado con la semilla de la ULTIMA celda
     // regenerada — y esto corre en CADA guardado. Sin re-sembrar aqui, todo lo que consuma
     // rand() despues (la tirada 1-de-5 de cartas de update_room_state, drops, deriva de IA)
-    // se volvia funcion constante de esa semilla: o todas las salas normales soltaban carta o
+    // se volvia funcion constante de esa semilla: o todas las celdas normales soltaban carta o
     // ninguna. El contador da una semilla distinta por guardado pero determinista para los
     // guiones (misma secuencia de guardados -> misma secuencia de semillas).
     srand(chapter_seed ^ (++rng_epoch * 2654435761u) ^ 0x85EBCA6Bu);
 }
 
-// Re-aplica sobre la sala RECIEN generada lo que el guardado dice de ella. El tile final se
-// deriva del recien generado: todas las transformaciones de runtime van a Floor (matorral
-// quemado, tinaja rota, grieta abierta, charca seca) salvo cofre / encuentro / altar de Baal,
-// que van a Path (ecs.cpp y update_room_state). El arco de salida no viaja en el diff como
-// valor: lo replica place_exit(), que pinta exactamente las mismas celdas. Si una mecanica
-// nueva cambia tiles a OTRA cosa, tiene que anadirse aqui o el Continuar la perdera.
-void Engine::apply_saved_room_state(int room_index, Room& r) {
-    if (room_index < 0 || room_index >= SAVE_MAX_ROOMS) return;
-    // Sin nada guardado no se toca la sala: f == 0 implica "sin visitar" (y por tanto sin
-    // celdas alteradas), y escribir los flags a cero igualmente pisaba el `cleared = true`
-    // con el que nace un interior — tras Continuar, load_room soltaba dentro enemigos.
-    const u8 f = save.data.room_flags[room_index];
+// El tile final se DERIVA del recien generado: todas las transformaciones de runtime van a
+// Floor (matorral quemado, tinaja rota, grieta abierta, charca seca) salvo cofre / encuentro /
+// altar de Baal, que van a Path (ecs.cpp y update_room_state). El arco de salida no viaja en
+// el diff como valor: lo replica place_exit(), que pinta exactamente las mismas celdas. Si una
+// mecanica nueva cambia tiles a OTRA cosa, tiene que anadirse aqui o el Continuar la perdera.
+static TileType restored_tile(TileType t) {
+    return (t == TileType::Chest || t == TileType::Event || t == TileType::AltarBaal)
+           ? TileType::Path : TileType::Floor;
+}
+
+// Re-aplica sobre la ZONA recien construida lo que el guardado dice de UNA celda.
+void Engine::apply_saved_cell_state(int cell, Room& zone) {
+    if (cell < 0 || cell >= SAVE_MAX_ROOMS || cell >= zone.cell_count || cell >= floor_map.room_count) return;
+    // Sin nada guardado no se toca: f == 0 implica "sin visitar" (y sin tiles alterados)
+    const u8 f = save.data.room_flags[cell];
     if (f == 0) return;
-    const u8* bits = save.data.room_open[room_index];
+    const u8* bits = save.data.room_open[cell];
+    const auto& node = floor_map.rooms[cell];
+    const int ox = node.grid_x * zone.cell_w, oy = node.grid_y * zone.cell_h;
     int reopened = 0;
-    for (int y = 0; y < r.tiles_h; y++) {
-        for (int x = 0; x < r.tiles_w; x++) {
-            int cell = y * Config::ROOM_TILES_X + x;
-            if (!(bits[cell >> 3] & (1u << (cell & 7)))) continue;
-            TileType t = r.tiles[y][x];
-            r.tiles[y][x] = (t == TileType::Chest || t == TileType::Event ||
-                             t == TileType::AltarBaal) ? TileType::Path : TileType::Floor;
+    for (int y = 0; y < zone.cell_h; y++) {
+        for (int x = 0; x < zone.cell_w; x++) {
+            int c = y * Config::ROOM_TILES_X + x;
+            if (!(bits[c >> 3] & (1u << (c & 7)))) continue;
+            zone.tiles[oy + y][ox + x] = restored_tile(zone.tiles[oy + y][ox + x]);
             reopened++;
         }
     }
-    r.visited      = (f >> 0) & 1;
-    r.cleared      = (f >> 1) & 1;
-    r.altar_used   = (f >> 2) & 1;
-    r.chest_opened = (f >> 3) & 1;
-    r.event_used   = (f >> 4) & 1;
-    if ((f >> 5) & 1) r.place_exit();
-    SDL_Log("Room %d: estado restaurado del guardado (flags %02x, %d celdas)",
-            room_index, f, reopened);
+    CellState& cs = zone.cells[cell];
+    cs.visited      = (f >> 0) & 1;
+    cs.cleared      = (f >> 1) & 1;
+    cs.altar_used   = (f >> 2) & 1;
+    cs.chest_opened = (f >> 3) & 1;
+    cs.event_used   = (f >> 4) & 1;
+    if (((f >> 5) & 1) && cell == zone.boss_cell) zone.place_exit();
+    SDL_Log("Room %d: estado restaurado del guardado (flags %02x, %d celdas)", cell, f, reopened);
+}
+
+// Idem sobre el INTERIOR recien generado (una sola celda de estado).
+void Engine::apply_saved_interior_state(int node_index, Room& r) {
+    if (node_index < 0 || node_index >= SAVE_MAX_ROOMS) return;
+    const u8 f = save.data.room_flags[node_index];
+    if (f == 0) return;   // escribir ceros pisaba el `cleared = true` con el que nace un interior
+    const u8* bits = save.data.room_open[node_index];
+    int reopened = 0;
+    for (int y = 0; y < r.tiles_h; y++) {
+        for (int x = 0; x < r.tiles_w; x++) {
+            int c = y * Config::ROOM_TILES_X + x;
+            if (!(bits[c >> 3] & (1u << (c & 7)))) continue;
+            r.tiles[y][x] = restored_tile(r.tiles[y][x]);
+            reopened++;
+        }
+    }
+    CellState& cs = r.cells[0];
+    cs.visited      = (f >> 0) & 1;
+    cs.cleared      = (f >> 1) & 1;
+    cs.altar_used   = (f >> 2) & 1;
+    cs.chest_opened = (f >> 3) & 1;
+    cs.event_used   = (f >> 4) & 1;
+    SDL_Log("Room %d: estado restaurado del guardado (flags %02x, %d celdas)", node_index, f, reopened);
 }
 
 // Morir no borra la partida. El guardado se rebobina al principio del capitulo (profeta
@@ -2251,6 +2409,7 @@ void Engine::continue_run() {
     state.current_chapter = save.data.current_chapter;
     state.current_room    = save.data.current_room;
     boss_talk_seen = 0;
+    run_events_done = 0;
     pending_scene  = -1;
     state.run_time        = save.data.run_time;
     run_kills = 0;
@@ -2319,271 +2478,400 @@ void Engine::continue_run() {
 }
 
 // =============================================================================
-// Room Loading (with persistence)
+// Zona continua: cargar el mapa, entrar en una celda, celdas vivas y la arena
 // =============================================================================
+static const char* room_type_name(RoomType t) {
+    switch (t) {
+        case RoomType::Start:    return "Start";
+        case RoomType::Boss:     return "Boss";
+        case RoomType::Interior: return "Interior";
+        case RoomType::Event:    return "Event";
+        case RoomType::Normal:   return "Normal";
+        case RoomType::Elite:    return "Elite";
+        case RoomType::Treasure: return "Treasure";
+        case RoomType::Altar:    return "Altar";
+        case RoomType::Zone:     return "Zone";
+        default:                 return "Special";
+    }
+}
+
+// Volcado ASCII de UNA celda (40 columnas x 22 filas; un interior, 20 x 11): el mismo
+// formato de siempre, para que los gates de los guiones sigan valiendo.
+void Engine::dump_cell_ascii(const Room& r, int cell) {
+    if (!autoplay.active) return;
+    static const char glyph[] = ".#OW^v><BGCTbRg~PFXEtNjcD";  // indexed by TileType (j tinaja, c grieta, D puerta)
+    static_assert(sizeof(glyph) - 1 == static_cast<int>(TileType::COUNT),
+                  "un TileType nuevo necesita su glifo en el volcado ASCII");
+    const Rect rc = r.cell_rect_world(cell);
+    const int x0 = static_cast<int>(rc.x) / Config::TILE_SIZE, y0 = static_cast<int>(rc.y) / Config::TILE_SIZE;
+    const int w = std::min(Config::ROOM_TILES_X, static_cast<int>(rc.w) / Config::TILE_SIZE);
+    const int h = static_cast<int>(rc.h) / Config::TILE_SIZE;
+    for (int y = 0; y < h && y0 + y < r.tiles_h; y++) {
+        char line[Config::ROOM_TILES_X + 1];
+        int n = 0;
+        for (int x = 0; x < w && x0 + x < r.tiles_w; x++) {
+            u8 t = static_cast<u8>(r.tiles[y0 + y][x0 + x]);
+            line[n++] = t < sizeof(glyph) - 1 ? glyph[t] : '?';
+        }
+        line[n] = 0;
+        SDL_Log("  %s", line);
+    }
+}
+
+// Coloca al profeta SIN dejar los pies dentro de un solido (misma referencia que el
+// movimiento), salta la camara a su sitio y presenta al discipulo si toca.
+void Engine::place_player(Vec2 spawn_pos) {
+    if (player.entity == ENTITY_NONE || !world.has(player.entity, Component::Transform)) return;
+    Vec2 foot = world.has(player.entity, Component::Collider) ? world.colliders[player.entity].offset : Vec2{0, 0};
+    Vec2 free_feet;
+    if (!current_room_data.is_walkable_world(spawn_pos + foot) &&
+        current_room_data.nearest_walkable_world(spawn_pos + foot, free_feet)) {
+        spawn_pos = free_feet - foot;
+    }
+    world.transforms[player.entity].position = spawn_pos;
+    if (world.has(player.entity, Component::Movement)) {
+        world.movements[player.entity].knockback = {0, 0};
+        world.movements[player.entity].velocity = {0, 0};
+    }
+    // La camara SALTA a su sitio; sin esto haria un barrido desde donde estaba
+    camera.set_target(spawn_pos);
+    camera.position = spawn_pos;
+    camera.update(0.0f);
+
+    // "La Escuela de Profetas" (mejora meta 7): Eliseo entra acompanado. El discipulo se
+    // vuelve a presentar en cada carga (el mundo se vacia), que es lo que el jugador
+    // percibe como "permanente".
+    if (progression.is_unlocked(7) && player.character == CharacterType::Eliseo) {
+        spawn_disciple(world, spawn_pos + Vec2{18.0f, 6.0f},
+                       enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)],
+                       0.0f, 40.0f, 10.0f);
+    }
+}
+
+// `load_room(nodo)` ya no carga "una sala": para un nodo de la rejilla construye la ZONA
+// entera si hace falta (o la recupera de la ranura 0 al volver de un interior o de un
+// escenario) y teletransporta al profeta al nudo de esa celda (o a `spawn_tx/ty`, si vuelve
+// por una puerta); para el nodo del interior carga la pantalla del interior (ranura 1).
+// Barre todas las entidades salvo el profeta: las celdas vivas se vuelven a sembrar solas
+// (update_cells) en el frame siguiente, lo que hace el teletransporte determinista.
 void Engine::load_room(int room_index) {
     if (room_index < 0 || room_index >= floor_map.room_count) {
         SDL_Log("load_room: invalid index %d (max %d)", room_index, floor_map.room_count);
         return;
     }
-    room_fade = 1.0f;   // fade in the new room (see Engine::render)
     world.popups.clear();
     world.hitstop = 0.0f;
-    room_change_grace = Config::Feel::COYOTE_TIME;   // ver try_room_transition
+    room_change_grace = Config::Feel::COYOTE_TIME;   // ver use_doorway
 
-    // Destroy all non-player entities (enemies, projectiles, items from previous room)
     for (u32 e = 0; e < MAX_ENTITIES; e++) {
         if (static_cast<Entity>(e) != world.player && world.masks[e].any()) {
             world.destroy(static_cast<Entity>(e));
         }
     }
     boss_entity = ENTITY_NONE;
-
-    floor_map.current_room = room_index;
-    state.current_room = room_index;
-
-    auto& node = floor_map.rooms[room_index];
-
-    if (floor_map.room_generated[room_index]) {
-        // Restore from cache
-        current_room_data = floor_map.room_cache[room_index];
-    } else {
-        // First visit: generate and cache. La generacion es PURA por (capitulo, sala):
-        // generate_pristine_room re-siembra rand() con chapter_seed ^ sala justo antes de
-        // generar, que es lo que mata la deriva — el gameplay (sacudidas, drops, burbujas)
-        // drena el MISMO generador, y sin el re-sembrado la misma sala salia distinta segun
-        // cuando entraras y que hicieras antes (medido en la bateria del 2026-08-27).
-        generate_pristine_room(room_index, current_room_data);
-        if (apply_saved_rooms) apply_saved_room_state(room_index, current_room_data);   // Continuar (v9)
-
-        floor_map.room_cache[room_index] = current_room_data;
-        floor_map.room_generated[room_index] = true;
+    reset_boss_bar();
+    if (Room* z = zone_ptr()) {
+        for (int i = 0; i < z->cell_count; i++) z->cells[i].active = false;
+        z->arena_sealed = false;
     }
 
-    current_room_data.visited = true;
-    player.took_damage_this_room = false;
-
-    // Link room to ECS for tile collision
-    world.active_room = &current_room_data;
-
-    // Camara: limites de ESTA sala. En una de una pantalla el recorte la deja clavada en el
-    // centro, que es el comportamiento de siempre.
-    camera.set_room({0, 0, current_room_data.world_w(), current_room_data.world_h()});
-
-    // Position player based on entry direction (inside the opening, just past the border)
-    if (player.entity != ENTITY_NONE &&
-        world.has(player.entity, Component::Transform)) {
-
-        // Contra el tamano de ESTA sala, no contra la pantalla: la arena del jefe mide una
-        // pantalla y una sala exterior cuatro, y con las constantes el profeta aparecia
-        // fuera del mapa al entrar en la grande por el lado equivocado.
-        const f32 rw = current_room_data.world_w();
-        const f32 rh = current_room_data.world_h();
-        f32 cx = rw * 0.5f;
-        f32 cy = rh * 0.5f;
-
-        Vec2 spawn_pos;
-        if (spawn_tx >= 0 && spawn_ty >= 0) {
-            // Llegado POR UNA PUERTA: se aparece justo delante de ella, no en un borde.
-            spawn_pos = current_room_data.tile_to_world(spawn_tx, spawn_ty);
-            spawn_tx = spawn_ty = -1;
-        } else
-        switch (entry_direction) {
-            case Direction::Up:    spawn_pos = {cx, 26.0f}; break;   // came from the room above
-            case Direction::Down:  spawn_pos = {cx, rh - 26.0f}; break;
-            case Direction::Left:  spawn_pos = {26.0f, cy}; break;
-            case Direction::Right: spawn_pos = {rw - 26.0f, cy}; break;
-            default:               spawn_pos = current_room_data.tile_to_world(current_room_data.tiles_w / 2,
-                                                                               current_room_data.tiles_h / 2); break;
-        }
-        // Never spawn with the FEET inside a solid tile (same reference point as movement)
-        Vec2 foot = world.has(player.entity, Component::Collider) ? world.colliders[player.entity].offset : Vec2{0, 0};
-        Vec2 free_feet;
-        if (!current_room_data.is_walkable_world(spawn_pos + foot) &&
-            current_room_data.nearest_walkable_world(spawn_pos + foot, free_feet)) {
-            spawn_pos = free_feet - foot;
-        }
-        world.transforms[player.entity].position = spawn_pos;
-        world.movements[player.entity].knockback = {0, 0};
-        world.movements[player.entity].velocity = {0, 0};
-        // La camara SALTA a su sitio al entrar; sin esto haria un barrido desde donde estaba
-        // en la sala anterior, justo por encima del fundido de entrada.
-        camera.set_target(spawn_pos);
-        camera.position = spawn_pos;
-        camera.update(0.0f);
-
-        // "La Escuela de Profetas" (mejora meta 7): Eliseo entra acompanado. El discipulo
-        // NO viaja entre salas —al cambiar de sala el mundo se vacia—: se vuelve a
-        // presentar en cada una, que es lo que el jugador percibe como "permanente".
-        if (progression.is_unlocked(7) && player.character == CharacterType::Eliseo) {
-            spawn_disciple(world, spawn_pos + Vec2{18.0f, 6.0f},
-                           enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)],
-                           0.0f, 40.0f, 10.0f);
-        }
-    }
-
-    // Enemies / boss (only if the room is not already cleared)
-    if (!current_room_data.cleared) {
-        if (node.type == RoomType::Boss) {
-            auto def = get_chapter_def(state.current_chapter);
-            Vec2 pos = current_room_data.tile_to_world(current_room_data.tiles_w / 2, 3);
-            codex_see_enemy(save.data, def.boss_type);
-            boss_entity = spawn_boss(world, def.boss_type, pos,
-                                     enemy_textures[static_cast<u32>(def.boss_type)],
-                                     state.current_chapter, def.boss_name, def.boss_pattern);
-            // El encuentro del capitulo puede haber debilitado al jefe (agua sobre el altar,
-            // ojos abiertos): se aplica al desangrarlo, no al definirlo.
-            if (boss_hp_scale < 1.0f && boss_entity != ENTITY_NONE &&
-                world.has(boss_entity, Component::Health)) {
-                auto& bh = world.healths[boss_entity];
-                bh.max *= boss_hp_scale;
-                bh.current = bh.max;
-                show_message(tr("El jefe entra debilitado", "The boss comes in weakened"), 2.5f);
-            }
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%s", def.boss_name);
-            show_banner(tr("JEFE", "BOSS"), buf, 2.5f);
-            play_voice(Voice::Jefe, 0.9f);   // se salta la espera: suena una vez por capitulo
-            audio.play_sfx(SfxID::CriticalHit, 0.9f);
-            // El jefe habla antes de pelear (game/scenes.h): se pide aqui y arranca en el
-            // siguiente paso de Playing, no en mitad de la transicion de sala. Una vez por
-            // partida y capitulo: morir y reintentar no lo repite. Bajo autoplay se
-            // suprime (los guiones cronometran las peleas) y lo fuerza `escena`.
-            const u32 talk_bit = 1u << state.current_chapter;
-            if (Scene::boss_of(state.current_chapter) >= 0 && !(boss_talk_seen & talk_bit)) {
-                boss_talk_seen |= talk_bit;
-                if (autoplay.active) SDL_Log("Dialogo del jefe %d suprimido (autoplay)", state.current_chapter);
-                else                 pending_scene = Scene::boss_of(state.current_chapter);
-            }
-        } else {
-            spawn_room_enemies();
-        }
-    }
-    current_room_data.exits_locked = is_combat_room(node.type) && !current_room_data.cleared &&
-                                     world.count_living_enemies() > 0;
-    if (current_room_data.exits_locked && node.type != RoomType::Boss && lock_hints_shown < 3) {
-        lock_hints_shown++;
-        show_message(tr("Salidas selladas: derrota a todos los enemigos", "Exits sealed: defeat every enemy"), 2.5f);
-    }
-
-    // ASCII dump of the layout (debug aid for autoplay sessions)
-    if (autoplay.active) {
-        static const char glyph[] = ".#OW^v><BGCTbRg~PFXEtNjcD";  // indexed by TileType (j tinaja, c grieta, D puerta)
-        static_assert(sizeof(glyph) - 1 == static_cast<int>(TileType::COUNT),
-                      "un TileType nuevo necesita su glifo en el volcado ASCII");
-        for (int y = 0; y < current_room_data.tiles_h; y++) {
-            char line[Config::ROOM_TILES_X + 1];
-            for (int x = 0; x < current_room_data.tiles_w; x++) {
-                u8 t = static_cast<u8>(current_room_data.tiles[y][x]);
-                line[x] = t < sizeof(glyph) - 1 ? glyph[t] : '?';
-            }
-            line[current_room_data.tiles_w] = 0;
-            SDL_Log("  %s", line);
-        }
-    }
-
-    if (node.type == RoomType::Interior) show_message(get_interior_name(state.current_chapter), 2.2f);
-
+    const auto& node = floor_map.rooms[room_index];
     auto def = get_chapter_def(state.current_chapter);
-    SDL_Log("Loaded room %d [%d,%d] (%s) - %s [%d enemies]%s",
-            room_index, node.grid_x, node.grid_y, def.name,
-            node.type == RoomType::Start ? "Start" :
-            node.type == RoomType::Boss  ? "Boss" :
-            node.type == RoomType::Interior ? "Interior" :
-            node.type == RoomType::Event ? "Event" :
-            node.type == RoomType::Normal ? "Normal" :
-            node.type == RoomType::Elite ? "Elite" :
-            node.type == RoomType::Treasure ? "Treasure" :
-            node.type == RoomType::Altar ? "Altar" : "Special",
-            static_cast<int>(current_room_data.enemy_spawns.size()),
-            current_room_data.cleared ? " (cleared)" : "");
-}
 
-// =============================================================================
-// Room Transition Detection
-// =============================================================================
-void Engine::try_room_transition() {
-    if (player.entity == ENTITY_NONE ||
-        !world.has(player.entity, Component::Transform)) return;
-
-    auto& pos = world.transforms[player.entity].position;
-    auto& node = floor_map.rooms[floor_map.current_room];
-    const f32 room_w = current_room_data.world_w();
-    const f32 room_h = current_room_data.world_h();
-
-    Direction move_dir = Direction::None;
-    int next_room = -1;
-
-    if (pos.x < 0.0f) {
-        move_dir = Direction::Left;
-        next_room = node.connections[3];  // West
-    } else if (pos.x >= room_w) {
-        move_dir = Direction::Right;
-        next_room = node.connections[2];  // East
-    } else if (pos.y < 0.0f) {
-        move_dir = Direction::Up;
-        next_room = node.connections[0];  // North
-    } else if (pos.y >= room_h) {
-        move_dir = Direction::Down;
-        next_room = node.connections[1];  // South
-    }
-
-    if (move_dir == Direction::None) return;
-
-    // Coyote time: durante el margen que sigue a una carga de sala NO se encadena otra.
-    // El profeta aparece pegado al borde contrario, y con la tecla mantenida un roce en
-    // diagonal podia cruzar dos salas en dos frames. Se le sigue frenando en el borde.
-    if (room_change_grace > 0.0f) {
-        pos.x = std::max(1.0f, std::min(pos.x, room_w - 1.0f));
-        pos.y = std::max(1.0f, std::min(pos.y, room_h - 1.0f));
+    if (node.type == RoomType::Interior) {
+        if (current_room_data.type == RoomType::Zone) floor_map.room_cache[0] = current_room_data;
+        if (floor_map.room_generated[room_index]) {
+            current_room_data = floor_map.room_cache[1];
+        } else {
+            generate_pristine_cell(room_index, current_room_data);
+            if (apply_saved_rooms) apply_saved_interior_state(room_index, current_room_data);   // Continuar
+            floor_map.room_cache[1] = current_room_data;
+            floor_map.room_generated[room_index] = true;
+        }
+        room_fade = 1.0f;   // el fundido queda para la puerta
+        floor_map.current_room = room_index;
+        state.current_room = room_index;
+        current_room_data.cells[0].visited = true;
+        player.took_damage_this_room = false;
+        world.active_room = &current_room_data;
+        camera.set_room({0, 0, current_room_data.world_w(), current_room_data.world_h()}, true);
+        Vec2 spawn_pos = (spawn_tx >= 0 && spawn_ty >= 0)
+                       ? current_room_data.tile_to_world(spawn_tx, spawn_ty)
+                       : current_room_data.tile_to_world(current_room_data.cells[0].hub_tx, current_room_data.cells[0].hub_ty);
+        spawn_tx = spawn_ty = -1;
+        place_player(spawn_pos);
+        dump_cell_ascii(current_room_data, 0);
+        show_message(get_interior_name(state.current_chapter), 2.2f);
+        SDL_Log("Loaded room %d [%d,%d] (%s) - Interior [0 enemies]%s",
+                room_index, node.grid_x, node.grid_y, def.name,
+                current_room_data.cells[0].cleared ? " (cleared)" : "");
         return;
     }
 
-    if (next_room >= 0 && !current_room_data.exits_locked) {
-        // Persist this room's full state (cleared flags, smashed altars, opened chests...)
-        floor_map.room_cache[floor_map.current_room] = current_room_data;
+    // Nodo de la rejilla: la zona
+    if (!floor_map.zone_built) {
+        build_pristine_zone(current_room_data);
+        if (apply_saved_rooms)   // Continuar (v9/v10): cada celda con estado guardado
+            for (int i = 0; i < current_room_data.cell_count; i++) apply_saved_cell_state(i, current_room_data);
+        for (int i = 0; i < current_room_data.cell_count && i < floor_map.room_count; i++)
+            floor_map.room_generated[i] = true;
+        floor_map.room_cache[0] = current_room_data;
+        floor_map.zone_built = true;
+        room_fade = 1.0f;
+    } else if (current_room_data.type != RoomType::Zone) {
+        // Volviendo de un interior o de un escenario de escena: la zona esta en la ranura 0
+        // (el interior ya se cacheo en use_doorway; un escenario no se guarda)
+        current_room_data = floor_map.room_cache[0];
+        room_fade = 1.0f;
+    }
+    world.active_room = &current_room_data;
+    enter_cell(room_index);
+}
 
-        // Entry direction is the opposite side: if player moved right, they enter from the left
-        switch (move_dir) {
-            case Direction::Up:    entry_direction = Direction::Down;  break;
-            case Direction::Down:  entry_direction = Direction::Up;    break;
-            case Direction::Left:  entry_direction = Direction::Right; break;
-            case Direction::Right: entry_direction = Direction::Left;  break;
-            default: break;
+// Teletransporte al nudo de una celda (o a spawn_tx/ty). Escribe la misma linea de log
+// `Loaded room ...` de siempre: es el gate de media docena de guiones.
+void Engine::enter_cell(int cell) {
+    Room& zone = current_room_data;
+    if (zone.type != RoomType::Zone || cell < 0 || cell >= zone.cell_count || cell >= floor_map.room_count) return;
+    const auto& node = floor_map.rooms[cell];
+    floor_map.current_room = cell;
+    state.current_room = cell;
+    zone.cells[cell].visited = true;
+    player.took_damage_this_room = false;
+    camera.set_room({0, 0, zone.world_w(), zone.world_h()}, true);
+
+    int hx = zone.cells[cell].hub_tx, hy = zone.cells[cell].hub_ty;
+    // La puerta del interior se coloca sobre la senda y puede caer JUSTO en el nudo:
+    // aparecer encima la dispara sola tras la gracia. Un tile mas abajo.
+    if (hy + 1 < zone.tiles_h && zone.tiles[hy][hx] == TileType::Doorway) hy++;
+    Vec2 spawn_pos = (spawn_tx >= 0 && spawn_ty >= 0)
+                   ? zone.tile_to_world(spawn_tx, spawn_ty)
+                   : zone.tile_to_world(hx, hy);
+    spawn_tx = spawn_ty = -1;
+    place_player(spawn_pos);
+
+    dump_cell_ascii(zone, cell);
+    auto def = get_chapter_def(state.current_chapter);
+    SDL_Log("Loaded room %d [%d,%d] (%s) - %s [%d enemies]%s",
+            cell, node.grid_x, node.grid_y, def.name, room_type_name(node.type),
+            static_cast<int>(zone.cells[cell].spawns.size()),
+            zone.cells[cell].cleared ? " (cleared)" : "");
+}
+
+void Engine::spawn_cell_enemies(int cell) {
+    Room& zone = current_room_data;
+    if (zone.type != RoomType::Zone || cell < 0 || cell >= zone.cell_count) return;
+    for (const auto& spawn : zone.cells[cell].spawns) {
+        Entity e = spawn_enemy(world, spawn.type, spawn.position,
+                               enemy_textures[static_cast<u32>(spawn.type)], state.current_chapter);
+        codex_see_enemy(save.data, spawn.type);   // el bestiario se llena viéndolos
+        if (e != ENTITY_NONE) {
+            world.enemy_ais[e].home_cell = cell;
+            SDL_Log("Spawned enemy '%s' at (%.0f, %.0f)",
+                    get_enemy_def(spawn.type).name, spawn.position.x, spawn.position.y);
         }
+    }
+}
 
-        SDL_Log("Room transition: %s -> room %d",
-                move_dir == Direction::Up    ? "North" :
-                move_dir == Direction::Down  ? "South" :
-                move_dir == Direction::Left  ? "West"  : "East",
-                next_room);
+// Todo hostil nacido en esa celda, cadaveres incluidos. Por celda de ORIGEN, nunca por
+// posicion: un enemigo que cruzo una costura persiguiendo sigue siendo de su celda.
+void Engine::despawn_cell(int cell) {
+    int n = 0;
+    for (u32 e = 0; e < world.entity_count; e++) {
+        if (!world.masks[e].any() || static_cast<Entity>(e) == world.player) continue;
+        if (!world.has(e, Component::EnemyAI) || world.enemy_ais[e].ally) continue;
+        if (world.enemy_ais[e].home_cell != cell) continue;
+        world.destroy(static_cast<Entity>(e));
+        n++;
+    }
+    SDL_Log("Cell %d despawned (%d entities)", cell, n);
+}
 
-        load_room(next_room);
-    } else {
-        // No connection or sealed — clamp inside (if this lands the feet on a solid border
-        // tile, system_movement's unstick() snaps to the nearest walkable tile next frame)
-        pos.x = std::max(1.0f, std::min(pos.x, room_w - 1.0f));
-        pos.y = std::max(1.0f, std::min(pos.y, room_h - 1.0f));
+// Celdas VIVAS (ALTTP). Cada frame de Playing: (1) la celda del profeta pasa a ser la
+// actual; (2) una celda de combate a menos de media pantalla siembra sus enemigos, y a
+// mas de 1,2 pantallas los repone (asi ni el presupuesto de 512 entidades ni la IA se
+// disparan); (3) la arena se dispara al ENTRAR con los pies, y la camara se clava a ella
+// mientras el profeta esta dentro y la pelea no ha acabado.
+void Engine::update_cells() {
+    Room& zone = current_room_data;
+    if (zone.type != RoomType::Zone) return;
+    if (player.entity == ENTITY_NONE || !world.has(player.entity, Component::Transform)) return;
+    const Vec2 feet = world.transforms[player.entity].position + Vec2{0, 6};
+    // "Dentro de la arena" = pies sobre su SUELO, con el borde de abajo EXCLUSIVO: la fila
+    // del vano no cuenta, o el sellado cerraria el tile que el profeta esta pisando.
+    auto in_arena = [&]() {
+        if (!zone.has_arena) return false;
+        const Rect a = zone.arena_rect_world();
+        return feet.x >= a.x && feet.x < a.right() && feet.y >= a.y && feet.y < a.bottom();
+    };
+
+    const int pc = zone.cell_of_world(feet);
+    if (pc >= 0 && pc < floor_map.room_count && pc != floor_map.current_room) {
+        floor_map.current_room = pc;
+        state.current_room = pc;
+        zone.cells[pc].visited = true;
+        const auto& node = floor_map.rooms[pc];
+        SDL_Log("Entered cell %d [%d,%d] (%s)%s", pc, node.grid_x, node.grid_y, room_type_name(node.type),
+                zone.cells[pc].cleared ? " (cleared)" : "");
+    }
+
+    const f32 sw = static_cast<f32>(Config::GAME_WIDTH), sh = static_cast<f32>(Config::GAME_HEIGHT);
+    for (int i = 0; i < zone.cell_count && i < floor_map.room_count; i++) {
+        CellState& cs = zone.cells[i];
+        const auto& node = floor_map.rooms[i];
+        if (!is_combat_room(node.type)) continue;
+        if (node.type == RoomType::Boss) {
+            if (!cs.cleared && boss_entity == ENTITY_NONE && !zone.arena_sealed && in_arena())
+                enter_arena();
+            continue;
+        }
+        const Rect r = zone.cell_rect_world(i);
+        auto within = [&](f32 k) {
+            return feet.x >= r.x - sw * k && feet.x < r.right() + sw * k &&
+                   feet.y >= r.y - sh * k && feet.y < r.bottom() + sh * k;
+        };
+        if (!cs.active && !cs.cleared && within(Config::CELL_ACTIVATE_SCREENS)) {
+            spawn_cell_enemies(i);
+            cs.active = true;
+            player.took_damage_this_room = false;   // aproximacion aceptada con celdas solapadas
+        } else if (cs.active && !cs.cleared && !within(Config::CELL_DESPAWN_SCREENS)) {
+            despawn_cell(i);
+            cs.active = false;
+        }
+    }
+
+    // Camara: la arena mientras se esta dentro y el jefe no ha caido; si no, la zona
+    if (zone.boss_cell >= 0 && !zone.cells[zone.boss_cell].cleared && in_arena())
+        camera.set_room(zone.arena_bounds_world(), false);
+    else
+        camera.set_room({0, 0, zone.world_w(), zone.world_h()}, false);
+}
+
+// El profeta pisa la arena: nace el jefe (o el grupo del cap. 3), se sella el vano, banner y
+// voz, y el dialogo del jefe (game/scenes.h) se pide para el siguiente paso de Playing.
+void Engine::enter_arena() {
+    Room& zone = current_room_data;
+    if (zone.type != RoomType::Zone || !zone.has_arena || zone.boss_cell < 0) return;
+    const int bc = zone.boss_cell;
+    auto def = get_chapter_def(state.current_chapter);
+    int ax, ay;
+    zone.arena_anchor(ax, ay);
+    Vec2 pos = zone.tile_to_world(ax, ay);
+    codex_see_enemy(save.data, def.boss_type);
+    // Cap. 3: sumo sacerdote (la cabeza, en el ancla de la escena Live) + corro de profetas
+    // bailando alrededor del centro de la arena, con barra compartida.
+    boss_entity = spawn_boss_group(world, def.boss_type, pos, pos + Vec2{0, 40},
+                                   enemy_textures[static_cast<u32>(def.boss_type)],
+                                   state.current_chapter, def.boss_name, def.boss_pattern);
+    // El encuentro del capitulo puede haber debilitado al jefe (agua sobre el altar, ojos
+    // abiertos): se aplica al desangrarlo, no al definirlo. A TODO el grupo.
+    for (u32 e = 0; e < world.entity_count; e++) {
+        if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+        if (!world.enemy_ais[e].is_boss && !world.enemy_ais[e].boss_group) continue;
+        world.enemy_ais[e].home_cell = bc;
+        if (boss_hp_scale < 1.0f) {
+            auto& bh = world.healths[e];
+            bh.max *= boss_hp_scale;
+            bh.current = bh.max;
+        }
+    }
+    if (boss_hp_scale < 1.0f && boss_entity != ENTITY_NONE)
+        show_message(tr("El jefe entra debilitado", "The boss comes in weakened"), 2.5f);
+    // La barra: el maximo del grupo se fija AQUI (las reposiciones no lo mueven)
+    reset_boss_bar();
+    boss_bar_name = def.boss_name;
+    if (boss_entity != ENTITY_NONE) {
+        for (u32 e = 0; e < world.entity_count; e++) {
+            if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+            if (world.enemy_ais[e].boss_group) boss_group_max += world.healths[e].max;
+        }
+        if (boss_group_max > 0.0f) boss_group_max += world.healths[boss_entity].max;
+    }
+    update_boss_bar();
+
+    zone.arena_sealed = true;
+    zone.cells[bc].active = true;
+    player.took_damage_this_room = false;
+    camera.set_room(zone.arena_bounds_world(), true);
+    SDL_Log("Arena sealed: boss cell %d", bc);
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s", def.boss_name);
+    show_banner(tr("JEFE", "BOSS"), buf, 2.5f);
+    play_voice(Voice::Jefe, 0.9f);   // se salta la espera: suena una vez por capitulo
+    audio.play_sfx(SfxID::CriticalHit, 0.9f);
+    // El jefe habla antes de pelear (game/scenes.h): se pide aqui y arranca en el siguiente
+    // paso de Playing. Una vez por partida y capitulo: morir y reintentar no lo repite. Bajo
+    // autoplay se suprime (los guiones cronometran las peleas) y lo fuerza `escena`.
+    const u32 talk_bit = 1u << state.current_chapter;
+    if (Scene::boss_of(state.current_chapter) >= 0 && !(boss_talk_seen & talk_bit)) {
+        boss_talk_seen |= talk_bit;
+        if (autoplay.active) SDL_Log("Dialogo del jefe %d suprimido (autoplay)", state.current_chapter);
+        else                 pending_scene = Scene::boss_of(state.current_chapter);
     }
 }
 
 // =============================================================================
 // Room state: clear detection, boss defeat, tile interactions
 // =============================================================================
+void Engine::reset_boss_bar() {
+    boss_group_max = 0.0f;
+    boss_bar_hp = 0.0f;
+    boss_bar_max = 0.0f;
+    boss_bar_heads = 0;
+    boss_bar_invulnerable = false;
+    boss_bar_name = nullptr;
+    boss_group_alive_last = 0;
+}
+
+void Engine::update_boss_bar() {
+    f32 hp = 0.0f, head_max = 0.0f;
+    int heads = 0;
+    bool head_alive = false, invul = false;
+    for (u32 e = 0; e < world.entity_count; e++) {
+        if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+        const auto& ai = world.enemy_ais[e];
+        if (!ai.is_boss && !ai.boss_group) continue;
+        const auto& h = world.healths[e];
+        if (!h.is_alive()) continue;
+        hp += h.current;
+        heads++;
+        if (ai.is_boss) { head_alive = true; head_max = h.max; invul = h.invulnerable; }
+    }
+    boss_bar_hp = hp;
+    boss_bar_heads = heads;
+    boss_bar_invulnerable = invul;
+    boss_bar_max = (boss_group_max > 0.0f) ? boss_group_max : head_max;
+    // Log para los guiones: una linea por baja del grupo (carmelo_check)
+    if (boss_group_max > 0.0f) {
+        if (heads < boss_group_alive_last)
+            SDL_Log("Boss group: %d alive (head %s)", heads, head_alive ? "alive" : "down");
+        boss_group_alive_last = heads;
+    }
+}
+
 void Engine::update_room_state() {
     Room& room = current_room_data;
-    auto& node = floor_map.rooms[floor_map.current_room];
+    update_boss_bar();
 
-    if (is_combat_room(node.type) && !room.cleared) {
-        int alive = world.count_living_enemies();
-        if (alive == 0) {
-            room.cleared = true;
-            room.exits_locked = false;
+    if (room.type == RoomType::Zone) {
+        // UNA limpieza por frame: `killall` puede vaciar varias celdas a la vez y
+        // open_item_choice no puede abrirse dos veces en un frame.
+        for (int i = 0; i < room.cell_count && i < floor_map.room_count; i++) {
+            CellState& cs = room.cells[i];
+            const auto& node = floor_map.rooms[i];
+            if (!is_combat_room(node.type) || cs.cleared || !cs.active) continue;
+            if (world.count_living_enemies(i) > 0) continue;
+            cs.cleared = true;
+            cs.active = false;
             player.rooms_cleared++;
 
             if (node.type == RoomType::Boss) {
+                room.arena_sealed = false;
                 room.place_exit();
                 boss_entity = ENTITY_NONE;
+                reset_boss_bar();
+                camera.set_room({0, 0, room.world_w(), room.world_h()}, false);
                 show_banner(tr("JEFE DERROTADO", "BOSS DEFEATED"), tr("Cruza el arco dorado para continuar", "Cross the golden arch to go on"), 4.0f);
                 audio.play_sfx(SfxID::LevelUp);
             } else if (!player.took_damage_this_room) {
@@ -2597,26 +2885,26 @@ void Engine::update_room_state() {
             if (faith.current < Config::FAITH_LEVEL_1) award(AchievementID::BajoLaRetama);
             if (node.type != RoomType::Boss) audio.play_sfx(SfxID::DoorOpen, 0.8f);
             if (node.type == RoomType::Elite) {
-                // Elite reward: a small offering pile at the centre
-                Vec2 c = room.tile_to_world(room.tiles_w / 2, room.tiles_h / 2);
+                // Elite reward: a small offering pile at the cell hub
+                Vec2 c = room.tile_to_world(cs.hub_tx, cs.hub_ty);
                 spawn_pickup(world, c + Vec2{-12, 0}, ItemComponent::Pickup::Heart, 15.0f);
                 spawn_pickup(world, c + Vec2{12, 0}, ItemComponent::Pickup::FaithOrb, 8.0f);
                 spawn_pickup(world, c + Vec2{0, 12}, ItemComponent::Pickup::Heart, 15.0f);
             }
-            floor_map.room_cache[floor_map.current_room] = room;
+            SDL_Log("Cell %d cleared (%s)", i, room_type_name(node.type));
 
-            // Auto-save on every cleared room (GDD 4.4: mobile expects it, and it makes
-            // "Continuar" land on the room the player actually reached)
+            // Auto-save on every cleared cell (GDD 4.4: mobile expects it, and it makes
+            // "Continuar" land on the cell the player actually reached)
             populate_save_data();
             save.save();
             refresh_continue_state();
 
-            // Core loop step 4: choose an upgrade. Elite/Boss always, normal rooms 1 in 5 —
-            // one card per room would hand out all 13 items well before the first chapter ends
-            // (bot runs reached chapter 10 carrying 18 items and never dropped below 70% HP).
+            // Core loop step 4: choose an upgrade. Elite/Boss always, normal cells 1 in 5 —
+            // one card per cell would hand out all items well before the first chapter ends.
             if (node.type == RoomType::Elite)      open_item_choice(tr("ELITE DERROTADA", "ELITE DEFEATED"));
             else if (node.type == RoomType::Boss)  open_item_choice(tr("BOTÍN DEL JEFE", "BOSS LOOT"));
             else if (randi_range(0, 4) == 0)       open_item_choice(tr("ELIGE UNA BENDICIÓN", "CHOOSE A BLESSING"));
+            break;
         }
     }
 
@@ -2628,13 +2916,15 @@ void Engine::update_room_state() {
     int tx = static_cast<int>(std::floor(feet.x / Config::TILE_SIZE));
     int ty = static_cast<int>(std::floor(feet.y / Config::TILE_SIZE));
     if (tx < 0 || tx >= room.tiles_w || ty < 0 || ty >= room.tiles_h) return;
+    const int ci = room.cell_of_tile(tx, ty);
+    if (ci < 0) return;
+    CellState& cs = room.cells[ci];
 
     // Chapter exit: stepping anywhere on the arch patch (3x3 around the Exit tile)
     if (room.exit_open) {
         Vec2 exit_pos = room.tile_to_world(room.exit_tx, room.exit_ty);
         Vec2 center = world.transforms[player.entity].position;
         if (std::abs(center.x - exit_pos.x) < 20.0f && std::abs(feet.y - exit_pos.y) < 20.0f) {
-            floor_map.room_cache[floor_map.current_room] = room;
             // Cierre narrado del capitulo antes de pasar al siguiente
             story.begin();
             story_chapter_outro(story, state.current_chapter);
@@ -2646,27 +2936,25 @@ void Engine::update_room_state() {
     TileType t = room.tiles[ty][tx];
     switch (t) {
         case TileType::AltarGod:
-            if (!room.altar_used) {
-                room.altar_used = true;
+            if (!cs.altar_used) {
+                cs.altar_used = true;
                 faith.on_pray();
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
-                floor_map.room_cache[floor_map.current_room] = room;
                 // Praying is where new miracles are learned (GDD: miracles come from God)
                 open_miracle_choice(tr("UN NUEVO MILAGRO", "A NEW MIRACLE"));
             }
             break;
         case TileType::Chest:
-            if (!room.chest_opened) {
-                room.chest_opened = true;
+            if (!cs.chest_opened) {
+                cs.chest_opened = true;
                 room.tiles[ty][tx] = TileType::Path;
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(15.0f);
                 faith.modify(5.0f);
-                floor_map.room_cache[floor_map.current_room] = room;
                 open_item_choice(tr("EL COFRE SE ABRE", "THE CHEST OPENS"));
             }
             break;
         case TileType::Event:
-            if (!room.event_used) open_dialogue(room.event_id);
+            if (!cs.event_used && cs.event_id >= 0) open_dialogue(cs.event_id);
             break;
         case TileType::Doorway:
             // Coyote time: al salir de un interior se aparece SOBRE la puerta de fuera, asi
@@ -2685,25 +2973,23 @@ void Engine::update_room_state() {
 // guarda en `room_cache` antes de irse, igual que en una transicion normal, asi que los
 // enemigos muertos siguen muertos y el cofre abierto sigue abierto al volver.
 void Engine::use_doorway() {
-    auto& node = floor_map.rooms[floor_map.current_room];
-    floor_map.room_cache[floor_map.current_room] = current_room_data;
-
-    int target = (node.type == RoomType::Interior) ? node.interior_of : node.interior_room;
+    const auto& node = floor_map.rooms[floor_map.current_room];
+    const int target = (node.type == RoomType::Interior) ? node.interior_of : node.interior_room;
     if (target < 0 || target >= floor_map.room_count) return;
 
     if (node.type == RoomType::Interior) {
-        // Volver: se sale a la puerta de la sala de fuera y un tile MAS ABAJO, para no caer
-        // encima del propio umbral.
-        const Room& out = floor_map.room_cache[target];
-        spawn_tx = out.has_doorway ? out.door_tx : out.tiles_w / 2;
-        spawn_ty = out.has_doorway ? std::min(out.tiles_h - 2, out.door_ty + 1) : out.tiles_h / 2;
+        floor_map.room_cache[1] = current_room_data;   // el interior conserva su estado
+        // Volver: a la puerta de la zona y un tile MAS ABAJO, para no caer encima del
+        // propio umbral (coordenadas de zona: la puerta se coso con su celda).
+        const Room& out = floor_map.room_cache[0];
+        spawn_tx = out.has_doorway ? out.door_tx : -1;
+        spawn_ty = out.has_doorway ? std::min(out.tiles_h - 2, out.door_ty + 1) : -1;
     } else {
         // Entrar: delante de la puerta del interior, que esta siempre en el muro sur.
         spawn_tx = Config::SCREEN_TILES_X / 2;
         spawn_ty = Config::SCREEN_TILES_Y - 2;
     }
     audio.play_sfx(SfxID::DoorOpen, 0.9f);
-    entry_direction = Direction::None;
     load_room(target);
 }
 
@@ -2774,8 +3060,12 @@ void Engine::update_dialogue(f32 dt) {
     if (ascent_step >= 0) { ascent_next(); return; }
     if (epilogue_step >= 0) { epilogue_next(); return; }
 
-    // El encuentro no se repite: la hoguera se apaga y la sala queda marcada
-    current_room_data.event_used = true;
+    // El encuentro no se repite: la hoguera se apaga y la CELDA que lo cuenta queda marcada
+    // (la del relato, no la que pisa el profeta: el comando `event` abre cualquiera)
+    for (int i = 0; i < current_room_data.cell_count; i++)
+        if (current_room_data.cells[i].event_id >= 0 && current_room_data.cells[i].event_id == dialogue.event_id)
+            current_room_data.cells[i].event_used = true;
+    if (dialogue.event_id >= 0 && dialogue.event_id < 64) run_events_done |= 1ull << dialogue.event_id;
     Vec2 feet = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
                 ? world.transforms[player.entity].position + Vec2{0, 6} : Vec2{0, 0};
     int tx = static_cast<int>(std::floor(feet.x / Config::TILE_SIZE));
@@ -2783,7 +3073,6 @@ void Engine::update_dialogue(f32 dt) {
     if (tx >= 0 && tx < current_room_data.tiles_w && ty >= 0 && ty < current_room_data.tiles_h &&
         current_room_data.tiles[ty][tx] == TileType::Event)
         current_room_data.tiles[ty][tx] = TileType::Path;
-    floor_map.room_cache[floor_map.current_room] = current_room_data;
     change_scene(GameScene::Playing);
 }
 
@@ -3188,18 +3477,6 @@ void Engine::update_item_choice(f32 dt) {
 // =============================================================================
 // Enemy Spawning (from room data)
 // =============================================================================
-void Engine::spawn_room_enemies() {
-    for (auto& spawn : current_room_data.enemy_spawns) {
-        Entity e = spawn_enemy(world, spawn.type, spawn.position,
-                               enemy_textures[static_cast<u32>(spawn.type)], state.current_chapter);
-        codex_see_enemy(save.data, spawn.type);   // el bestiario se llena viéndolos
-        if (e != ENTITY_NONE) {
-            SDL_Log("Spawned enemy '%s' at (%.0f, %.0f)",
-                    get_enemy_def(spawn.type).name, spawn.position.x, spawn.position.y);
-        }
-    }
-}
-
 // SaveData -> el espejo del menu. El menu no conoce el guardado ni Input: solo pinta.
 void Engine::load_settings_mirror() {
     menus.settings_music_vol   = save.data.music_volume;
@@ -3526,8 +3803,8 @@ void Engine::update_autoplay(f32 dt) {
                     }
                     start_chapter(def.chapter, ChapterAnnounce::None);
                     if (def.stage == StageKind::Live) {
-                        entry_direction = Direction::Down;   // como quien entra por el sur
-                        load_room(floor_map.boss_room);
+                        load_room(floor_map.boss_room);      // al nudo de la celda B...
+                        enter_arena();                       // ...y dentro del recinto, con el jefe de pie
                         pending_scene = -1;                  // se fuerza aqui mismo
                     }
                     scene_manual = (c.op == "audiencia") || c.num2 == 0;
@@ -3735,22 +4012,30 @@ void Engine::update_autoplay(f32 dt) {
             // dependia de que el mapa pusiera uno donde el guion lo esperaba.
             if (c.op == "pit") {
                 if (state.scene == GameScene::Playing && player.entity != ENTITY_NONE) {
+                    // El hueco MAS CERCANO al profeta: la zona entera tiene varios y el
+                    // primero por filas podia estar a tres celdas de distancia.
                     const Room& rm = current_room_data;
-                    bool found = false;
-                    for (int y = 1; y < rm.tiles_h - 1 && !found; y++) {
-                        for (int x = 2; x < rm.tiles_w - 1 && !found; x++) {
+                    const Vec2 me = world.transforms[player.entity].position;
+                    int bx = -1, by = -1;
+                    f32 best = 1e12f;
+                    for (int y = 1; y < rm.tiles_h - 1; y++) {
+                        for (int x = 2; x < rm.tiles_w - 1; x++) {
                             if (rm.tiles[y][x] != TileType::Pit) continue;
                             if (!rm.is_tile_walkable(x - 1, y)) continue;
-                            Vec2 at = rm.tile_to_world(x - 1, y);
-                            world.transforms[player.entity].position = at - Vec2{0, 6};
-                            player.last_move_dir = {1, 0};
-                            camera.position = at;
-                            SDL_Log("pit -> profeta en (%.0f,%.0f), hueco en tile (%d,%d)",
-                                    at.x, at.y, x, y);
-                            found = true;
+                            const f32 d = rm.tile_to_world(x - 1, y).distance_to(me);
+                            if (d < best) { best = d; bx = x; by = y; }
                         }
                     }
-                    if (!found) SDL_Log("pit -> esta sala no tiene ningun hueco");
+                    if (bx >= 0) {
+                        Vec2 at = rm.tile_to_world(bx - 1, by);
+                        world.transforms[player.entity].position = at - Vec2{0, 6};
+                        player.last_move_dir = {1, 0};
+                        camera.position = at;
+                        camera.set_target(at);
+                        SDL_Log("pit -> profeta en (%.0f,%.0f), hueco en tile (%d,%d)", at.x, at.y, bx, by);
+                    } else {
+                        SDL_Log("pit -> este mapa no tiene ningun hueco");
+                    }
                 }
                 continue;
             }
@@ -3832,8 +4117,11 @@ void Engine::update_autoplay(f32 dt) {
                     for (int i = 0; i < n; i++) {
                         Vec2 at = p + Vec2{static_cast<f32>((i % 4) - 1) * 20.0f,
                                            static_cast<f32>((i / 4) - 1) * 20.0f - 34.0f};
-                        spawn_enemy(world, static_cast<EnemyType>(t), at, world.enemy_textures[t],
-                                    state.current_chapter);
+                        Entity se = spawn_enemy(world, static_cast<EnemyType>(t), at, world.enemy_textures[t],
+                                                state.current_chapter);
+                        // Cuenta en la celda actual: si no, la celda no se limpiaria nunca
+                        if (se != ENTITY_NONE && current_room_data.type == RoomType::Zone)
+                            world.enemy_ais[se].home_cell = floor_map.current_room;
                     }
                     SDL_Log("Autoplay: spawn %d x %s", n, get_enemy_def(static_cast<EnemyType>(t)).name);
                 }

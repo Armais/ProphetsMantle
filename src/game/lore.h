@@ -53,44 +53,54 @@ struct ChapterLore {
 inline ChapterLore get_chapter_lore(int chapter) {
     switch (chapter) {
         case 1: return {
-            {"1 Reyes 17:4", tr("Beberás del arroyo; y yo he mandado a los cuervos que te den allí de comer.", "Thou shalt drink of the brook; and I have commanded the ravens to feed thee there.")},
-            // 17:1-3 ya no se repiten aqui: los acaba de jugar la audiencia con Acab
-            // (scenes.h, Scene::AUDIENCIA) justo antes de esta intro.
-            {tr("Los hombres del rey ya buscan tu rastro por todo Israel.", "The king's men already seek thy trail through all Israel."),
+            {"1 Reyes 17:5", tr("Y él fue e hizo conforme a la palabra de Jehová.", "So he went and did according unto the word of the Lord.")},
+            // 17:1-4 los acaba de jugar la audiencia con Acab (scenes.h, Scene::AUDIENCIA) —su
+            // ultima caja ES 17:4, que era el versiculo de aqui y salia dos veces seguidas—;
+            // los cuervos (17:6) y el arroyo seco (17:7) son el pozo, y la caceria (18:10) la
+            // juega el rastreador. La intro solo situa: el cauce.
+            {tr("El cauce de Querit: agua clara entre las peñas, y nadie en un día de camino.", "The bed of Cherith: clear water among the rocks, and no man within a day's journey."),
              nullptr, nullptr, nullptr},
             tr("Sobrevive junto al arroyo. Los cuervos te sustentarán.", "Survive by the brook. The ravens shall feed thee."),
-            tr("Cayó el capitán. Y pasados algunos días se secó el arroyo, porque no había llovido sobre la tierra.", "The captain fell. And after a while the brook dried up, because there had been no rain in the land.")
+            // La salida deja al profeta donde lo recoge la apertura del cap. 2 (17:8-9): sin
+            // narrar otra vez el arroyo seco (pozo) ni al capitan (el banner ya lo dijo).
+            tr("Junto al arroyo callado, sin cuervos ya, Elías espera. La palabra no ha dicho todavía adónde ir.", "By the silent brook, the ravens gone, Elijah waiteth. The word hath not yet said whither to go.")
         };
         case 2: return {
             {"1 Reyes 17:14", tr("La harina de la tinaja no escaseará, ni el aceite de la vasija disminuirá.", "The barrel of meal shall not waste, neither shall the cruse of oil fail.")},
-            // 17:8-11 los acaba de jugar la apertura (la palabra, el agua, el bocado de pan):
-            // aqui empieza lo que hay en la casa. El punado de harina (17:12) es el pozo.
-            {tr("En casa de la viuda hay un puñado de harina en la tinaja, un poco de aceite en una vasija, y un hijo.", "In the widow's house there is a handful of meal in a barrel, a little oil in a cruse, and a son."),
-             tr("Sarepta es tierra de Jezabel, y en Sarepta no se invoca otro nombre que el de Baal.", "Zarephath is Jezebel's country, and in Zarephath no name is called upon but Baal's."),
+            // 17:8-11 los acaba de jugar la apertura (la palabra, el agua, el bocado de pan).
+            // El punado de harina (17:12) es el pozo y no se adelanta; «Sarepta es de Baal» lo
+            // dicen ya el sacerdote de la apertura y el jefe. Aqui: la casa, y quien vigila.
+            {tr("La viuda vive junto a la puerta de la ciudad, con un hijo y sin marido que traiga grano.", "The widow dwelleth by the gate of the city, with a son, and no husband to bring in corn."),
+             tr("El sacerdote de la puerta no te ha quitado el ojo de encima.", "The priest at the gate hath not taken his eye off thee."),
              nullptr, nullptr},
             tr("Vuelve a la casa de la viuda. Que la tinaja no se acabe.", "Return to the widow's house. Let the barrel not fail."),
             tr("El niño ha vuelto a la vida. «Ahora conozco que tú eres varón de Dios».", "The child liveth again. «Now I know that thou art a man of God».")
         };
         case 3: return {
-            {"1 Reyes 18:21", tr("¿Hasta cuándo claudicaréis vosotros entre dos pensamientos?", "How long halt ye between two opinions?")},
-            // «Ve, muestrate a Acab» (18:1) y la audiencia con Acab (18:17-19, 24) son la
-            // apertura: la intro arranca en 18:20, con Israel subiendo al monte.
-            {tr("Entonces Acab convocó a todos los hijos de Israel, y reunió a los profetas en el monte Carmelo.", "So Ahab sent unto all the children of Israel, and gathered the prophets together unto mount Carmel."),
-             tr("Cuatrocientos cincuenta de Baal a un lado; al otro, un hombre solo.", "Four hundred and fifty of Baal on the one side; on the other, one man alone."),
+            {"1 Reyes 18:22", tr("Sólo yo he quedado profeta de Jehová; mas de los profetas de Baal hay cuatrocientos cincuenta hombres.", "I, even I only, remain a prophet of the Lord; but Baal's prophets are four hundred and fifty men.")},
+            // «Ve, muestrate a Acab» (18:1), la audiencia (18:17-19, 24) y la convocatoria
+            // (18:20, ultima caja de la apertura: salia dos veces seguidas) son la apertura;
+            // la pregunta al pueblo (18:21) es el pozo. La intro arranca YA en el monte.
+            {tr("El Carmelo, sobre el mar. Acab ha subido con su carro, y mira desde él.", "Carmel, above the sea. Ahab is come up with his chariot, and looketh on from it."),
              tr("Dos altares, dos bueyes, y ningún fuego encendido por mano de hombre.", "Two altars, two bullocks, and no fire kindled by the hand of man."),
-             nullptr},
+             nullptr, nullptr},
             tr("Que el pueblo vea de quién es el fuego.", "Let the people see whose the fire is."),
-            tr("«¡Jehová es el Dios!». Y el cielo se oscureció, y hubo una gran lluvia.", "«The Lord, he is the God!». And the heaven was black, and there was a great rain.")
+            // El fuego es el jefe y la lluvia (y la carrera) son el pozo («Despues del fuego»):
+            // la salida deja al profeta a la puerta de Jezreel, donde lo recoge la apertura 4.
+            tr("«¡Jehová es el Dios!», dijo el pueblo sobre su rostro. Esa noche Elías está a la puerta de Jezreel, empapado.", "«The Lord, he is the God!», said the people upon their faces. That night Elijah is at the gate of Jezreel, drenched.")
         };
         case 4: return {
-            {"1 Reyes 19:12", tr("Y tras el fuego un silbo apacible y delicado.", "And after the fire a still small voice.")},
-            // El juramento de Jezabel (19:2) y la huida a Beerseba (19:3) son la apertura; el
-            // enebro (19:4-8) es el pozo. Aqui: el desierto y la cueva (19:8-9).
-            {tr("Un día de camino por el desierto, y luego cuarenta días y cuarenta noches hasta Horeb, el monte de Dios.", "A day's journey into the wilderness, and then forty days and forty nights unto Horeb the mount of God."),
-             tr("Y allí se metió en una cueva, donde pasó la noche.", "And he came thither unto a cave, and lodged there."),
-             nullptr, nullptr},
+            {"1 Reyes 19:9", tr("Y allí se metió en una cueva, donde pasó la noche.", "And he came thither unto a cave, and lodged there.")},
+            // El juramento de Jezabel (19:2) y la huida (19:3, «un dia de camino») son la
+            // apertura; el enebro y los cuarenta dias (19:4-8) y el silbo apacible (19:11-12,
+            // que era el versiculo de aqui y el resultado del pozo palabra por palabra) son
+            // el pozo. Aqui: Horeb, y nada mas.
+            {tr("Horeb, el monte de Dios. La noche cae sobre la ladera, y el que sube no trae pan ni odre.", "Horeb the mount of God. Night falleth on the hillside, and he that goeth up hath neither bread nor bottle."),
+             nullptr, nullptr, nullptr},
             tr("«¿Qué haces aquí, Elías?»", "«What doest thou here, Elijah?»"),
-            tr("«Vuelve por tu camino». Y bajó de Horeb: quedaban siete mil rodillas, y un labrador en Abel-mehola.", "«Go, return on thy way». And he came down from Horeb: seven thousand knees remained, and a ploughman in Abel-meholah.")
+            // «Vuelve por tu camino» (19:15) y los siete mil (19:18) son dos relatos del pozo:
+            // la salida deja al profeta bajando, y el labrador espera en la apertura del 5.
+            tr("Bajó de Horeb por el camino del desierto. En Abel-mehola hay un labrador que todavía no sabe nada.", "He came down from Horeb by the way of the wilderness. In Abel-meholah there is a ploughman that knoweth nothing yet.")
         };
         case 5: return {
             {"1 Reyes 19:19", tr("Y pasando Elías por delante de él, echó sobre él su manto.", "And Elijah passed by him, and cast his mantle upon him.")},
@@ -184,7 +194,7 @@ inline ChapterLore get_prologue_lore() {
 //
 // Cuenta lo mismo que get_prologue_lore() pero en imagenes: el reino partido, Acab,
 // Jezabel y la entrada de Baal, la persecucion, el llamamiento de Elias en el monte,
-// el juramento ante el rey, los cuervos de Querit y el titulo.
+// el juramento ante el rey, el arroyo escondido (anunciado, no jugado) y el titulo.
 //
 // `ref` sigue siendo solo atribucion documental: NO se pinta (ver Scripture arriba).
 // =============================================================================
@@ -219,10 +229,13 @@ inline PrologueScene get_prologue_scene(int i) {
             tr("«Vive el Señor, Dios de Israel, delante de quien estoy:", "«As the Lord God of Israel liveth, before whom I stand:"),
             tr("no habrá rocío ni lluvia en estos años, sino por mi palabra.»", "there shall not be dew nor rain these years, but according to my word.»"),
             nullptr}};
-        case 6: return {"1 Reyes 17:3-6", {
-            tr("«Escóndete junto al arroyo de Querit.", "«Hide thyself by the brook Cherith."),
-            tr("Beberás del arroyo, y he mandado a los cuervos que allí te sustenten.»", "Thou shalt drink of the brook, and I have commanded the ravens to feed thee there.»"),
-            tr("Obedeció. Y comió de la mano de los cuervos.", "He obeyed. And he ate from the hand of the ravens.")}};
+        // ANUNCIA, no narra: la orden entera (17:2-4) la juega la audiencia con Acab dos
+        // minutos despues, y ver a los cuervos (17:6) es el pozo. El arte (el arroyo con
+        // los cuervos) se conserva.
+        case 6: return {"1 Reyes 17:2-3", {
+            tr("Y vino a él palabra de Jehová: que se apartara de allí, al oriente.", "And the word of the Lord came unto him: to get him hence, eastward."),
+            tr("A un arroyo escondido frente al Jordán, donde nadie lo buscaría.", "To a hidden brook before Jordan, where no man would seek him."),
+            nullptr}};
         default: return {"", {nullptr, nullptr, nullptr}};
     }
 }

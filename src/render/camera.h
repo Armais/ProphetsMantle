@@ -17,16 +17,29 @@ struct Camera {
     Rect room_bounds  = {0, 0,
                          static_cast<f32>(Config::GAME_WIDTH),
                          static_cast<f32>(Config::GAME_HEIGHT)};
+    // Hacia donde se DESLIZAN los limites. Con la zona continua el recorte cambia al entrar
+    // y salir de la arena del jefe (arena <-> zona entera); sin deslizar, la camara pegaba
+    // un salto de media pantalla al cruzar el vano.
+    Rect bounds_goal  = room_bounds;
 
     void set_target(Vec2 pos) {
         target = pos;
     }
 
-    void set_room(Rect bounds) {
-        room_bounds = bounds;
+    // snap = true: los limites cambian en el acto (cargar un mapa, teletransportar)
+    void set_room(Rect bounds, bool snap = true) {
+        bounds_goal = bounds;
+        if (snap) room_bounds = bounds;
     }
 
     void update(f32 dt) {
+        // Los limites se deslizan hacia su meta
+        const f32 k = std::min(1.0f, 8.0f * dt);
+        room_bounds.x += (bounds_goal.x - room_bounds.x) * k;
+        room_bounds.y += (bounds_goal.y - room_bounds.y) * k;
+        room_bounds.w += (bounds_goal.w - room_bounds.w) * k;
+        room_bounds.h += (bounds_goal.h - room_bounds.h) * k;
+
         // Smooth follow
         position = Vec2::lerp(position, target, follow_speed * dt);
 

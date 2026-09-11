@@ -149,9 +149,19 @@ struct EnemyAIComponent {
     f32 shoot_timer     = 1.0f;   // Ranged/caster/boss volley cooldown
     f32 leap_timer      = 0.0f;   // FastLeaper: time until next leap
     Entity target       = ENTITY_NONE;
-    Vec2 wander_target  = {0, 0};
+    Vec2 ring_center    = {0, 0};  // Corro de Baal: centro de la orbita (boss_group)
     const char* name    = "???";   // Display name (from EnemyDef)
     bool is_boss        = false;
+    // Miembro del GRUPO del jefe (el corro de profetas del Carmelo, game/enemies.cpp
+    // spawn_boss_group): cuenta en la barra compartida y su baja se loguea, pero NO es
+    // `is_boss` — las recompensas, el logro, la sacudida y el +90 de la auto-mira siguen
+    // siendo de UNA entidad, la cabeza. Si cuenta contra el techo de invocaciones.
+    bool boss_group     = false;
+    f32  ring_phase     = 0.0f;    // Angulo propio en el corro (boss_group)
+    // Celda de la zona en que nacio (zona continua, 2026-09-10). Limpieza de celda y
+    // despawn van SIEMPRE por celda de origen, nunca por posicion: los enemigos persiguen
+    // a traves de las costuras. -1 = fuera de toda celda (cuenta en todas, no se despawnea).
+    int  home_cell      = -1;
     u32  enemy_type     = 0;       // EnemyType index (for death effects / faith rewards)
 
     // Jefes: patron propio por capitulo (game/enemies.h BossPattern)
@@ -316,7 +326,7 @@ struct ECSWorld {
     void collect_draws(std::vector<DrawCmd>& out, Renderer& renderer);
 
     // Helpers
-    int count_living_enemies() const;   // solo hostiles: un discipulo no sella la sala
+    int count_living_enemies(int cell = -1) const;   // solo hostiles; cell >= 0 = solo esa celda de la zona
 };
 
 // =============================================================================

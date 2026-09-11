@@ -20,7 +20,9 @@
 #include <cstdio>
 
 int main(int argc, char* argv[]) {
-    Engine engine;
+    // Estatico: con la zona continua un Room son ~15 KB (160x88 tiles) y el Engine lleva
+    // tres (la activa y las dos ranuras de cache). Fuera de la pila.
+    static Engine engine;
 
     const char* script = nullptr;
     bool touch_mode = false;

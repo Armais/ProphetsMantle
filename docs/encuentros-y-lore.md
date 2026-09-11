@@ -4,6 +4,60 @@ Viene del `CLAUDE.md` de la raiz. Pertenece a **`src/game/`** (`events.h`, `lore
 caja de dialogo de **`src/ui/`**. El arte de los retratos y las vinetas lo genera
 `tools/blender/` (ver su `CLAUDE.md`).
 
+### Espinas de los caps. 1, 2 y 4, y el jefe que responde al pozo (2026-09-10, noche)
+
+Veredicto del usuario al jugar el cap. 1: *el dialogo se repite con la cinematica*. Verificado:
+la ultima caja de la audiencia («Beberas del arroyo; y yo he mandado a los cuervos...», 17:4)
+y la PRIMERA linea de la intro del cap. 1 eran identicas byte a byte, con dos segundos entre
+medias; el mismo patron estaba en el cap. 3 (la convocatoria, 18:20, ultima caja de la
+apertura Y linea 0 de la intro). La regla que ya declaraba `lore.h` se aplico ahora a los
+caps. 1, 2 y 4, que no tenian columna vertebral escrita:
+
+> **El prologo ANUNCIA, la apertura JUEGA, la intro SITUA, el pozo MUESTRA, el jefe responde a
+> lo jugado, la salida deja al profeta donde lo recoge la apertura siguiente.** Cada versiculo
+> o hecho se dice en UN solo eslabon por capitulo.
+
+- **Cap. 1** (17:1-7 + 18:10): prologo estampa 7 = 17:2-3 anunciado («la palabra lo mando al
+  oriente, a un arroyo escondido»; ya no narra la comida de los cuervos; conserva su arte) ->
+  audiencia 16:30-33, 18:4, 17:1, 18:19, 18:10 (Jezabel), 17:2-4 -> intro **17:5** («Y el fue
+  e hizo conforme a la palabra de Jehova») + una linea que situa el cauce -> pozo: cuervos
+  (17:6), rastreador (18:10, «Acab ha hecho jurar a reinos enteros»), arroyo seco (17:7) ->
+  jefe: el capitan YA NO cita 18:10; base «todo Israel te busca... segui el unico arroyo» y
+  **variante** si el rastreador se resolvio («mi explorador siguio el agua; yo segui a mi
+  explorador», vale para las dos opciones) -> salida: el arroyo callado, sin cuervos y sin
+  palabra todavia (17:8-9 es la apertura del 2). Fuera de la salida: «cayo el capitan» (el
+  banner lo dice) y el arroyo seco (pozo).
+- **Cap. 2** (17:8-24): apertura 17:8-11 -> intro 17:14 + la casa junto a la puerta y «el
+  sacerdote de la puerta no te ha quitado el ojo» (fuera el punado de harina, que es 17:12 =
+  el pozo, y «Sarepta es de Baal», que lo dicen el sacerdote de la apertura y el jefe) -> pozo
+  17:12, 17:14-16, 17:17-24 -> jefe 17:9 / 17:1 / 18:4 -> salida 17:24 (afirma el canon aunque
+  el pozo eligiera consolar a la madre).
+- **Cap. 3** (18): apertura 18:1, 18:17-19, 18:24, 18:20 -> intro **18:22** («solo yo he
+  quedado profeta de Jehova; mas de los profetas de Baal hay 450») + Acab en su carro + 18:23
+  (fuera la convocatoria y 18:21, que es «Todo el pueblo en el monte») -> pozo 18:33, 18:3-4
+  (Abdias), 18:21, 18:41-46 («Despues del fuego», con la marca) -> jefe: abre **el sumo
+  sacerdote** por todos (el jefe es un GRUPO desde hoy) sin la cifra, y **variante** si se
+  jugo a Abdias («esconde profetas en las cuevas de este monte; iremos tambien por ellos»,
+  vale para las dos opciones) -> salida 18:39 («Jehova es el Dios», sobre su rostro) y Elias
+  a la puerta de Jezreel esa noche, empapado: NI fuego NI lluvia, que ya se jugaron.
+- **Cap. 4** (19:1-18): apertura 19:1-2, 19:3 («un dia de camino») -> intro **19:9** («y alli
+  se metio en una cueva») + Horeb de noche (fuera «un dia de camino / cuarenta dias», que son
+  la apertura y el enebro, y 19:12, que era el resultado de «La boca de la cueva» palabra por
+  palabra) -> pozo 19:11-12, 19:4-8, 19:15-16, 19:18 -> jefe 19:4 como eco reconocido, 19:10,
+  19:2 como eco, 17:1 -> salida: baja de Horeb y el labrador de Abel-mehola «todavia no sabe
+  nada» (fuera «vuelve por tu camino» y los siete mil, dos relatos del pozo).
+
+**El jefe responde al pozo (motor):** `SceneDef::alt_first_line` + `alt_event` (scenes.h).
+`Engine::scene_next` usa la variante como PRIMERA caja si `event_resolved_in_run(alt_event)`;
+el resto de la cadena no cambia, y los ids de las variantes van al FINAL del enum `Sc` para
+no mover ninguno. `event_resolved_in_run` NO lee `codex_events` (es el Codice: persiste entre
+partidas y un jefe respondería a un relato jugado en otra run): lee `Engine::run_events_done`
+(bit al cerrar cualquier relato, tambien por el comando `event`; se pone a cero al empezar
+partida y al Continuar) o `event_used` de la sala Event que cuenta ese relato (lo que
+sobrevive al Continuar: start_chapter rehidrata room_cache desde el v9). Hoy solo lo usan
+los jefes 1 (rastreador) y 3 (Abdias); el mecanismo queda para el resto. El log dice `parada
+1/N (id X) variante`, y `escenas_check` tiene una cuarta pasada que lo exige (gate 8).
+
 ### Voz humana y coherencia capitulo a capitulo (2026-09-10, tarde)
 
 Veredicto del usuario al jugar las escenas guionizadas: *los dialogos suenan roboticos, a

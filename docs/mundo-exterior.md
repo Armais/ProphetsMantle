@@ -3,6 +3,100 @@
 Viene del `CLAUDE.md` de la raiz. Pertenece a **`src/game/`** (`rooms.h/cpp`): leelo antes
 de tocar `Room::generate`, `decorate`, `carve_trail` o `render_ground`.
 
+## Zona continua (2026-09-10)
+
+Decision del usuario: *"el mapa sea una exploracion libre, no por cuadrados"*. Un capitulo
+es desde hoy **UN solo mapa** (`RoomType::Zone`): las celdas de la rejilla (40x22, la unidad
+de generacion pura de los mapas fijos) se cosen en un lienzo de hasta 160x88 tiles, sin
+anillos entre ellas, sin fundidos, con la camara siguiendo al profeta de punta a punta. Las
+secciones de mas abajo que hablan de "salas", "transicion por bordes", `try_room_transition`,
+`exits_locked` y `room_cache[i]` son HISTORIA: describen como se llego a la celda actual y
+por que las cosas se cuentan como se cuentan, pero el motor ya no hace nada de eso.
+
+**Piezas, en orden de dependencia:**
+
+1. **La celda sigue siendo la unidad pura.** `Engine::generate_pristine_cell(nodo, out)` es
+   el `generate_pristine_room` de siempre (siembra `chapter_seed ^ ((nodo+1)*2654435761)` y
+   genera 40x22 en local). `Engine::build_pristine_zone` la llama para cada nodo de la
+   rejilla y `Room::blit_cell` la pega en `(gx*40, gy*22)`; luego `Room::open_seams`. Es
+   una funcion pura de (semilla, capitulo, rejilla): `Engine::pristine_zone()` la cachea y
+   `capture_room_states` diffea contra ella (regenerar 16 celdas en cada guardado daria un
+   tiron en mitad de la pelea). Cambiar el generador de UNA celda cambia solo esa celda;
+   el resto de los mapas siguen siendo fijos.
+2. **Costuras** (`open_seams`): las dos filas/columnas de anillo de cada costura interior
+   pasan a suelo SI eran solidas (una senda que llega al borde se queda). En bioma
+   `Natural` el vano ya ocupaba casi todo el lado y la franja irregular se salta el vano,
+   asi que la costura **no se ve**: el campo es continuo. En `Masonry` (6, 8, 10) la
+   silleria queda solo en el PERIMETRO y las costuras se abren igual; las antorchas que
+   flanqueaban el vano quedan flanqueando el paso, y se lee como una puerta de ciudad.
+   Deuda visual aceptada: los rios y las charcas se generan por celda y mueren una fila
+   antes de la costura.
+3. **Estado por celda** (`CellState` en `Room::cells[i]`, i = nodo de la rejilla): visited,
+   cleared, altar_used, chest_opened, event_used, active, event_id, el nudo (hub) y los
+   spawns en coordenadas de zona. Un interior o un escenario de escena son `cells[0]`. Los
+   flags planos de `Room` han desaparecido; `exit_open`/`exit_tx/ty` siguen planos porque el
+   arco es uno por zona.
+4. **Celdas VIVAS** (`Engine::update_cells`, cada frame de Playing, antes de
+   `update_room_state`): la celda bajo los pies del profeta pasa a ser `floor_map.current_room`
+   (log `Entered cell N [gx,gy] (Tipo)`); una celda de combate a menos de media pantalla
+   de su rectangulo siembra sus enemigos (`spawn_cell_enemies`, `EnemyAIComponent::home_cell`
+   = la celda) y a mas de 1,2 pantallas los repone (`despawn_cell`: por celda de ORIGEN,
+   nunca por posicion — persiguen a traves de las costuras). Limpieza: la primera celda
+   activa con `count_living_enemies(i) == 0`, UNA por frame (`killall` vacia varias y
+   `open_item_choice` no se abre dos veces). Las invocaciones, los hijos del Agua Corrupta y
+   el corro de Baal heredan la celda de quien los engendra; `spawn` del autoplay usa la
+   actual; un enemigo con `home_cell == -1` cuenta en todas y no se despawnea.
+5. **La arena vive DENTRO de la celda B** (`stamp_arena`, en `Room::generate` para
+   `RoomType::Boss`): recinto de una pantalla de suelo (20x11) pegado al borde de arriba
+   de la celda, cerco de `Rock` en todos los biomas (un muro de un tile de grueso no se
+   dibuja: `collect_props` solo pinta la cara de abajo de un bloque) y vano de 4 tiles en
+   el cerco de abajo. El nudo de la celda B baja a cuatro filas del borde inferior, fuera
+   del recinto; una senda recta une el vano con el nudo; si el estampado corta una senda,
+   `carve_straight` repara con una L determinista por fuera del cerco. `Engine::enter_arena`
+   se dispara cuando los pies pisan el suelo del recinto (`arena_rect_world`): nace el jefe
+   (o el grupo), `arena_sealed = true` (un flag: `is_tile_walkable` y
+   `is_tile_solid_for_projectiles` cierran el vano sin tocar tiles, asi que el diff del
+   guardado no lo ve), banner, voz y el dialogo del jefe. La camara se clava al recinto CON
+   su cerco (`arena_bounds_world`) mientras el profeta esta dentro y el jefe vive; los
+   limites de `Camera` se DESLIZAN (`bounds_goal`) para que cruzar el vano no pegue un salto.
+   Al caer el ultimo: `place_exit()` en la segunda fila del recinto.
+6. **Interiores y escenarios**: `FloorMap::room_cache` son DOS ranuras (0 = la zona mientras
+   se esta en un interior o en un escenario de escena, 1 = el interior mientras se esta
+   fuera). `load_room(nodo)` despacha: nodo interior -> ranura 1 (cacheando antes la zona);
+   nodo de rejilla -> construye la zona si no esta (`zone_built`) o la recupera de la ranura
+   0 si lo activo no es la zona, y `enter_cell` teletransporta al nudo (o a `spawn_tx/ty` al
+   volver por la puerta). El fundido (`room_fade`) queda para el arranque del capitulo y la
+   puerta. `use_doorway` vuelve a la puerta en coordenadas de zona (la puerta se coso con su
+   celda: `Room::door_tx/ty` planos en la zona).
+7. **Guardado v10** (`save.h`): misma forma de fichero que la v9; `room_flags[i]` /
+   `room_open[i]` son por CELDA (i = nodo, bits en local, stride 40) y el interior va en su
+   nodo. Como la celda del jefe cambio de forma y los secretos se reparten ahora por
+   coordenadas de zona (`tile_hides_loot` hashea la zona), un resumen v9 aplicado tal cual
+   abriria tiles que no eran secretos: la migracion lo pone a cero y `current_room = -1`
+   (celda de inicio). Al Continuar, `apply_saved_cell_state` corre sobre la zona recien
+   construida y el interior con estado se pre-genera en la ranura 1.
+8. **Pintado por vista**: `render_ground` y `collect_props` reciben el `Rect` visible y
+   solo recorren la vista mas un tile (dos por arriba, por los props altos). `tile_hash`
+   recibe coordenadas de zona, asi que el reparto de decorados y de hallazgos secretos se
+   redistribuyo (determinista igual).
+9. **Autoplay**: `goto <celda|tipo>` teletransporta al nudo; el jefe se entra ANDANDO
+   (`goto boss` + `walk 1600 150`: el vano esta en (1568..1632, 192..208) porque la celda
+   B es (2,0) en todos los capitulos); `walk` va en coordenadas de ZONA (celda (gx,gy) =
+   +(gx*640, gy*352)); `pit` busca el hueco MAS CERCANO; `escena` de un jefe llama a
+   `enter_arena` tras `load_room`. Logs nuevos: `Zone built`, `Entered cell`, `Arena
+   sealed`, `Cell N cleared/despawned`. Los gates `Loaded room N [gx,gy] (Cap) - Tipo [n
+   enemies]` y el volcado ASCII de 40x22 se conservan por celda.
+
+Riesgos conocidos, para no redescubrirlos: `took_damage_this_room` y el "+2 Fe sin dano"
+pierden exactitud con celdas activas solapadas (se resetea al activar cada celda: aproximacion
+aceptada); Ojos Abiertos marca solo enemigos de celdas activas; guardar en mitad de la pelea
+del jefe deja al Continuar en el nudo de la celda B y la arena se vuelve a disparar con su
+dialogo (`boss_talk_seen` no se guarda), como pasaba antes con la sala.
+
+Gates: `scripts/mapas_check.txt` (costura, perimetros, arena desde fuera / sellada / arco),
+`feel_check` (tramo 6: cruzar una costura no carga nada), `interiores_check` (7 -> 12 -> 7),
+`carmelo_check` (el grupo nace al pisar la arena).
+
 ### Room System & Navigation
 
 Each chapter (scene) contains a **grid of rooms** that the player navigates freely. When the player reaches any edge of the current room, they transition to the adjacent room in that direction (if one exists).
@@ -22,6 +116,10 @@ Y **cada sala mide 2x2 pantallas** (40x22 tiles, 640x352 unidades), asi que un c
 ~48 pantallas contra las 9 de antes. La excepcion es la **arena del jefe: una pantalla**.
 
 #### Room Transition Mechanic
+
+> **HISTORIA (hasta 2026-09-10).** Ya no hay transicion por bordes: el capitulo es una zona
+> continua (ver arriba). Se conserva porque explica de donde vienen los vanos por lado y las
+> sendas hasta el borde, que siguen generandose por celda.
 
 - Player walks to the **top edge** (y ≤ 0) → load room at `(grid_x, grid_y - 1)`, player spawns at bottom
 - Player walks to the **bottom edge** (y ≥ GAME_HEIGHT) → load room at `(grid_x, grid_y + 1)`, player spawns at top
@@ -110,8 +208,12 @@ arriba).
   (ciudad, casa noble, campamento) cierran con `TileType::Wall`; **`Natural`** (desierto,
   campos, ribera) cierra con el propio terreno: roca y arboles del bioma en el anillo, mas
   una **franja irregular** hacia dentro (a veces otro bloqueo, a veces matorral pisable).
-  Reparto: 1 Cliff - 2 Natural - 3 Cliff - 4 Cliff - 5 Natural - 6 Masonry - 7 Natural -
-  8 Masonry - 9 Natural - 10 Masonry.
+  Reparto (2026-09-10, "quita los muros en el capitulo uno y en todo escenario al aire
+  libre"): 1 Natural - 2 Natural - 3 Natural - 4 Natural - 5 Natural - 6 Masonry -
+  7 Natural - 8 Masonry - 9 Natural - 10 Masonry. `Cliff` ya no lo usa ningun exterior.
+  - **TRAMPA**: `decorate` colocaba los huecos (Carro de Fuego) y las grietas SOLO con borde
+    `Cliff`; cambiar el borde a secas los borraba de los caps. 1, 3 y 4. Por eso existe
+    `BiomeStyle::rocky` (true en 1/3/4): el terreno rocoso es una propiedad aparte del borde.
   - **Dejar el borde ABIERTO no es opcion**: fuera de la rejilla `is_tile_walkable` deja
     pasar, y sin sala vecina `try_room_transition` devuelve al profeta de un tiron — un muro
     invisible, que se siente peor que el muro.
@@ -175,8 +277,11 @@ guion ya NO fija semilla: mide el mapa REAL del juego (`Config::CHAPTER_SEEDS[0]
 constante — pero cualquier cambio en `Room::generate` o en esa semilla sigue moviendo la
 medida sin que el motor de combate se haya tocado.
 
-Cifras buenas de referencia hoy (mapa real, tras los mapas fijos del 2026-08-27):
-soldados **0,80 s**, leones **2,04 s**, arqueros **0,76 s**, 0 golpes recibidos.
+Cifras de referencia desde la ZONA CONTINUA (2026-09-10, mapa real; la celda de inicio del
+cap. 1 cambio de decorado al abrir el borde a Natural, y la sonda corre en coordenadas de
+zona): soldados **0,93 s**, leones **2,05 s**, arqueros **0,96 s**, 0 golpes recibidos.
+Las anteriores (mapa real, tras los mapas fijos del 2026-08-27): soldados 0,80 s, leones
+2,04 s, arqueros 0,76 s — ya no comparables.
 Reproducibles bit a bit (dos pasadas identicas linea a linea). Las anteriores (0,93 /
 3,10 / 1,23 con seed 20260825, y todas las previas) se midieron sobre OTRO mapa, asi que
 no son comparables. Ojo con el tramo del jefe: `killall` deja la sala por limpia, asi

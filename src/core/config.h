@@ -217,6 +217,26 @@ constexpr int ROOM_TILES_Y        = SCREEN_TILES_Y * 2;       // 22
 constexpr int ROOM_W_UNITS        = ROOM_TILES_X * TILE_SIZE; // 640
 constexpr int ROOM_H_UNITS        = ROOM_TILES_Y * TILE_SIZE; // 352
 
+// ZONA continua (2026-09-10, decision del usuario: "el mapa sea una exploracion libre, no
+// por cuadrados"). Un capitulo es UN solo mapa. La celda (40x22) sigue siendo la unidad de
+// generacion pura (mapas fijos: (capitulo, celda) -> mismo terreno); la zona es lo que se
+// juega — las celdas se cosen sin anillos entre ellas, sin fundidos, con la camara siguiendo
+// al profeta de punta a punta. Tope: rejilla 4x4 = 160x88 tiles (14 KB por Room).
+constexpr int ZONE_CELLS_X        = 4;
+constexpr int ZONE_CELLS_Y        = 4;
+constexpr int ZONE_CELLS_MAX      = ZONE_CELLS_X * ZONE_CELLS_Y;   // 16
+constexpr int ZONE_TILES_X        = ROOM_TILES_X * ZONE_CELLS_X;   // 160
+constexpr int ZONE_TILES_Y        = ROOM_TILES_Y * ZONE_CELLS_Y;   // 88
+// La arena del jefe vive DENTRO de la celda B: un recinto de una pantalla de suelo (20x11)
+// con un cerco de piedras y un vano de 4 tiles abajo, sellado mientras el jefe vive.
+constexpr int ARENA_TILES_X       = SCREEN_TILES_X;                // 20
+constexpr int ARENA_TILES_Y       = SCREEN_TILES_Y;                // 11
+constexpr int ARENA_GAP           = 4;
+// Celdas VIVAS (ALTTP): los enemigos de una celda nacen al acercarse y se reponen al
+// alejarse. Distancias en PANTALLAS desde el rectangulo de la celda.
+constexpr float CELL_ACTIVATE_SCREENS = 0.5f;
+constexpr float CELL_DESPAWN_SCREENS  = 1.2f;
+
 // Sube con el area: doce enemigos repartidos en cuatro pantallas es un descampado.
 constexpr int MAX_ENEMIES_PER_ROOM = 18;
 

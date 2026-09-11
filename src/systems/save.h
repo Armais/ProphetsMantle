@@ -31,7 +31,14 @@
 //     despejado y el secreto abierto sigue abierto. Un byte de flags por sala + UN BIT por
 //     celda alterada desde la generacion — el terreno NO viaja: se regenera identico porque
 //     la generacion es pura por (capitulo, sala) y la semilla es constante.
-constexpr u32 SAVE_VERSION = 9;
+// v10: zona continua (2026-09-10). El fichero NO cambia de forma (mismos campos, mismos
+//      bytes): cambia el SIGNIFICADO de room_flags/room_open — el indice sigue siendo el
+//      nodo de la rejilla (= celda de la zona), pero la celda del jefe pasa de 20x11 a 40x22
+//      con la arena dentro y los secretos se reparten por coordenadas de zona. Un resumen v9
+//      aplicado tal cual abriria tiles que no eran secretos: la migracion lo pone a cero y
+//      deja `current_room = -1` (celda de inicio). La partida no se tira: rebobina el mapa
+//      del capitulo, como una derrota.
+constexpr u32 SAVE_VERSION = 10;
 
 // v9: dimensiones del resumen por sala. 25 = FloorMap::MAX_ROOMS (engine.cpp lo vigila con
 // un static_assert); 110 bytes = los 40x22 tiles de una sala exterior, a bit por celda.

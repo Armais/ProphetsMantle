@@ -1,19 +1,35 @@
-# Verificacion del mundo exterior (GDD2.0 fase 1): salas de 2x2 pantallas con camara,
-# bordes por bioma y PNJ de pie en la sala de encuentro.
+# Verificacion del mundo exterior: ZONA CONTINUA por capitulo (2026-09-10), bordes por
+# bioma y PNJ de pie en la celda de encuentro.
 # Uso:  MANTLE.exe --script scripts/mapas_check.txt
 # Capturas en screenshots/ (1280x720). Tras cada shot va un wait 0.1.
 #
-# Lo que hay que MIRAR en cada captura, que es lo que este guion no puede afirmar solo:
-#  - 01/02: el profeta se mueve por la sala y el mundo se desplaza con el; el HUD NO.
-#  - 03 (cap 2, Natural) y 05 (cap 5, Natural): el borde son rocas y arboles, NO silleria
-#    ni acantilado, y la franja es irregular (no una fila recta).
-#  - 04 (cap 1, Cliff) y 06 (cap 10, Masonry): ahi el muro SI, que es donde significa algo.
-#  - 07: la senda serpentea. Si sale una recta perfecta de lado a lado, la regresion volvio.
-#  - 08: el PNJ de la viuda esta DE PIE en la sala, con su marca flotante — no una antorcha.
-#  - 09: la arena del jefe mide una pantalla y la camara no se mueve.
+# Coordenadas: la zona cose las celdas de la rejilla (40x22 tiles = 640x352 unidades) en
+# UN mapa; la celda (gx,gy) empieza en (gx*640, gy*352). La de inicio es (2,2) en 4x3 y
+# (2,3) en 4x4; la del jefe, (2,0) en todos: su arena ocupa la parte alta de la celda,
+# con el vano en (1568..1632, 192..208) y el nudo (donde deja `goto boss`) en (1608,296).
 #
-# El volcado ASCII de cada sala va al log en cada `goto`: 40 columnas x 22 filas en exterior,
-# 20 x 11 en la sala de jefe.
+# GATES DEL LOG:
+#   - "Zone built: 4x3 cells (160x66 tiles), boss cell 2, arena yes, door yes" por capitulo
+#     4x3 (4x4 en el 5 y el 10: 160x88).
+#   - Al cruzar una costura andando: "Entered cell N [gx,gy] (Tipo)" y NINGUNA linea
+#     "Loaded room" nueva (no se carga nada: el mapa es uno).
+#   - Al entrar en la arena: "Arena sealed: boss cell 2"; tras killall: "Cell 2 cleared (Boss)".
+#
+# Lo que hay que MIRAR en cada captura, que es lo que este guion no puede afirmar solo:
+#  - 01/02: el profeta cruza la costura entre (2,2) y (1,2) SIN muro, sin fundido ni salto de
+#    camara; el HUD NO se mueve. En bioma natural la costura no se ve: campo continuo.
+#  - 03 (cap 2), 04 (cap 1), 04b (cap 3), 04c (cap 4), 05 (cap 5): el PERIMETRO de abajo son
+#    rocas y arboles, NO silleria ni acantilado. Desde 2026-09-10 NINGUN exterior cierra con
+#    pared ("quita los muros en el capitulo uno y en todo escenario al aire libre").
+#  - 06 (cap 10, Masonry): ahi el muro SI en el perimetro (ciudad); las costuras interiores
+#    estan abiertas (las antorchas flanquean el paso, sin pared).
+#  - 07: la senda serpentea. Si sale una recta perfecta de lado a lado, la regresion volvio.
+#  - 08: el PNJ de la viuda esta DE PIE en la celda, con su marca flotante — no una antorcha.
+#  - 09: la arena vista DESDE FUERA: el cerco de piedras con el vano de 4 tiles en medio.
+#  - 10: dentro, sellada: el jefe de pie, la barra, la camara clavada al recinto.
+#  - 11: tras killall, el arco dorado en la segunda fila del recinto (sin pisarlo) y "Salida abierta".
+#
+# El volcado ASCII de cada celda va al log en cada `goto`: 40 columnas x 22 filas.
 
 seed 4242
 defaults
@@ -26,51 +42,71 @@ press confirm
 wait 1.4
 god
 
-# --- Cap 1: borde de acantilado (canon del Querit) ---
+# --- Cap 1: canon del Querit, borde NATURAL; cruzar la costura hacia el oeste ---
 wait 0.4
 shot 01_cap1_entrada
 wait 0.1
-walk 560 300
-wait 0.4
-shot 02_cap1_camara_sigue
+walk 1200 880
+wait 0.6
+shot 02_cap1_costura_cruzada
 wait 0.1
 
-# --- Cap 2: borde NATURAL (aldea sobre arena) ---
+# --- Cap 2: borde NATURAL (aldea sobre arena): el perimetro de abajo ---
 chapter 2
 wait 1.0
 press confirm
 wait 1.2
-walk 320 330
+walk 1400 1030
 wait 0.6
 shot 03_cap2_borde_natural
 wait 0.1
 
-# --- Cap 1 de nuevo, esquina: acantilado ---
+# --- Cap 1 de nuevo: NATURAL, sin acantilado ---
 chapter 1
 wait 1.0
 press confirm
 wait 1.2
-walk 320 330
+walk 1400 1030
 wait 0.6
-shot 04_cap1_borde_acantilado
+shot 04_cap1_borde_natural
 wait 0.1
 
-# --- Cap 5: campos abiertos, borde natural ---
+# --- Cap 3: monte Carmelo, NATURAL (sigue siendo roca: huecos y grietas por BiomeStyle::rocky) ---
+chapter 3
+wait 1.0
+press confirm
+wait 1.2
+walk 1400 1030
+wait 0.6
+shot 04b_cap3_borde_natural
+wait 0.1
+
+# --- Cap 4: ladera de Horeb, NATURAL (la cueva es el interior) ---
+chapter 4
+wait 1.0
+press confirm
+wait 1.2
+walk 1400 1030
+wait 0.6
+shot 04c_cap4_borde_natural
+wait 0.1
+
+# --- Cap 5 (4x4): campos abiertos, borde natural; el perimetro de abajo esta en y=1408 ---
 chapter 5
 wait 1.0
 press confirm
 wait 1.2
-walk 600 320
+walk 1400 1382
 wait 0.6
 shot 05_cap5_borde_natural
 wait 0.1
 
-# --- Cap 10: ciudad sitiada, borde de silleria ---
+# --- Cap 10 (4x4): ciudad sitiada, perimetro de silleria ---
 chapter 10
 wait 1.0
 press confirm
 wait 1.2
-walk 320 330
+walk 1400 1382
 wait 0.6
 shot 06_cap10_borde_silleria
 wait 0.1
@@ -91,9 +127,22 @@ wait 0.7
 shot 08_cap2_pnj_viuda
 wait 0.1
 
-# --- Arena del jefe: UNA pantalla, camara clavada ---
+# --- Arena del jefe: desde fuera, sellada por dentro, y el arco ---
 goto boss
-wait 0.9
-shot 09_cap2_arena_jefe
+wait 0.5
+walk 1600 236
+wait 0.6
+shot 09_cap2_arena_desde_fuera
+wait 0.1
+walk 1600 150
+wait 1.2
+shot 10_cap2_arena_sellada
+wait 0.1
+killall
+wait 1.0
+# hasta la mitad del recinto, SIN pisar el arco (pisarlo abre la pagina de cierre del capitulo)
+walk 1600 112
+wait 0.8
+shot 11_cap2_arco
 wait 0.2
 quit

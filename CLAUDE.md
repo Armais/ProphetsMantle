@@ -86,7 +86,7 @@ docs/               - temas largos, se leen bajo demanda
 | Audio | `audio/audio.h` | `Audio` | MIX_Mixer*, MIX_Track*, MIX_Audio* |
 | Faith | `game/faith.h` | `FaithSystem` | Core mechanic, 6 tiers |
 | Combat | `game/combat.h` | (free functions) | O(n^2) collision, projectiles |
-| Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; `Room::tiles_w/tiles_h` (40x22 exterior, 20x11 arena) |
+| Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; **zona continua** por capitulo (`RoomType::Zone`, celdas de 40x22 cosidas hasta 160x88; arena del jefe dentro de la celda B); interior 20x11 |
 | Save | `systems/save.h` | `SaveSystem` | Binary format, version 1 |
 | Progression | `systems/progression.h` | `ProgressionSystem` | 8 meta-upgrades |
 | Achievements | `systems/achievements.h` | `AchievementSystem` | 18 logros, bitmask en el guardado |

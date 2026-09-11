@@ -181,8 +181,18 @@ struct Engine {
     // de una pantalla — la arena del jefe, y los interiores de la fase siguiente — su
     // recorte contra los limites la deja clavada, o sea el comportamiento de siempre.
     Camera    camera;
-    Direction entry_direction = Direction::None;  // Which side the player entered from
     Entity    boss_entity = ENTITY_NONE;
+    // Barra del jefe (ui/hud.h HUDContext). Con el jefe en GRUPO (cap. 3, el corro de
+    // Baal: game/enemies.cpp spawn_boss_group) la vida es la suma de la cabeza y de los
+    // miembros (`EnemyAIComponent::boss_group`), el maximo se fija al nacer el grupo y la
+    // barra sigue mientras quede alguien aunque la cabeza (`boss_entity`) haya caido.
+    f32         boss_group_max = 0.0f;         // > 0: jefe en grupo
+    f32         boss_bar_hp    = 0.0f;
+    f32         boss_bar_max   = 0.0f;
+    int         boss_bar_heads = 0;
+    bool        boss_bar_invulnerable = false;
+    const char* boss_bar_name  = nullptr;
+    int         boss_group_alive_last = 0;     // para el log "Boss group: N alive"
 
     // Sprite sheets (renderer texture ids, TEXTURE_NONE if missing -> placeholders)
     u32 character_textures[2] = {TEXTURE_NONE, TEXTURE_NONE};            // by CharacterType
@@ -229,7 +239,6 @@ struct Engine {
     // Marca de la ultima medida `feel`: el comando imprime el TRAMO, no el acumulado.
     struct FeelMark { f32 t = 0.0f; int kills = 0, hits = 0, shots = 0; f32 out = 0.0f, in_ = 0.0f; };
     FeelMark feel_mark;
-    int  lock_hints_shown = 0;
     bool god_mode = false;
     // Reglas de movil en escritorio (--touch): hoy solo la caducidad de la partida a las
     // 48 h, que en PC no se aplica pero hay que poder probar.
@@ -341,14 +350,39 @@ struct Engine {
     int  pending_scene = -1;      // dialogo de jefe pedido por load_room: arranca en el
                                   // siguiente paso de Playing, no en mitad de la transicion
     u32  boss_talk_seen = 0;      // bit por capitulo: el jefe habla una vez por partida
+    // Relatos del pozo RESUELTOS en esta partida (bit = id de `namespace Ev`). No se guarda:
+    // al Continuar, `event_resolved_in_run` lo lee de `event_used` de la sala, que el v9 si
+    // guarda y start_chapter rehidrata en room_cache. `codex_events` no vale para esto: es
+    // el Codice y persiste entre partidas.
+    u64  run_events_done = 0;
+    bool event_resolved_in_run(int ev) const;
     Entity scene_figures[3] = {ENTITY_NONE, ENTITY_NONE, ENTITY_NONE};   // se retiran al cerrar
     void start_scene(int id);
     void scene_next();
     void finish_scene(bool skipped);
 
-    void spawn_room_enemies();
-    void try_room_transition();  // Check if player crossed a room border
-    void update_room_state();    // Clear detection, boss death, tile interactions
+    // --- Zona continua (2026-09-10) ---------------------------------------------------
+    // Un capitulo es UN mapa: las celdas de la rejilla (40x22, la unidad de generacion pura)
+    // cosidas en `current_room_data` (RoomType::Zone). La camara recorre la zona entera; los
+    // enemigos de una celda nacen al acercarse y se reponen al alejarse (ALTTP); la arena
+    // del jefe vive dentro de la celda B, sellada mientras el jefe vive. Los interiores
+    // siguen siendo una pantalla aparte (FloorMap::room_cache[1]) y el fundido queda solo
+    // para la puerta. Detalle: docs/mundo-exterior.md ("Zona continua").
+    void build_pristine_zone(Room& out);              // todas las celdas, cosidas (generacion pura)
+    void generate_pristine_cell(int node, Room& out); // UNA celda (o el interior), en coordenadas locales
+    const Room& pristine_zone();                      // copia pristina cacheada por (semilla, capitulo)
+    Room* zone_ptr();                                 // la zona: current_room_data, o su cache dentro de un interior
+    const Room* zone_ptr() const;
+    void place_player(Vec2 pos);                      // con la guardia de "pies en solido", salto de camara y discipulo
+    void enter_cell(int cell);                        // teletransporte al nudo de la celda (goto, arranque, vuelta)
+    void update_cells();                              // celda actual, activacion / despawn, arena, camara
+    void enter_arena();                               // el profeta pisa la arena: jefe, sellado, banner
+    void spawn_cell_enemies(int cell);
+    void despawn_cell(int cell);
+    void dump_cell_ascii(const Room& r, int cell);    // volcado ASCII de una celda (guiones)
+    void update_room_state();    // Clear detection (por celda), boss death, tile interactions
+    void reset_boss_bar();
+    void update_boss_bar();      // Cada frame: suma cabeza + corro y loguea las bajas del grupo
     void open_dialogue(int event_id);           // Encuentro biblico -> GameScene::Dialogue
     void update_dialogue(f32 dt);               // Avance de lineas + eleccion
     void apply_event_choice(int event_id, int option);  // Efecto de la decision
@@ -398,9 +432,9 @@ struct Engine {
     void populate_save_data();
     void save_after_defeat();   // La derrota rebobina la partida al inicio del capitulo, no la borra
     // Mapas fijos + estado de sala persistido (v9):
-    void generate_pristine_room(int room_index, Room& out);  // generacion PURA por (capitulo, sala)
-    void capture_room_states();                  // vuelca flags + celdas alteradas por sala a save.data
-    void apply_saved_room_state(int room_index, Room& r); // re-aplica lo guardado sobre la sala recien generada
+    void capture_room_states();                  // vuelca flags + celdas alteradas por CELDA a save.data
+    void apply_saved_cell_state(int cell, Room& zone);          // re-aplica lo guardado sobre una celda de la zona
+    void apply_saved_interior_state(int node, Room& interior);  // idem sobre el interior recien generado
     void continue_run();
     // Caducidad movil: recalcula si "Continuar" sigue siendo continuable o ya es una
     // partida abandonada, y cobra las ofrendas de esta ultima.

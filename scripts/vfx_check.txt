@@ -22,7 +22,7 @@ wait 1.5
 god
 killall
 wait 0.8
-walk 160 130
+walk 1440 834
 wait 2.5
 
 say ---- efecto 0: impacto ----

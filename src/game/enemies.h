@@ -114,6 +114,15 @@ Entity spawn_enemy(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_i
 Entity spawn_boss(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id,
                   int chapter, const char* boss_name, BossPattern pattern);
 
+// Jefe en GRUPO (cap. 3, 1 R 18:26-29: sumo sacerdote + corro de profetas con barra
+// compartida). Crea la cabeza con `spawn_boss` y, si el patron lo pide, sus miembros
+// (`EnemyAIComponent::boss_group`) bailando alrededor de `ring_center`. Devuelve la
+// cabeza. Para los demas patrones es exactamente `spawn_boss`.
+Entity spawn_boss_group(ECSWorld& world, EnemyType type, Vec2 position, Vec2 ring_center,
+                        u32 texture_id, int chapter, const char* boss_name, BossPattern pattern);
+// Miembros del grupo vivos (sin la cabeza)
+int count_boss_group(const ECSWorld& world);
+
 // =============================================================================
 // Enemy AI Update
 // =============================================================================

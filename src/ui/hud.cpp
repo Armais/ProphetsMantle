@@ -308,7 +308,7 @@ void HUD::render(Renderer& renderer, const Player& player,
     if (!slots_in_band) draw_miracle_slots(renderer, player, ctx, faith);
     draw_minimap(renderer, ctx, ctx.show_map);
     if (!ctx.show_map) draw_objective(renderer, ctx);
-    if (ctx.boss != ENTITY_NONE) draw_boss_bar(renderer, world, ctx.boss);
+    draw_boss_bar(renderer, ctx);
     draw_message(renderer, ctx);
     draw_banner(renderer, ctx);
     draw_touch_controls(renderer, player, ctx);
@@ -679,7 +679,8 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
         // en una celda inventada seria justo lo que el gate del track prohibe — que el
         // mapa mienta. Su sala de fuera si sale, y es la que hay que buscar.
         if (node.interior_of >= 0) continue;
-        bool visited = fm->room_generated[i] && fm->room_cache[i].visited;
+        const Room* z = ctx.zone;   // el estado vive en las celdas de la zona
+        bool visited = z && i < z->cell_count && z->cells[i].visited;
         // "Y vio el monte lleno": Ojos Abiertos vale por haber estado en la sala de al lado
         bool adjacent = ctx.map_revealed;
         for (int c = 0; c < 4; c++) if (fm->rooms[cur].connections[c] == i) adjacent = true;
@@ -710,7 +711,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
             renderer.draw_rect({x + cw * 0.5f - 0.5f, y + 1, 1, ch - 2}, {255, 240, 240, 255});
             renderer.draw_rect({x + 1, y + ch * 0.5f - 0.5f, cw - 2, 1}, {255, 240, 240, 255});
         }
-        if (visited && fm->room_cache[i].cleared && node.type != RoomType::Boss && big) {
+        if (visited && z->cells[i].cleared && node.type != RoomType::Boss && big) {
             renderer.draw_text("ok", x + 2, y + 4, {40, 30, 20, 255}, 0.75f);
         }
         if (big) {
@@ -753,7 +754,7 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
 
     char buf[48];
     if (dx == 0 && dy == 0) {
-        bool cleared = ctx.room && ctx.room->cleared;
+        bool cleared = ctx.zone && ctx.zone->boss_cell >= 0 && ctx.zone->cells[ctx.zone->boss_cell].cleared;
         snprintf(buf, sizeof(buf), cleared ? tr("Salida abierta", "Exit open") : tr("!! JEFE !!", "!! BOSS !!"));
     } else {
         // e.g. "Jefe: 2N 1E"
@@ -770,22 +771,31 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     renderer.draw_text(tr("TAB: mapa", "TAB: map"), Config::GAME_WIDTH - renderer.measure_text(tr("TAB: mapa", "TAB: map"), 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
 }
 
-void HUD::draw_boss_bar(Renderer& renderer, const ECSWorld& world, Entity boss) {
-    if (boss == ENTITY_NONE || !world.is_alive(boss) || !world.has(boss, Component::Health)) return;
-    const auto& h = world.healths[boss];
-    if (!h.is_alive()) return;
+void HUD::draw_boss_bar(Renderer& renderer, const HUDContext& ctx) {
+    if (ctx.boss_hp_max <= 0.0f || ctx.boss_hp <= 0.0f || ctx.boss_heads <= 0) return;
     f32 w = 160.0f, x = (Config::GAME_WIDTH - w) * 0.5f, y = Config::GAME_HEIGHT - 14.0f;
-    const char* name = world.has(boss, Component::EnemyAI) ? world.enemy_ais[boss].name : tr("JEFE", "BOSS");
+    const char* name = ctx.boss_name ? ctx.boss_name : tr("JEFE", "BOSS");
     // Name plate + framed red bar with a skull badge on the left
     f32 nw = renderer.measure_text(name, 0.8f);
     renderer.draw_rect({(Config::GAME_WIDTH - nw) * 0.5f - 6, y - 11.0f, nw + 12, 9.0f}, {0, 0, 0, 120});
     renderer.draw_text_centered(name, y - 11.0f, {255, 225, 185, 255}, 0.8f);
     // Un jefe intocable (La Muerte del cap. 8) tiene que decirlo, o parece un bug
-    Color bar_c = h.invulnerable ? Color{110, 100, 120, 255} : Color{215, 55, 45, 255};
-    draw_bar(renderer, {x, y, w, 6}, h.ratio(), bar_c, 1.25f);
-    draw_badge(renderer, world.tileset, TileSprite::Skull, x - 6.0f, y + 3.0f, 11.0f);
-    if (h.invulnerable)
+    Color bar_c = ctx.boss_invulnerable ? Color{110, 100, 120, 255} : Color{215, 55, 45, 255};
+    // Las reposiciones del corro pueden pasar del maximo fijado al nacer: se recorta
+    draw_bar(renderer, {x, y, w, 6}, std::min(1.0f, ctx.boss_hp / ctx.boss_hp_max), bar_c, 1.25f);
+    draw_badge(renderer, ctx.tileset, TileSprite::Skull, x - 6.0f, y + 3.0f, 11.0f);
+    if (ctx.boss_invulnerable)
         renderer.draw_text_centered(tr("INTOCABLE — acércate", "UNTOUCHABLE — get closer"), y - 19.0f, {215, 190, 230, 235}, 0.7f);
+    // Jefe en GRUPO: una marca por cabeza viva bajo la barra, para ver caer al corro
+    if (ctx.boss_group) {
+        const f32 mw = 6.0f, gap = 3.0f;
+        const f32 total = ctx.boss_heads * mw + (ctx.boss_heads - 1) * gap;
+        f32 mx = (Config::GAME_WIDTH - total) * 0.5f;
+        for (int i = 0; i < ctx.boss_heads; i++, mx += mw + gap) {
+            renderer.draw_rect({mx - 1.0f, y + 8.0f, mw + 2.0f, 4.0f}, {0, 0, 0, 140});
+            renderer.draw_rect({mx, y + 9.0f, mw, 2.0f}, {235, 120, 110, 255});
+        }
+    }
 }
 
 void HUD::draw_banner(Renderer& renderer, const HUDContext& ctx) {

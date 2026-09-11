@@ -69,7 +69,11 @@ wait 0.1
 # la rejilla paso de 3x3 a 4x3: caia en una Elite y el grito de jefe no sonaba nunca.
 chapter 1
 wait 2.5
+# zona continua: el grito del jefe suena al ENTRAR andando en la arena
 goto boss
+wait 0.5
+walk 1600 150
+wait 1.5
 wait 3.0
 shot A4_audio_jefe
 wait 0.1

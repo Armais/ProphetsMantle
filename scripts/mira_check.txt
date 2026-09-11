@@ -47,11 +47,12 @@ god
 faith 50
 
 # ---------------- A_OFF_dentro ----------------
+# Coordenadas de ZONA (2026-09-10): las de sala + el origen de la celda de inicio (1280,704)
 aimmode 0
 killall
 wait 0.5
-walk 536 200
-walk 536 312
+walk 1816 904
+walk 1816 1016
 hold up 0.06
 spawn 0 1
 feel marca
@@ -63,8 +64,8 @@ feel A_OFF_dentro
 aimmode 1
 killall
 wait 0.5
-walk 536 200
-walk 536 312
+walk 1816 904
+walk 1816 1016
 hold up 0.06
 spawn 0 1
 feel marca
@@ -76,8 +77,8 @@ feel B_ASIST_dentro
 aimmode 2
 killall
 wait 0.5
-walk 536 200
-walk 536 312
+walk 1816 904
+walk 1816 1016
 hold up 0.06
 spawn 0 1
 feel marca
@@ -89,8 +90,8 @@ feel C_ON_dentro
 aimmode 1
 killall
 wait 0.5
-walk 496 312
-walk 536 312
+walk 1776 1016
+walk 1816 1016
 hold right 0.06
 spawn 0 1
 feel marca
@@ -102,8 +103,8 @@ feel D_ASIST_fuera
 aimmode 2
 killall
 wait 0.5
-walk 496 312
-walk 536 312
+walk 1776 1016
+walk 1816 1016
 hold right 0.06
 spawn 0 1
 feel marca

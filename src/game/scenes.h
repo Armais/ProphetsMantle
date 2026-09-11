@@ -91,6 +91,11 @@ struct SceneDef {
     SceneFigure figures[3];
     int         first_line, count;   // cadena: `Sc::` first_line .. first_line + count - 1
     SceneThen   then;
+    // El jefe responde a lo JUGADO: si el jugador resolvio ese relato del pozo en esta
+    // partida (Engine::event_resolved_in_run), la PRIMERA caja es `alt_first_line` en vez
+    // de `first_line`; el resto de la cadena no cambia. -1 = sin variante.
+    int         alt_first_line = -1;
+    int         alt_event      = -1;   // id de `namespace Ev`
 };
 
 // =============================================================================
@@ -148,6 +153,9 @@ enum : int {
     J8_MUERTE, J8_ELISEO, J8_MUERTE_2, J8_ELISEO_2,
     J9_GUIEZI, J9_ELISEO, J9_GUIEZI_2, J9_ELISEO_2,
     J10_BENADAD, J10_ELISEO, J10_BENADAD_2, J10_ELISEO_2,
+    // --- Variantes: primera caja del jefe cuando el pozo se jugo (SceneDef::alt_*) ------
+    // Al FINAL a proposito: anadir aqui no mueve ningun id de arriba.
+    J1_CAPITAN_ALT, J3_PROFETAS_ALT,
     COUNT
 };
 }
@@ -646,11 +654,24 @@ inline EventDef get_scene_line(int line) {
     // es la que abre la pelea. Ninguna caja da por hecha una opcion del pozo (Dotan, el
     // baculo): sus lineas valen para las dos elecciones.
     // =========================================================================
-    // Cap. 1 - El Capitan de Acab (1 R 18:10). Cincuenta hombres: 2 R 1:9.
+    // Cap. 1 - El Capitan de Acab (1 R 18:10). Cincuenta hombres: 2 R 1:9. NO cita 18:10
+    // («Acab ha hecho jurar a los reinos»): esa frase la dice ya el rastreador del pozo. Y si
+    // el jugador resolvio al rastreador, la primera caja es la variante (J1_CAPITAN_ALT): el
+    // capitan llego siguiendo a su explorador — vale para las dos opciones del relato (el
+    // que bebio y se fue tambien pudo contar donde corre el agua).
     case Sc::J1_CAPITAN: return {
         tr("Capitán de Acab", "Ahab's Captain"),
-        {tr("Acab ha hecho jurar a todos los reinos que no te hallaron. Yo te he hallado: seguí el único arroyo que aún lleva agua.",
-            "Ahab hath made every kingdom swear they found thee not. I have found thee: I followed the one brook that yet hath water."),
+        {tr("Todo Israel te busca, tisbita, y te he hallado yo: seguí el único arroyo que aún lleva agua.",
+            "All Israel seeketh thee, Tishbite, and it is I that have found thee: I followed the one brook that yet hath water."),
+         tr("El rey te quiere vivo, profeta. Vivo, o en pedazos.",
+            "The king will have thee alive, prophet. Alive, or in pieces."),
+         nullptr},
+        {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
+    };
+    case Sc::J1_CAPITAN_ALT: return {
+        tr("Capitán de Acab", "Ahab's Captain"),
+        {tr("Mi explorador siguió el agua hasta este cañón, y yo he seguido a mi explorador. Aquí estás, tisbita.",
+            "My scout followed the water into this canyon, and I have followed my scout. Here thou art, Tishbite."),
          tr("El rey te quiere vivo, profeta. Vivo, o en pedazos.",
             "The king will have thee alive, prophet. Alive, or in pieces."),
          nullptr},
@@ -696,16 +717,30 @@ inline EventDef get_scene_line(int line) {
         {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
 
-    // Cap. 3 - Los 450 profetas de Baal (1 R 18:26-29, 36). Su grito ritual es la UNICA
-    // exclamacion del juego; la burla de Elias es 18:27 tal cual.
+    // Cap. 3 - Los 450 profetas de Baal (1 R 18:26-29, 36). El jefe es un GRUPO (sumo
+    // sacerdote + corro, enemies.cpp spawn_boss_group): abre el sumo sacerdote hablando
+    // por todos y responde el corro en plural. Su grito ritual es la UNICA exclamacion del
+    // juego; la burla de Elias es 18:27 tal cual.
     case Sc::J3_PROFETAS: return {
-        tr("Los profetas de Baal", "The prophets of Baal"),
+        tr("El sumo sacerdote de Baal", "The high priest of Baal"),
         {tr("¡Baal, respóndenos! ¡Respóndenos!",
             "O Baal, hear us! Hear us!"),
-         tr("Desde la mañana hasta el mediodía hemos clamado, y el altar sigue frío. Pero Baal oirá.",
-            "From morning even until noon we have cried, and the altar is yet cold. But Baal will hear."),
+         tr("Somos muchos, y desde la mañana clamamos. El altar sigue frío. Pero Baal oirá.",
+            "We are many, and since morning we have cried. The altar is yet cold. But Baal will hear."),
          nullptr},
         {"1 Reyes 18:26", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
+    };
+    // Variante si el jugador se encontro con Abdias camino del monte (Ev::ABDIAS): el sumo
+    // sacerdote sabe de los cien escondidos. Vale para las dos opciones (subirlos al Carmelo
+    // o dejarlos en las cuevas): el no sabe si han subido.
+    case Sc::J3_PROFETAS_ALT: return {
+        tr("El sumo sacerdote de Baal", "The high priest of Baal"),
+        {tr("¡Baal, respóndenos! ¡Respóndenos!",
+            "O Baal, hear us! Hear us!"),
+         tr("Abdías, el mayordomo, esconde profetas de Jehová en las cuevas de este monte. Cuando Baal hable, iremos también por ellos.",
+            "Obadiah the steward hideth prophets of the Lord in the caves of this mount. When Baal hath spoken, we go for them also."),
+         nullptr},
+        {"1 Reyes 18:4, 26", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
     };
     case Sc::J3_ELIAS_BURLA: return {
         tr("Elías", "Elijah"),
@@ -1087,9 +1122,11 @@ inline SceneDef get_scene_def(int id) {
         Sc::AP10_ELISEO_AVISO, 5, SceneThen::ChapterIntro
     };
     // Los jefes: la arena tal cual esta, el jefe de pie delante y el profeta donde entro.
-    case Scene::JEFE_1:  return {"Jefe 1",  "Dialogo con el jefe 1: el Capitan de Acab (1 Reyes 18:10)",       1,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J1_CAPITAN,       3, SceneThen::Play};
+    case Scene::JEFE_1:  return {"Jefe 1",  "Dialogo con el jefe 1: el Capitan de Acab (1 Reyes 18:10)",       1,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J1_CAPITAN,       3, SceneThen::Play,
+                                 Sc::J1_CAPITAN_ALT, Ev::RASTREADOR_DE_ACAB};
     case Scene::JEFE_2:  return {"Jefe 2",  "Dialogo con el jefe 2: el Sacerdote de Baal (1 Reyes 18:4)",      2,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J2_SACERDOTE,     3, SceneThen::Play};
-    case Scene::JEFE_3:  return {"Jefe 3",  "Dialogo con el jefe 3: los profetas de Baal (1 Reyes 18:26-29)",  3,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J3_PROFETAS,      4, SceneThen::Play};
+    case Scene::JEFE_3:  return {"Jefe 3",  "Dialogo con el jefe 3: los profetas de Baal (1 Reyes 18:26-29)",  3,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J3_PROFETAS,      4, SceneThen::Play,
+                                 Sc::J3_PROFETAS_ALT, Ev::ABDIAS};
     case Scene::JEFE_4:  return {"Jefe 4",  "Dialogo con el jefe 4: tu propia desesperacion (1 Reyes 19:4-10)", 4, StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J4_DESESPERACION, 4, SceneThen::Play};
     case Scene::JEFE_5:  return {"Jefe 5",  "Dialogo con el jefe 5: Acab y Jezabel (1 Reyes 21:20-23)",        5,  StageKind::Live, 0, 0, 3, Direction::Up,
                                  {{FK::Acab, 0, -2, 0, Direction::Down}, {FK::Jezabel, 0, 2, 0, Direction::Down}, none}, Sc::J5_ACAB, 4, SceneThen::Play};

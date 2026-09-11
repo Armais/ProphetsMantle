@@ -626,7 +626,9 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             for (u32 e = 0; e < world.entity_count; e++) {
                 if (!world.is_alive(e) || !is_hostile(world, e) || !world.has(e, Component::Health)) continue;
                 if (!world.healths[e].is_alive()) continue;
-                f32 dmg = world.enemy_ais[e].is_boss ? 120.0f * mult : 1000.0f;
+                // El corro del Carmelo aguanta como jefe: si no, un solo altar lo barre entero
+                const bool bossy = world.enemy_ais[e].is_boss || world.enemy_ais[e].boss_group;
+                f32 dmg = bossy ? 120.0f * mult : 1000.0f;
                 if (apply_damage(world, entity, e, dmg)) pending_kills.push_back(e);
             }
             // El altar consumido lo lame todo: fogonazo a pantalla completa y dos coronas

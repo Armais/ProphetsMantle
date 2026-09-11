@@ -96,8 +96,12 @@ chapter 3
 wait 2.5
 killall
 wait 1.5
-walk 160 40
-wait 2.5
+# Zona continua (2026-09-10): `goto boss` deja en el nudo bajo la arena; se entra ANDANDO.
+# El jefe del cap. 3 es desde hoy un GRUPO (sumo sacerdote + corro): la cifra cambia.
+goto boss
+wait 0.5
+walk 1600 150
+wait 2.0
 bot 20
 shot 93_feel_jefe
 wait 0.1

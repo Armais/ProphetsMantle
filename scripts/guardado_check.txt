@@ -1,7 +1,8 @@
 # Verificacion del GUARDADO: que subir de version no pierde nada.
 # Uso:  MANTLE.exe --script scripts/guardado_check.txt
 #
-# El fichero va por la v9 (estado de sala persistido: mapas fijos, 2026-08-27).
+# El fichero va por la v10 (zona continua, 2026-09-10: MISMA forma que la v9, el resumen de
+# salas se descarta al migrar porque cambio de significado).
 # Cada version anade su lector de compatibilidad, asi que aqui se comprueba la ULTIMA
 # migracion que haya y que la meta llega entera al otro lado.
 #
@@ -11,7 +12,7 @@
 #   Save file vN migrated to v8 (...)   <- SOLO si habia un fichero v6 en el disco.
 #                                          Para forzarlo: copiar un save.dat viejo a
 #                                          %APPDATA%\MantleGame\MANTLE\ antes de correrlo.
-#   SAVEDUMP v8 ...                     <- las tres lineas, tres veces (antes/durante/tras borrar)
+#   SAVEDUMP v10 ...                    <- las tres lineas, tres veces (antes/durante/tras borrar)
 #
 # Gates:
 #   1. Migrar NO pierde nada: ofrendas, mejoras, codice, unlocks, logros y bajas del
