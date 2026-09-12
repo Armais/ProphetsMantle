@@ -68,10 +68,15 @@ inline ChapterLore get_chapter_lore(int chapter) {
         case 2: return {
             {"1 Reyes 17:14", tr("La harina de la tinaja no escaseará, ni el aceite de la vasija disminuirá.", "The barrel of meal shall not waste, neither shall the cruse of oil fail.")},
             // 17:8-11 los acaba de jugar la apertura (la palabra, el agua, el bocado de pan).
-            // El punado de harina (17:12) es el pozo y no se adelanta; «Sarepta es de Baal» lo
-            // dicen ya el sacerdote de la apertura y el jefe. Aqui: la casa, y quien vigila.
-            {tr("La viuda vive junto a la puerta de la ciudad, con un hijo y sin marido que traiga grano.", "The widow dwelleth by the gate of the city, with a son, and no husband to bring in corn."),
-             tr("El sacerdote de la puerta no te ha quitado el ojo de encima.", "The priest at the gate hath not taken his eye off thee."),
+            // El punado de harina (17:12) es el pozo y no se adelanta. Estas dos lineas decian
+            // antes lo que el jugador ACABA de ver en pantalla —la viuda con su hijo (la figura
+            // y AP2_VIUDA_AGUA) y el sacerdote vigilando (AP2_SACERDOTE al pie de la letra)—,
+            // asi que la intro repetia el dialogo. Ahora dicen lo que ninguna caja toca: DONDE
+            // esta Sarepta y por que ahi. Sidon es la tierra de Etbaal, padre de Jezabel
+            // (1 R 16:31): Jehova esconde a Elias en la casa de sus enemigos, y el hambre que
+            // el anuncio en Samaria ya ha cruzado la frontera.
+            {tr("Sarepta es de Sidón, tierra de Etbaal, cuya hija se sienta en el trono de Samaria.", "Zarephath is of Sidon, the land of Ethbaal, whose daughter sitteth upon the throne of Samaria."),
+             tr("Jehová esconde a su profeta en casa de sus enemigos, y el hambre ha pasado la frontera.", "The Lord hideth his prophet in the house of his enemies, and the famine is passed over the border."),
              nullptr, nullptr},
             tr("Vuelve a la casa de la viuda. Que la tinaja no se acabe.", "Return to the widow's house. Let the barrel not fail."),
             tr("El niño ha vuelto a la vida. «Ahora conozco que tú eres varón de Dios».", "The child liveth again. «Now I know that thou art a man of God».")

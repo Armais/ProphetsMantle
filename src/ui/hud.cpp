@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <vector>
 
 // Layout (game units): icon badge on the left, glossy bar with a dark frame, value on the right
 static constexpr f32 BAR_X = 20.0f;
@@ -106,7 +107,7 @@ Rect choice_card_rect(int i, int count) {
 }
 
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,
-                       int count, int selected, u32 tileset) {
+                       int count, int selected, u32 tileset, bool touch) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
     renderer.draw_rect({0, 0, W, H}, {10, 8, 16, 175});
@@ -165,7 +166,12 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
             centred(dl[l], cx, ty + 2.0f + l * 6.5f, {180, 172, 160, 255}, 0.62f);
     }
 
-    renderer.draw_text_centered(tr("[A/D] elegir     [ENTER] tomar", "[A/D] choose     [ENTER] take"), H - 14.0f, {170, 160, 150, 220}, 0.7f);
+    // En tactil la carta se toma con DOS toques (el primero elige), igual que una opcion
+    // del encuentro: una carta tomada por error cuesta la partida.
+    renderer.draw_text_centered(touch ? tr("toca una carta; vuelve a tocarla para tomarla",
+                                           "tap a card; tap it again to take it")
+                                      : tr("[A/D] elegir     [ENTER] tomar", "[A/D] choose     [ENTER] take"),
+                                H - 14.0f, {170, 160, 150, 220}, 0.7f);
 }
 
 // =============================================================================
@@ -261,17 +267,48 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
                                     H - 6.0f, {160, 150, 140, 200}, 0.65f);
     } else {
         f32 blink = 0.55f + 0.45f * std::sin(time * 3.4f);
-        const char* prompt = view.touch ? tr("toca para seguir", "tap to continue")
-                           : view.more_lines ? tr("[ENTER] seguir", "[ENTER] continue")
-                                             : tr("[ENTER] continuar", "[ENTER] continue");
+        // Una escena guionizada SIEMPRE se podia saltar con ESC, pero el pie no lo decia:
+        // nadie lo sabia. En tactil el aviso no hace falta porque ahi esta el boton.
+        const char* prompt =
+              view.touch    ? tr("toca para seguir", "tap to continue")
+            : view.skippable ? (view.more_lines
+                                  ? tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip")
+                                  : tr("[ENTER] continuar    [ESC] saltar", "[ENTER] continue    [ESC] skip"))
+            : view.more_lines ? tr("[ENTER] seguir", "[ENTER] continue")
+                              : tr("[ENTER] continuar", "[ENTER] continue");
         renderer.draw_text_centered(prompt, H - 6.0f, {200, 185, 160, static_cast<u8>(210 * blink)}, 0.65f);
     }
+    if (view.touch && view.skippable) draw_skip_button(renderer, time);
     (void)tileset;
+}
+
+// =============================================================================
+// Boton de SALTAR (solo tactil)
+// =============================================================================
+// Arriba a la derecha, lejos del pie donde viven el aviso de "seguir" y las opciones: en
+// estas pantallas un toque en CUALQUIER otro sitio avanza, asi que el boton tiene que caer
+// donde nadie toca por costumbre. 52x14 unidades son ~9 mm en un telefono, que es el
+// minimo que se acierta sin mirar.
+Rect skip_button_rect() { return {262.0f, 4.0f, 52.0f, 14.0f}; }
+
+void draw_skip_button(Renderer& renderer, f32 time) {
+    const Rect r = skip_button_rect();
+    const f32 k = 0.72f + 0.28f * std::sin(time * 2.6f);   // respira: se ve que es un boton
+    const char* label = tr("SALTAR >>", "SKIP >>");
+    renderer.draw_panel({r.x, r.y + 1.4f, r.w, r.h}, {0, 0, 0, 120}, 4.0f);
+    renderer.draw_panel({r.x - 1.0f, r.y - 1.0f, r.w + 2.0f, r.h + 2.0f},
+                        {214, 176, 96, static_cast<u8>(110.0f + 90.0f * k)}, 4.8f);
+    renderer.draw_panel(r, {40, 33, 30, 238}, 4.0f);
+    const f32 sc = 0.62f;
+    const f32 lw = renderer.measure_text(label, sc);
+    renderer.draw_text(label, r.x + (r.w - lw) * 0.5f,
+                       r.y + (r.h - Renderer::TEXT_LINE_UNITS * sc) * 0.5f,
+                       {248, 228, 178, 255}, sc);
 }
 
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],
                       int count, int selected, u32 tileset, bool act_one,
-                      const char* held_relic) {
+                      const char* held_relic, bool touch) {
     ChoiceCard cards[3];
     char swap[3][40];
     for (int i = 0; i < count && i < 3; i++) {
@@ -290,11 +327,11 @@ void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* cons
         cards[i].accent = rarity_color(defs[i]->rarity);
         cards[i].icon   = category_icon(defs[i]->category);
     }
-    draw_choice_cards(renderer, title, cards, count, selected, tileset);
+    draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
 
 void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID* ids, int count,
-                         int selected, u32 tileset, const char* const* extras) {
+                         int selected, u32 tileset, const char* const* extras, bool touch) {
     static const Color TIER_COLORS[5] = {{200, 195, 185, 255}, {200, 195, 185, 255},
                                          {120, 210, 120, 255}, {110, 175, 245, 255},
                                          {245, 205, 90, 255}};
@@ -310,7 +347,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
         cards[i].accent = TIER_COLORS[d.tier < 0 ? 0 : (d.tier > 4 ? 4 : d.tier)];
         cards[i].icon   = miracle_icon(ids[i]);
     }
-    draw_choice_cards(renderer, title, cards, count, selected, tileset);
+    draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
 
 void HUD::render(Renderer& renderer, const Player& player,
@@ -818,55 +855,344 @@ static int tile_family(TileType t) {
     }
 }
 
-static Color fam_color(int fam) {
-    switch (fam) {
-        case FAM_PATH:       return {158, 133,  94, 255};
-        case FAM_WATER:      return { 74, 138, 172, 255};
-        case FAM_DEEP:       return { 40,  84, 124, 255};
-        case FAM_SOLID:      return { 64,  57,  60, 255};
-        case FAM_PIT:        return { 14,  10,  15, 255};
-        case FAM_DOOR:       return {235, 190,  90, 255};
-        case FAM_CHEST:      return {255, 210,  60, 255};
-        case FAM_ALTAR_GOD:  return {120, 200, 255, 255};
-        case FAM_ALTAR_BAAL: return {190,  90, 220, 255};
-        case FAM_EVENT:      return {255, 226, 150, 255};
-        case FAM_EXIT:       return {120, 255, 160, 255};
-        default:             return {110,  94,  70, 255};   // FAM_GROUND
+// =============================================================================
+// La textura del mapa: terreno PINTADO, no un mosaico de tiles
+// =============================================================================
+// La version anterior pintaba un rect por tramo de tiles del mismo color: 1,3 unidades por
+// tile, trece colores planos y la niebla recortada en rectangulos de celda. Eso es un
+// mosaico, y el usuario lo leyo -con razon- como pixel art, en un juego que dejo el pixel
+// art atras en 2026-08-25.
+//
+// Ahora el terreno se pinta en una TEXTURA y el filtrado lineal hace el resto. Las mascaras
+// de tile (solido / agua / camino / hueco) se suavizan a resolucion de tile y se muestrean
+// bilineal: una mascara binaria suavizada es un campo continuo, y umbralizar ese campo da
+// siluetas curvas en vez de escalones. Del gradiente del campo sale la luz (desde arriba a
+// la izquierda) y de su filo, el contorno de tinta. Eso es lo que convierte una rejilla en
+// un mapa dibujado.
+//
+// Terreno y NIEBLA van en dos texturas a proposito:
+//  - el terreno depende del capitulo y se genera UNA sola vez, en la carga;
+//  - la niebla cambia cada vez que se pisa una celda nueva, asi que es una textura de 4 px
+//    por celda estirada con filtrado lineal. Repintarla cuesta microsegundos y el degradado
+//    sale suave gratis. Con una sola textura habria que repintar medio megapixel al cruzar
+//    cada celda, y eso es un tiron en plena exploracion.
+static constexpr int MAP_PX = 5;   // pixeles de textura por tile de terreno
+
+static inline f32 map_smoothstep(f32 a, f32 b, f32 v) {
+    if (b <= a) return v >= b ? 1.0f : 0.0f;
+    f32 t = (v - a) / (b - a);
+    t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// Ruido de valor (rejilla + interpolacion suave). Es el grano de pergamino: sin el, la
+// tierra es un plano de color liso y vuelve a parecer una ficha de color.
+static inline f32 map_hash(int x, int y) {
+    u32 h = static_cast<u32>(x) * 374761393u + static_cast<u32>(y) * 668265263u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return static_cast<f32>((h ^ (h >> 16)) & 0xFFFFu) / 65535.0f;
+}
+static f32 map_noise(f32 x, f32 y, f32 cell) {
+    const f32 gx = x / cell, gy = y / cell;
+    const int x0 = static_cast<int>(std::floor(gx)), y0 = static_cast<int>(std::floor(gy));
+    f32 ax = gx - x0, ay = gy - y0;
+    ax = ax * ax * (3.0f - 2.0f * ax);
+    ay = ay * ay * (3.0f - 2.0f * ay);
+    const f32 a = map_hash(x0, y0),     b = map_hash(x0 + 1, y0);
+    const f32 c = map_hash(x0, y0 + 1), d = map_hash(x0 + 1, y0 + 1);
+    return (a * (1.0f - ax) + b * ax) * (1.0f - ay) + (c * (1.0f - ax) + d * ax) * ay;
+}
+
+// El TERRENO. Solo depende del capitulo y de sus dimensiones, asi que se genera una vez y
+// se reutiliza: romper una tinaja no repinta el mapa (un tile suelto no se ve a esta
+// escala) y a cambio no hay ni un tiron durante la partida.
+static u32 zone_terrain_texture(Renderer& renderer, const Room& z, int& out_w, int& out_h) {
+    static u64 cached_sig = 0;
+    static u32 cached_tex = TEXTURE_NONE;
+    static int cached_w = 0, cached_h = 0;
+
+    const int TW = z.tiles_w, TH = z.tiles_h;
+    if (TW <= 0 || TH <= 0) return TEXTURE_NONE;
+    const u64 sig = (static_cast<u64>(z.chapter) << 40) ^ (static_cast<u64>(TW) << 20) ^ static_cast<u64>(TH);
+    TextureEntry* live = renderer.get_texture(cached_tex);
+    if (sig == cached_sig && live && live->texture) {
+        out_w = cached_w; out_h = cached_h;
+        return cached_tex;
     }
+
+    // --- Mascaras a resolucion de tile, suavizadas ------------------------------
+    const size_t N = static_cast<size_t>(TW) * TH;
+    std::vector<f32> solid(N, 0.0f), water(N, 0.0f), deep(N, 0.0f), path(N, 0.0f), pit(N, 0.0f);
+    for (int ty = 0; ty < TH; ty++) {
+        for (int tx = 0; tx < TW; tx++) {
+            const size_t i = static_cast<size_t>(ty) * TW + tx;
+            switch (tile_family(z.tiles[ty][tx])) {
+                case FAM_SOLID: solid[i] = 1.0f; break;
+                case FAM_WATER: water[i] = 1.0f; break;
+                case FAM_DEEP:  deep[i]  = 1.0f; break;
+                case FAM_PATH:
+                case FAM_DOOR:  path[i]  = 1.0f; break;
+                case FAM_PIT:   pit[i]   = 1.0f; break;
+                default: break;
+            }
+        }
+    }
+    auto blur = [&](std::vector<f32>& f) {
+        std::vector<f32> t(f.size(), 0.0f);
+        for (int y = 0; y < TH; y++) {
+            for (int x = 0; x < TW; x++) {
+                f32 sum = 0.0f, wsum = 0.0f;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        const int nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= TW || ny >= TH) continue;
+                        const f32 w = (dx == 0 && dy == 0) ? 4.0f : ((dx == 0 || dy == 0) ? 2.0f : 1.0f);
+                        sum += f[static_cast<size_t>(ny) * TW + nx] * w;
+                        wsum += w;
+                    }
+                }
+                t[static_cast<size_t>(y) * TW + x] = sum / wsum;
+            }
+        }
+        f.swap(t);
+    };
+    blur(solid); blur(water); blur(deep); blur(path); blur(pit);
+
+    // El gradiente del campo solido, precalculado: es de donde sale el relieve, y sacarlo
+    // aqui ahorra cuatro muestreos bilineales POR PIXEL.
+    std::vector<f32> gx(N, 0.0f), gy(N, 0.0f);
+    for (int y = 0; y < TH; y++) {
+        for (int x = 0; x < TW; x++) {
+            const int xm = x > 0 ? x - 1 : x, xp = x < TW - 1 ? x + 1 : x;
+            const int ym = y > 0 ? y - 1 : y, yp = y < TH - 1 ? y + 1 : y;
+            gx[static_cast<size_t>(y) * TW + x] = solid[static_cast<size_t>(y) * TW + xp] - solid[static_cast<size_t>(y) * TW + xm];
+            gy[static_cast<size_t>(y) * TW + x] = solid[static_cast<size_t>(yp) * TW + x] - solid[static_cast<size_t>(ym) * TW + x];
+        }
+    }
+
+    auto samp = [&](const std::vector<f32>& f, f32 fx, f32 fy) -> f32 {
+        fx = std::min(std::max(fx - 0.5f, 0.0f), static_cast<f32>(TW) - 1.001f);
+        fy = std::min(std::max(fy - 0.5f, 0.0f), static_cast<f32>(TH) - 1.001f);
+        const int x0 = static_cast<int>(fx), y0 = static_cast<int>(fy);
+        const int x1 = std::min(x0 + 1, TW - 1), y1 = std::min(y0 + 1, TH - 1);
+        const f32 ax = fx - x0, ay = fy - y0;
+        const f32 a = f[static_cast<size_t>(y0) * TW + x0], b = f[static_cast<size_t>(y0) * TW + x1];
+        const f32 c = f[static_cast<size_t>(y1) * TW + x0], d = f[static_cast<size_t>(y1) * TW + x1];
+        return (a * (1.0f - ax) + b * ax) * (1.0f - ay) + (c * (1.0f - ax) + d * ax) * ay;
+    };
+
+    // --- El dibujo --------------------------------------------------------------
+    const int W = TW * MAP_PX, H = TH * MAP_PX;
+    std::vector<u8> px(static_cast<size_t>(W) * H * 4, 255);
+    for (int y = 0; y < H; y++) {
+        const f32 ty = (y + 0.5f) / MAP_PX;
+        for (int x = 0; x < W; x++) {
+            const f32 tx = (x + 0.5f) / MAP_PX;
+            const f32 sv = samp(solid, tx, ty), wv = samp(water, tx, ty), dv = samp(deep, tx, ty);
+            const f32 pv = samp(path, tx, ty),  iv = samp(pit, tx, ty);
+
+            // Tierra con grano de pergamino (dos octavas: mancha grande + veta fina)
+            const f32 grain = map_noise(static_cast<f32>(x), static_cast<f32>(y), 13.0f) * 0.64f
+                            + map_noise(static_cast<f32>(x), static_cast<f32>(y), 3.5f)  * 0.36f;
+            const f32 tone = 0.80f + 0.42f * grain;          // mas recorrido: el pardo plano apagaba el mapa
+            f32 R = 132.0f * tone, G = 113.0f * tone, B = 82.0f * tone;
+
+            // Camino: una vereda apenas mas clara, con el borde deshilachado por el propio
+            // grano. Va FLOJO a proposito. Los caminos unen centros de celda, asi que
+            // pintados con fuerza trazan una reticula rectangular sobre el mapa entero, y
+            // esa reticula es exactamente lo que el usuario seguia leyendo como "celdas"
+            // aunque el terreno ya estuviera pintado. Se ven, pero no mandan.
+            const f32 tp = map_smoothstep(0.26f, 0.70f, pv + (grain - 0.5f) * 0.30f);
+            R += (152.0f - R) * tp * 0.48f; G += (131.0f - G) * tp * 0.48f; B += (96.0f - B) * tp * 0.48f;
+
+            // Agua, con orilla clara justo en el filo
+            const f32 av = wv + dv;
+            if (av > 0.16f) {
+                const f32 md = dv / std::max(0.001f, av);
+                f32 wr = 78.0f + (42.0f - 78.0f) * md;
+                f32 wg = 142.0f + (88.0f - 142.0f) * md;
+                f32 wb = 176.0f + (128.0f - 176.0f) * md;
+                const f32 shore = std::max(0.0f, 1.0f - std::fabs(av - 0.33f) / 0.14f);
+                wr += 66.0f * shore; wg += 58.0f * shore; wb += 38.0f * shore;
+                const f32 tw = map_smoothstep(0.24f, 0.54f, av);
+                R += (wr - R) * tw; G += (wg - G) * tw; B += (wb - B) * tw;
+            }
+
+            // Hueco: negro, con el filo oscuro para que se lea como agujero
+            const f32 tpit = map_smoothstep(0.24f, 0.54f, iv);
+            R += (16.0f - R) * tpit; G += (12.0f - G) * tpit; B += (18.0f - B) * tpit;
+
+            // Solido (roca, arbol, muro) con relieve y contorno de tinta
+            if (sv > 0.12f) {
+                const f32 nx = samp(gx, tx, ty), ny = samp(gy, tx, ty);
+                f32 light = 1.0f - (nx + ny) * 1.35f;                 // luz desde arriba-izquierda
+                light = std::min(1.75f, std::max(0.5f, light));
+                const f32 ts = map_smoothstep(0.22f, 0.52f, sv);
+                R += (70.0f * light - R) * ts; G += (63.0f * light - G) * ts; B += (66.0f * light - B) * ts;
+                const f32 ink = std::max(0.0f, 1.0f - std::fabs(sv - 0.29f) / 0.115f);
+                const f32 k = 1.0f - 0.52f * ink;
+                R *= k; G *= k; B *= k;
+            }
+
+            u8* o = &px[(static_cast<size_t>(y) * W + x) * 4];
+            o[0] = static_cast<u8>(std::min(255.0f, std::max(0.0f, R)));
+            o[1] = static_cast<u8>(std::min(255.0f, std::max(0.0f, G)));
+            o[2] = static_cast<u8>(std::min(255.0f, std::max(0.0f, B)));
+            o[3] = 255;
+        }
+    }
+
+    cached_tex = renderer.create_texture_from_rgba("@zonemap", W, H, px.data());
+    cached_sig = sig;
+    cached_w = W; cached_h = H;
+    out_w = W; out_h = H;
+    return cached_tex;
 }
 
-// `vis`: 2 = celda pisada, 1 = entrevista (adyacente, Ojos Abiertos, jefe, inicio)
-static Color map_color(int fam, int vis) {
-    Color c = fam_color(fam);
-    if (vis >= 2) return c;
-    return {static_cast<u8>(c.r * 0.42f), static_cast<u8>(c.g * 0.42f),
-            static_cast<u8>(c.b * 0.42f), 255};
+// La NIEBLA: 8 px por celda, estirados con filtrado lineal sobre el mapa entero. Es lo que
+// sustituye a los rectangulos negros de celda, que eran la mitad de lo "cuadriculado".
+//
+// Y no es solo un velo: es una capa de LUZ Y SOMBRA. Hasta el 2026-09-12 "descubierto"
+// significaba nada mas "sin velo", y sobre un terreno pardo apagado una celda pisada se
+// seguia viendo oscura; ahora lo pisado lleva un realce calido y lo desconocido el velo de
+// siempre. Sigue siendo UNA textura y UN draw.
+static u32 zone_fog_texture(Renderer& renderer, const FloorMap& fm, const int* vis, int& out_w, int& out_h) {
+    static u64 cached_sig = 0;
+    static u32 cached_tex = TEXTURE_NONE;
+
+    const int CW = std::max(1, fm.grid_w), CH = std::max(1, fm.grid_h);
+    const int SUB = 8;   // 4 se quedaba corto: dos desenfoques se comian casi una celda entera
+    const int W = CW * SUB, H = CH * SUB;
+    out_w = W; out_h = H;
+
+    u64 sig = static_cast<u64>(CW) * 31u + static_cast<u64>(CH);
+    for (int i = 0; i < fm.room_count && i < Config::ZONE_CELLS_MAX; i++)
+        sig = sig * 3u + static_cast<u64>(vis[i] & 3);
+    TextureEntry* live = renderer.get_texture(cached_tex);
+    if (sig == cached_sig && live && live->texture) return cached_tex;
+
+    // Oscuridad por celda: 0 = pisada (transparente), 1 = nunca vista (opaca)
+    std::vector<f32> dark(static_cast<size_t>(CW) * CH, 1.0f);
+    for (int i = 0; i < fm.room_count && i < Config::ZONE_CELLS_MAX; i++) {
+        const auto& node = fm.rooms[i];
+        if (node.interior_of >= 0) continue;                 // los interiores no van en la rejilla
+        if (node.grid_x < 0 || node.grid_y < 0 || node.grid_x >= CW || node.grid_y >= CH) continue;
+        // 0 = pisada (realce), 0,78 = entrevista, 1 = nunca vista (velo al maximo). El
+        // 0,78 esta calibrado sobre el reparto de abajo: deja la entrevista claramente
+        // entre las dos, no a medio camino del realce.
+        dark[static_cast<size_t>(node.grid_y) * CW + node.grid_x] = (vis[i] >= 2) ? 0.0f : (vis[i] == 1 ? 0.78f : 1.0f);
+    }
+
+    std::vector<f32> f(static_cast<size_t>(W) * H, 1.0f);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            f[static_cast<size_t>(y) * W + x] = dark[static_cast<size_t>(y / SUB) * CW + (x / SUB)];
+    // Se DILATA lo claro antes de tocar el filo: un minimo sobre vecindad de 2 px mueve la
+    // frontera ~2 px FUERA de la celda descubierta. Sin esto, el ruido del filo y los dos
+    // desenfoques de abajo mordian HACIA DENTRO (con SUB = 8, casi medio lado de celda) y
+    // una celda visitada se veia oscura salvo en el centro: era la mitad del bug de "lo
+    // descubierto se ve oscuro". Ahora se comen ese margen y el filo cae en el borde real.
+    {
+        constexpr int R = 2;
+        std::vector<f32> g(f.size(), 1.0f);
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                f32 m = f[static_cast<size_t>(y) * W + x];
+                for (int dy = -R; dy <= R; dy++) {
+                    for (int dx = -R; dx <= R; dx++) {
+                        const int nx = std::min(W - 1, std::max(0, x + dx));
+                        const int ny = std::min(H - 1, std::max(0, y + dy));
+                        m = std::min(m, f[static_cast<size_t>(ny) * W + nx]);
+                    }
+                }
+                g[static_cast<size_t>(y) * W + x] = m;
+            }
+        }
+        f.swap(g);
+    }
+
+    // Filo ORGANICO. La niebla se decide POR CELDA, asi que su frontera nace siendo una
+    // recta vertical u horizontal: una rejilla de rectas, que es justo lo que se queria
+    // quitar del mapa. Se mueve el filo con ruido, y SOLO el filo -donde la vecindad no es
+    // uniforme-, porque perturbar el interior mancharia de claros la zona a oscuras.
+    {
+        std::vector<f32> g = f;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                const f32 c = f[static_cast<size_t>(y) * W + x];
+                bool edge = false;
+                for (int dy = -1; dy <= 1 && !edge; dy++) {
+                    for (int dx = -1; dx <= 1 && !edge; dx++) {
+                        const int nx = std::min(W - 1, std::max(0, x + dx));
+                        const int ny = std::min(H - 1, std::max(0, y + dy));
+                        if (std::fabs(f[static_cast<size_t>(ny) * W + nx] - c) > 0.01f) edge = true;
+                    }
+                }
+                if (!edge) continue;
+                // Ruido SOLO HACIA FUERA (max(0, n)): simetrico, sobre una celda pisada
+                // (c = 0) levantaba hasta 0,42 de oscuridad DENTRO de lo descubierto. El
+                // filo sigue siendo organico, pero ya no puede invadir lo pisado.
+                const f32 n = map_noise(static_cast<f32>(x), static_cast<f32>(y), 2.6f) - 0.5f;
+                g[static_cast<size_t>(y) * W + x] = std::min(1.0f, std::max(0.0f, c + std::max(0.0f, n) * 0.85f));
+            }
+        }
+        f.swap(g);
+    }
+
+    for (int pass = 0; pass < 2; pass++) {                    // dos pasadas: el filo deja de ser una recta
+        std::vector<f32> t(f.size(), 0.0f);
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                f32 sum = 0.0f, wsum = 0.0f;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        const int nx = std::min(W - 1, std::max(0, x + dx));
+                        const int ny = std::min(H - 1, std::max(0, y + dy));
+                        const f32 w = (dx == 0 && dy == 0) ? 3.0f : 1.0f;
+                        sum += f[static_cast<size_t>(ny) * W + nx] * w;
+                        wsum += w;
+                    }
+                }
+                t[static_cast<size_t>(y) * W + x] = sum / wsum;
+            }
+        }
+        f.swap(t);
+    }
+
+    // Luz y sombra en la MISMA textura: por debajo de 0,5 un realce calido (lo pisado sale
+    // claro, que es lo que se pedia), por encima el velo oscuro de siempre.
+    std::vector<u8> px(static_cast<size_t>(W) * H * 4, 0);
+    for (size_t i = 0; i < f.size(); i++) {
+        const f32 v = std::min(1.0f, std::max(0.0f, f[i]));
+        if (v < 0.5f) {
+            const f32 k = (0.5f - v) * 2.0f;      // 1 en el centro de lo pisado
+            px[i * 4 + 0] = 250; px[i * 4 + 1] = 238; px[i * 4 + 2] = 210;
+            px[i * 4 + 3] = static_cast<u8>(k * 46.0f);
+        } else {
+            const f32 k = (v - 0.5f) * 2.0f;      // 1 en lo nunca visto
+            px[i * 4 + 0] = 20; px[i * 4 + 1] = 17; px[i * 4 + 2] = 24;
+            px[i * 4 + 3] = static_cast<u8>(k * 252.0f);
+        }
+    }
+    cached_tex = renderer.create_texture_from_rgba("@zonefog", W, H, px.data());
+    cached_sig = sig;
+    return cached_tex;
 }
 
-static const Color MAP_FOG = {24, 20, 26, 235};
+// Chincheta: disco con borde oscuro. Se lee a cualquier tamano y no compite con el terreno.
+static void map_pin(Renderer& renderer, f32 cx, f32 cy, f32 r, Color fill) {
+    renderer.draw_panel({cx - r - 0.9f, cy - r - 0.9f, (r + 0.9f) * 2.0f, (r + 0.9f) * 2.0f}, {14, 11, 16, 220}, r + 0.9f);
+    renderer.draw_panel({cx - r, cy - r, r * 2.0f, r * 2.0f}, fill, r);
+}
 
-static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room& z) {
+// Rellena `vis`: 2 = celda pisada, 1 = entrevista (adyacente, Ojos Abiertos, jefe, inicio).
+// Lo usan el mapa grande y el minimapa pequeno, que desde ahora pintan lo MISMO.
+static void zone_visibility(const HUDContext& ctx, const Room& z, int* vis, int& cur_out) {
     const FloorMap* fm = ctx.floor_map;
-    const f32 GW = static_cast<f32>(Config::GAME_WIDTH), GH = static_cast<f32>(Config::GAME_HEIGHT);
-    renderer.draw_rect({0, 0, GW, GH}, {0, 0, 0, 185});
-    renderer.draw_text_centered(tr("MAPA DEL CAPÍTULO", "CHAPTER MAP"), 3.0f, {240, 220, 160, 255});
-
-    // Area util: debajo del titulo y el objetivo, encima de las dos lineas de pie. La
-    // escala sale de DIVIDIR, no de una constante: el capitulo 5 y el 10 tienen una fila
-    // de celdas mas (4x4) y con un valor fijo se saldrian por abajo.
-    // AREA_Y = 31 y no 24: justo debajo del panel de vitales, que llega a 30,75. Con 24 el
-    // mapa le cortaba por la mitad el nombre del nivel de fe y parecia un fallo de dibujo.
-    const f32 AREA_X = 13.0f, AREA_Y = 31.0f, AREA_W = 294.0f, AREA_H = 118.0f;
-    const f32 s = std::min(AREA_W / std::max(1, z.tiles_w), AREA_H / std::max(1, z.tiles_h));
-    const f32 mw = z.tiles_w * s, mh = z.tiles_h * s;
-    const f32 mx = AREA_X + (AREA_W - mw) * 0.5f, my = AREA_Y + (AREA_H - mh) * 0.5f;
-    renderer.draw_rect({mx - 1.0f, my - 1.0f, mw + 2.0f, mh + 2.0f}, {50, 42, 34, 245});
-
-    // --- Que celda se conoce ---------------------------------------------------
     int cur = fm->current_room;
     if (cur >= 0 && cur < fm->room_count && fm->rooms[cur].interior_of >= 0)
         cur = fm->rooms[cur].interior_of;
-    int vis[Config::ZONE_CELLS_MAX] = {};
+    cur_out = cur;
     for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
         const auto& node = fm->rooms[i];
         if (node.interior_of >= 0) continue;          // los interiores no estan en la rejilla
@@ -876,28 +1202,73 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         if (z.cells[i].visited || i == cur)       vis[i] = 2;
         else if (adjacent || node.type == RoomType::Boss || node.type == RoomType::Start) vis[i] = 1;
     }
+}
 
-    // --- El terreno, por tramos horizontales -----------------------------------
-    // 160x88 son 14.080 tiles: uno a uno serian 14.080 rects por frame con el mapa abierto.
-    // Cosiendo los tramos del mismo color la cifra baja a unos pocos cientos, y el dibujo es
-    // el mismo porque el terreno viene en manchas, no en damero.
-    auto key_at = [&](int tx, int ty) -> int {
-        const int c = z.cell_of_tile(tx, ty);
-        const int v = (c >= 0 && c < z.cell_count) ? vis[c] : 0;
-        if (v == 0) return -1;                                  // niebla
-        return tile_family(z.tiles[ty][tx]) * 4 + v;
-    };
-    for (int ty = 0; ty < z.tiles_h; ty++) {
-        int x0 = 0;
-        while (x0 < z.tiles_w) {
-            const int k = key_at(x0, ty);
-            int x1 = x0 + 1;
-            while (x1 < z.tiles_w && key_at(x1, ty) == k) x1++;
-            const Color c = (k < 0) ? MAP_FOG : map_color(k / 4, k % 4);
-            renderer.draw_rect({mx + x0 * s, my + ty * s, (x1 - x0) * s, s}, c);
-            x0 = x1;
-        }
+// El terreno con su marco, dentro del rect dado. Lo comparten el mapa grande y el minimapa:
+// tener DOS dibujos distintos del mismo sitio era justo lo que hacia que el pequeno siguiera
+// siendo una rejilla de cajas cuando el grande ya no lo era.
+static void draw_zone_canvas(Renderer& renderer, const Room& z, const FloorMap& fm,
+                             const int* vis, Rect area, f32& out_mx, f32& out_my, f32& out_s) {
+    const f32 s = std::min(area.w / std::max(1, z.tiles_w), area.h / std::max(1, z.tiles_h));
+    const f32 mw = z.tiles_w * s, mh = z.tiles_h * s;
+    const f32 mx = area.x + (area.w - mw) * 0.5f, my = area.y + (area.h - mh) * 0.5f;
+    out_mx = mx; out_my = my; out_s = s;
+
+    // Sombra arrojada, marco de pergamino, filete oscuro y el mapa dentro. El marco usa el
+    // mismo panel de 9 trozos que los botones: una sola pieza para todo el juego.
+    const f32 pad = std::max(1.6f, s * 1.2f);
+    renderer.draw_panel({mx - pad, my - pad + 1.5f, mw + pad * 2.0f, mh + pad * 2.0f}, {0, 0, 0, 120}, pad + 2.0f);
+    renderer.draw_panel({mx - pad, my - pad, mw + pad * 2.0f, mh + pad * 2.0f}, {96, 78, 56, 255}, pad + 2.0f);
+    renderer.draw_panel({mx - 1.2f, my - 1.2f, mw + 2.4f, mh + 2.4f}, {34, 28, 24, 255}, 2.4f);
+
+    int tw = 0, th = 0;
+    const u32 terrain = zone_terrain_texture(renderer, z, tw, th);
+    if (terrain != TEXTURE_NONE)
+        renderer.draw_sprite_rect(terrain, {0, 0, static_cast<f32>(tw), static_cast<f32>(th)}, {mx, my, mw, mh});
+    else
+        renderer.draw_rect({mx, my, mw, mh}, {112, 96, 72, 255});
+
+    int fw = 0, fh = 0;
+    const u32 fog = zone_fog_texture(renderer, fm, vis, fw, fh);
+    if (fog != TEXTURE_NONE)
+        renderer.draw_sprite_rect(fog, {0, 0, static_cast<f32>(fw), static_cast<f32>(fh)}, {mx, my, mw, mh});
+}
+
+// Donde esta el profeta, en unidades de pantalla. Dentro de un interior no hay punto que
+// valga: se marca el centro de su celda de FUERA, que es donde esta en la rejilla.
+static bool prophet_marker(const HUDContext& ctx, const Room& z, int cur, f32 mx, f32 my, f32 s,
+                           f32& px, f32& py) {
+    const FloorMap* fm = ctx.floor_map;
+    if (ctx.player_in_zone) {
+        px = mx + (ctx.player_pos.x / Config::TILE_SIZE) * s;
+        py = my + (ctx.player_pos.y / Config::TILE_SIZE) * s;
+        return true;
     }
+    if (cur >= 0 && cur < fm->room_count) {
+        px = mx + (fm->rooms[cur].grid_x + 0.5f) * z.cell_w * s;
+        py = my + (fm->rooms[cur].grid_y + 0.5f) * z.cell_h * s;
+        return true;
+    }
+    return false;
+}
+
+static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room& z) {
+    const FloorMap* fm = ctx.floor_map;
+    const f32 GW = static_cast<f32>(Config::GAME_WIDTH), GH = static_cast<f32>(Config::GAME_HEIGHT);
+    renderer.draw_rect({0, 0, GW, GH}, {6, 5, 9, 205});
+    renderer.draw_text_centered(tr("MAPA DEL CAPÍTULO", "CHAPTER MAP"), 3.0f, {240, 220, 160, 255});
+
+    // Area util: debajo del titulo y el objetivo, encima de las dos lineas de pie. La
+    // escala sale de DIVIDIR, no de una constante: el capitulo 5 y el 10 tienen una fila
+    // de celdas mas (4x4) y con un valor fijo se saldrian por abajo.
+    // AREA_Y = 31 y no 24: justo debajo del panel de vitales, que llega a 30,75. Con 24 el
+    // mapa le cortaba por la mitad el nombre del nivel de fe y parecia un fallo de dibujo.
+    int vis[Config::ZONE_CELLS_MAX] = {};
+    int cur = -1;
+    zone_visibility(ctx, z, vis, cur);
+
+    f32 mx = 0.0f, my = 0.0f, s = 0.0f;
+    draw_zone_canvas(renderer, z, *fm, vis, {13.0f, 31.0f, 294.0f, 118.0f}, mx, my, s);
 
     // --- Rotulos de celda: es lo que contesta "¿que hago aqui?" ----------------
     for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
@@ -905,23 +1276,36 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         const auto& node = fm->rooms[i];
         if (node.interior_of >= 0) continue;
         const char* label = nullptr;
+        Color plate = {28, 23, 20, 228};
         switch (node.type) {
             case RoomType::Start:    label = tr("INICIO", "START"); break;
-            case RoomType::Boss:     label = tr("JEFE", "BOSS"); break;
-            case RoomType::Treasure: label = tr("TESORO", "TREASURE"); break;
-            case RoomType::Altar:    label = "ALTAR"; break;
-            case RoomType::Elite:    label = tr("ELITE", "ELITE"); break;
-            case RoomType::Event:    label = tr("RELATO", "STORY"); break;
+            case RoomType::Boss:     label = tr("JEFE", "BOSS");       plate = {122, 36, 30, 238}; break;
+            case RoomType::Treasure: label = tr("TESORO", "TREASURE"); plate = {104, 76, 18, 235}; break;
+            case RoomType::Altar:    label = "ALTAR";                  plate = { 26, 60, 96, 235}; break;
+            case RoomType::Elite:    label = tr("ELITE", "ELITE");     plate = { 68, 34, 96, 235}; break;
+            case RoomType::Event:    label = tr("RELATO", "STORY");    plate = { 86, 70, 26, 235}; break;
             default: break;
         }
         if (!label) continue;
-        const f32 cx = mx + (node.grid_x + 0.5f) * z.cell_w * s;
-        const f32 cy = my + (node.grid_y + 0.5f) * z.cell_h * s;
+        // El rotulo va por ENCIMA del centro de la celda, no en el: en la celda de inicio la
+        // placa caia justo sobre el punto del profeta y se tapaban entre ellos. El del JEFE
+        // es la excepcion y cuelga BAJO su chincheta: su celda no tiene el centro donde
+        // esta la arena, y con el desplazamiento de las demas la placa acababa detras del
+        // pin (se vio en el capitulo 5, que tiene una fila de celdas mas y por tanto celdas
+        // mas bajas).
+        f32 cx = mx + (node.grid_x + 0.5f) * z.cell_w * s;
+        f32 cy = my + (node.grid_y + 0.5f) * z.cell_h * s - 6.5f;
+        if (node.type == RoomType::Boss && z.has_arena) {
+            int bx, by;
+            z.arena_anchor(bx, by);
+            cx = mx + (bx + 0.5f) * s;
+            cy = my + (by + 0.5f) * s + 8.0f;
+        }
         const f32 lw = renderer.measure_text(label, 0.6f);
-        renderer.draw_rect({cx - lw * 0.5f - 2.0f, cy - 4.0f, lw + 4.0f, 8.0f}, {10, 8, 12, 170});
+        renderer.draw_panel({cx - lw * 0.5f - 3.0f, cy - 4.2f, lw + 6.0f, 8.4f}, plate, 3.2f);
         renderer.draw_text(label, cx - lw * 0.5f, cy - 3.0f,
-                           node.type == RoomType::Boss ? Color{255, 150, 140, 250}
-                                                       : Color{228, 216, 194, 235}, 0.6f);
+                           node.type == RoomType::Boss ? Color{255, 226, 220, 255}
+                                                       : Color{240, 230, 210, 245}, 0.6f);
     }
 
     // --- El jefe y la salida ----------------------------------------------------
@@ -929,33 +1313,25 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         int ax, ay;
         z.arena_anchor(ax, ay);
         const f32 bx = mx + (ax + 0.5f) * s, by = my + (ay + 0.5f) * s;
-        renderer.draw_rect({bx - 3.5f, by - 0.75f, 7.0f, 1.5f}, {255, 90, 80, 255});
-        renderer.draw_rect({bx - 0.75f, by - 3.5f, 1.5f, 7.0f}, {255, 90, 80, 255});
+        map_pin(renderer, bx, by, 3.2f, {214, 62, 52, 255});
+        renderer.draw_rect({bx - 2.0f, by - 0.5f, 4.0f, 1.0f}, {255, 232, 226, 255});
+        renderer.draw_rect({bx - 0.5f, by - 2.0f, 1.0f, 4.0f}, {255, 232, 226, 255});
     }
     if (z.exit_open) {
         const f32 ex = mx + (z.exit_tx + 0.5f) * s, ey = my + (z.exit_ty + 0.5f) * s;
-        renderer.draw_rect({ex - 2.5f, ey - 2.5f, 5.0f, 5.0f}, {120, 255, 160, 255});
+        map_pin(renderer, ex, ey, 2.6f + 0.6f * std::sin(ctx.time * 4.0f), {104, 226, 142, 255});
     }
 
     // --- Donde esta el profeta --------------------------------------------------
-    // El punto va en su tile de verdad. Dentro de un interior no hay punto que valga: se
-    // marca el centro de su celda de FUERA, que es donde el jugador esta en la rejilla.
     f32 px = 0.0f, py = 0.0f;
-    bool have = false;
-    if (ctx.player_in_zone) {
-        px = mx + (ctx.player_pos.x / Config::TILE_SIZE) * s;
-        py = my + (ctx.player_pos.y / Config::TILE_SIZE) * s;
-        have = true;
-    } else if (cur >= 0 && cur < fm->room_count) {
-        px = mx + (fm->rooms[cur].grid_x + 0.5f) * z.cell_w * s;
-        py = my + (fm->rooms[cur].grid_y + 0.5f) * z.cell_h * s;
-        have = true;
-    }
-    if (have) {
-        const bool blink = (static_cast<int>(ctx.time * 3.0f) % 2) == 0;
-        renderer.draw_rect({px - 2.5f, py - 2.5f, 5.0f, 5.0f}, {20, 16, 22, 235});
-        renderer.draw_rect({px - 1.5f, py - 1.5f, 3.0f, 3.0f},
-                           blink ? Color{255, 248, 220, 255} : Color{245, 205, 90, 255});
+    if (prophet_marker(ctx, z, cur, mx, my, s, px, py)) {
+        // Halo que late: en un mapa grande, el punto propio es lo primero que se busca.
+        const f32 halo = 4.6f + 1.5f * std::sin(ctx.time * 3.4f);
+        if (renderer.shadow_tex != TEXTURE_NONE)
+            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32},
+                                      {px - halo, py - halo, halo * 2.0f, halo * 2.0f},
+                                      {255, 236, 170, 120});
+        map_pin(renderer, px, py, 2.4f, {255, 246, 214, 255});
     }
 
     // EL OBJETIVO DEL CAPITULO (`ChapterLore::objective`) va aqui abajo y no bajo el titulo:
@@ -965,8 +1341,8 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         const char* obj = get_chapter_lore(ctx.room->chapter).objective;
         if (obj && obj[0]) renderer.draw_text_centered(obj, 152.0f, {248, 216, 130, 255}, 0.85f);
     }
-    renderer.draw_text_centered(tr("Llega al JEFE (la cruz roja) y derrótalo para abrir la salida",
-                                   "Reach the BOSS (red cross) and beat it to open the exit"),
+    renderer.draw_text_centered(tr("Llega al JEFE (la chincheta roja) y derrótalo para abrir la salida",
+                                   "Reach the BOSS (red pin) and beat it to open the exit"),
                                 162.0f, {200, 200, 200, 255}, 0.75f);
     renderer.draw_text_centered(ctx.input && ctx.input->touch_ui
                                 ? tr("Toca el mapa para volver", "Tap the map to go back")
@@ -974,15 +1350,50 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
                                 170.0f, {160, 160, 160, 255}, 0.75f);
 }
 
+// El minimapa pequeno: el MISMO terreno que el mapa grande, en pequeno. Antes era una
+// rejilla de cajas con borde -una caja por celda- y eso es lo que el usuario seguia leyendo
+// como "cuadriculado" aunque el grande ya pintara terreno. Su rect exterior no se mueve ni
+// una unidad a proposito: lo comparte `Input::touch_minimap` (`HUD::minimap_rect`), asi que
+// dibujo y hit-test siguen saliendo de la MISMA formula.
+static void draw_zone_minimap(Renderer& renderer, const HUDContext& ctx, const Room& z) {
+    const FloorMap* fm = ctx.floor_map;
+    const Rect frame = HUD::minimap_rect(*fm);
+    if (frame.w <= 0.0f) return;
+
+    int vis[Config::ZONE_CELLS_MAX] = {};
+    int cur = -1;
+    zone_visibility(ctx, z, vis, cur);
+
+    f32 mx = 0.0f, my = 0.0f, s = 0.0f;
+    draw_zone_canvas(renderer, z, *fm, vis,
+                     {frame.x + 2.2f, frame.y + 2.2f, frame.w - 4.4f, frame.h - 4.4f}, mx, my, s);
+
+    if (z.has_arena) {
+        int ax, ay;
+        z.arena_anchor(ax, ay);
+        map_pin(renderer, mx + (ax + 0.5f) * s, my + (ay + 0.5f) * s, 1.5f, {214, 62, 52, 255});
+    }
+    if (z.exit_open)
+        map_pin(renderer, mx + (z.exit_tx + 0.5f) * s, my + (z.exit_ty + 0.5f) * s, 1.4f, {104, 226, 142, 255});
+
+    f32 px = 0.0f, py = 0.0f;
+    if (prophet_marker(ctx, z, cur, mx, my, s, px, py))
+        map_pin(renderer, px, py, 1.3f, {255, 246, 214, 255});
+}
+
 void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     const FloorMap* fm = ctx.floor_map;
     if (!fm || fm->room_count <= 0) return;
 
-    // El mapa GRANDE pinta el terreno de la zona. La rejilla de celdas de abajo se queda
-    // para el minimapa pequeno (a 10x7 unidades por celda el terreno no dice nada) y como
-    // respaldo si no hay zona construida.
+    // Los DOS mapas pintan el terreno de la zona. La rejilla de celdas de abajo se queda
+    // solo como respaldo para cuando no hay zona construida (un interior suelto): si hay
+    // zona, ni el grande ni el pequeno vuelven a dibujar una caja por sala.
     const Room* zone = ctx.zone;
-    if (big && zone && zone->cell_count > 1) { draw_zone_map(renderer, ctx, *zone); return; }
+    if (zone && zone->cell_count > 1) {
+        if (big) draw_zone_map(renderer, ctx, *zone);
+        else     draw_zone_minimap(renderer, ctx, *zone);
+        return;
+    }
 
     f32 cw = big ? 34.0f : 9.0f;
     f32 ch = big ? 18.0f : 6.0f;

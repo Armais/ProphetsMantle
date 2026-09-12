@@ -136,3 +136,49 @@ Guion: **`scripts/asccine_check.txt`**. Gates: `Cinematica del Ascenso (asccine,
 x2 (ES y EN), cero `falta la capa`, cero `TEXT TRUNCATED`, `Unloaded texture` tras salir,
 `suprimida (autoplay)` en el flujo real y `le seguiste 3 de 3 veces, doble porcion=si`
 con el LOADOUT de siempre (la herencia no se ha movido).
+
+## Saltar con el dedo, y el paseo de la apertura (2026-09-12)
+
+**`CinematicSystem::touch_ui` y `StorySystem::touch_ui`** los escribe `Engine::update` antes de
+renderizar (mismo patron que `MenuSystem::touch_hints`). Con ellos:
+
+- el aviso del pie deja de anunciar teclas en un telefono (`[ENTER] seguir    [ESC] saltar`
+  pasa a `toca para seguir`; la carta de historia, a `toca para seguir` / `toca para
+  continuar`). **En PC la cadena no se toca en ningun caso.**
+- las dos pantallas pintan el **boton de SALTAR** de `ui/hud.h`, que emite `Action::Cancel` —
+  exactamente lo que ya cerraba una cinematica (`cinematic.cpp`) o una secuencia
+  (`story.cpp`). Se salta **tramo a tramo**: la apertura lleva a la intro, y la intro se salta
+  con otro toque.
+
+**`SceneDef::walk_after` / `walk_from_dx` / `walk_from_dy`** (`game/scenes.h`) parten una
+cadena de escena en dos mitades con un **paseo cinematico** en la juntura: tras la parada
+`walk_after` el motor lleva al profeta andando hasta su sitio y solo entonces abre la caja
+siguiente. Con `-1` (las otras 19 escenas) no cambia ni una letra.
+
+- Reusa la maquinaria de la entrada del jefe: se **empuja con velocidad**, no se desliza la
+  posicion, para que `system_movement` le ponga el rumbo y `system_animation` la fila de andar;
+  `world.update(dt)` corre; la camara lo sigue (sin adelanto: aqui lo que hay que mirar es a
+  el llegando) y al final **se asienta** el recorte, porque en `Dialogue` nadie la actualiza.
+  Tope duro `Config::Feel::SCENE_WALK_MAX` (4,5 s; el del jefe, 2,4, cortaba este tramo).
+- El **destino es el `player_dx/dy` de siempre**, igual que en la entrada del jefe: si fuera
+  otro, la caja siguiente teletransportaria al profeta y el corte volveria dos segundos mas
+  tarde. `start_scene` apunta el destino y coloca al profeta en el origen; `scene_walked` evita
+  que el paseo se repita cuando `scene_next` vuelve a pasar por la misma parada.
+- **Se abre el pasillo**: el profeta arranca fuera del claro de 15x8 del escenario exterior, asi
+  que `start_scene` allana tambien la franja entre origen y destino. Sin eso llega atascado en
+  un matorral o metido en una charca.
+- Mientras dura no se pinta la caja (solo el mundo y el boton de SALTAR), y al llegar **se le
+  devuelve el `player_facing` de la escena**: `system_animation` lo habia dejado con el rumbo
+  del ultimo paso y la caja siguiente es la del encuentro.
+
+Hoy solo lo pide **`Scene::APERTURA_2`** (`walk_after = 0`, origen 9 tiles al oeste y 2 al sur).
+Plantar a Elias, la viuda y el sacerdote juntos desde la primera caja hacia que el encuentro
+pareciera un spawn; ahora la primera caja es Dios (la palabra de Jehova, 17:8-9), Elias camina,
+y las cuatro siguientes son el encuentro. **Dos cosas se decidieron mirando la captura**: el
+origen NO es al sur —ahi la camara topa con el borde de la sala y la caja de dialogo tapaba al
+profeta entero, el mismo choque que la arena del jefe— y el sacerdote bajo de `dx 5` a `dx 4`,
+porque al final del paseo la camara lo dejaba justo detras del boton de SALTAR.
+
+Guiones: **`scripts/escenas_check.txt`** (`escena 1` / `escena 1 1` ensenan el paseo; el log
+dice `Apertura 2: paseo tras la parada 1/5` y `paseo de escena terminado`) y
+**`scripts/intros_check.txt`**.

@@ -79,7 +79,8 @@ Reglas de interacción, decididas por el usuario:
 | El Santuario | tocar una mejora la compra; arrastrar recorre |
 | El Códice | tocar pestaña = cambiar; tocar fila = **seleccionar** (no cierra); "< Volver" al pie |
 | Cartas (3 de 1) y encuentros | **dos toques**: el primero elige, el segundo decide |
-| Historia, prólogo, Controles, Victoria | tocar en cualquier sitio = continuar |
+| Historia, prólogo, intro de capítulo | tocar en cualquier sitio = continuar; el botón **SALTAR** de arriba a la derecha salta el tramo |
+| Controles, Victoria | tocar en cualquier sitio = continuar |
 
 Los rects salen **siempre de la misma fórmula que pinta** (`MenuSystem::mark_row`,
 `CodexScreen::tab_rects/row_rects`, `HUD::minimap_rect`, `choice_card_rect`,
@@ -172,3 +173,34 @@ lo que no se pinta).
 - El rect del minimapa pequeno (`HUD::minimap_rect`, que `Input::touch_minimap` comparte para
   que tocarlo abra el mapa grande) **no ha cambiado** pese a que el minimapa se redibujo: las
   celdas se ensancharon hasta llenarlo en vez de mover el marco. Ese contrato sigue intacto.
+
+### Pulido tras la segunda prueba del APK (2026-09-12)
+
+**En un teléfono no había forma de saltarse nada.** El tap se traducía SIEMPRE a `Confirm`
+(prólogo, intros de capítulo, cartas de historia, apertura guionizada): la única salida era el
+botón atrás de Android, que en un teléfono por gestos no existe, y el botón `II` está apagado
+fuera de `Playing`. Ahora hay un **botón de SALTAR** (`skip_button_rect` / `draw_skip_button`,
+en `ui/hud.cpp`) que emite `Action::Cancel` — la acción con la que cada sistema ya sabía
+saltarse entero, así que no hay camino nuevo que mantener.
+
+- **No se mueve entre pantallas**: `{262, 4, 52, 14}` siempre, como las posiciones fijas de la
+  fila de acción. Y el rect sale de la misma fórmula que lo pinta, el contrato de esta capa.
+- **Se salta TRAMO A TRAMO** (decisión del usuario): saltar la apertura del capítulo lleva a
+  su intro, y esa se salta con otro toque. No hay botón que se lleve la cadena entera.
+- **Un toque en cualquier OTRO sitio sigue avanzando**, que es lo que hacía antes. El hit-test
+  es el mismo en los tres sitios (`tap_skip_or_advance` en `engine.cpp` para `Intro` y
+  `Story`; dentro de `update_dialogue` para la escena, donde se atiende ANTES que nada para
+  que valga también durante el paseo).
+- **`Input::peek_tap`**: como `take_tap` pero sin consumir. Lo necesita quien tiene que mirar
+  si el toque cae en un botón concreto antes de decidir quién se queda el tap.
+- El botón **solo se dibuja en táctil**, y en la caja de diálogo solo si la escena se puede
+  saltar de verdad (`DialogueView::skippable`): un encuentro del pozo no se salta, y un botón
+  que no hace nada miente. En PC nada cambia salvo que el pie de una escena guionizada ya
+  DICE que se puede saltar (`[ENTER] seguir    [ESC] saltar`): se podía desde siempre y
+  nadie lo sabía.
+
+**Quedaban cuatro leyendas de teclado en táctil** pese a la regla de arriba: el prólogo y las
+intros (`cinematic.cpp`), las cartas de historia (`story.cpp`), las cartas de elección
+(`hud.cpp`) y — ya resueltas en la pasada anterior — el Códice y el Santuario. `CinematicSystem`
+y `StorySystem` reciben un `bool touch_ui` que el Engine escribe antes de renderizar, mismo
+patrón que `MenuSystem::touch_hints`.

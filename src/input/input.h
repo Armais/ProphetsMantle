@@ -228,6 +228,15 @@ struct Input {
     void set_touch_enabled(bool consumable, int miracle_slots, bool weapon, bool pray, bool pause);
 
     // Consume el tap pendiente (coordenadas de juego). Devuelve false si no hay ninguno.
+    // Igual que take_tap pero SIN consumirlo: lo necesita quien tiene que mirar si el
+    // toque cae en un boton concreto antes de decidir quien se lo queda (el boton de
+    // SALTAR en una escena guionizada, que se atiende antes que el resto de la pantalla).
+    bool peek_tap(Vec2& out) const {
+        if (!tap_pending) return false;
+        out = tap_pos;
+        return true;
+    }
+
     bool take_tap(Vec2& out) {
         if (!tap_pending) return false;
         tap_pending = false;

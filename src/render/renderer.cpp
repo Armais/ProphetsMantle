@@ -25,6 +25,7 @@ bool Renderer::init(SDL_Renderer* renderer, SDL_Texture* render_target) {
     // Procedural helper textures (soft shadow blob, screen vignette)
     shadow_tex   = create_radial_texture("@shadow",   64, 32, 1.0f, 0.0f, 1.6f);
     vignette_tex = create_radial_texture("@vignette", 160, 90, 0.0f, 1.0f, 2.5f);
+    panel_tex    = create_panel_texture("@panel", PANEL_TEX_SIZE, static_cast<int>(PANEL_TEX_SIZE * PANEL_CORNER_FRAC));
 
     // UI font (falls back to the debug bitmap font if missing)
     has_font = load_font("fonts/LilitaOne-Regular.ttf");
@@ -194,6 +195,99 @@ u32 Renderer::create_radial_texture(const char* name, int w, int h, f32 inner_a,
     textures.push_back(entry);
     texture_map[name] = id;
     return id;
+}
+
+// Textura desde pixeles ya calculados en CPU. Reutiliza el id si el nombre ya existe:
+// ver el comentario de la declaracion (el mapa se regenera muchas veces por partida).
+u32 Renderer::create_texture_from_rgba(const char* name, int w, int h, const u8* rgba, bool smooth) {
+    if (!name || w <= 0 || h <= 0 || !rgba) return TEXTURE_NONE;
+    SDL_Surface* surf = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_RGBA32);
+    if (!surf) {
+        SDL_Log("create_texture_from_rgba '%s' failed: %s", name, SDL_GetError());
+        return TEXTURE_NONE;
+    }
+    u8* dst = static_cast<u8*>(surf->pixels);
+    for (int y = 0; y < h; y++) std::memcpy(dst + y * surf->pitch, rgba + static_cast<size_t>(y) * w * 4, static_cast<size_t>(w) * 4);
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(sdl, surf);
+    SDL_DestroySurface(surf);
+    if (!tex) {
+        SDL_Log("create_texture_from_rgba '%s' failed: %s", name, SDL_GetError());
+        return TEXTURE_NONE;
+    }
+    SDL_SetTextureScaleMode(tex, smooth ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+
+    auto it = texture_map.find(name);
+    if (it != texture_map.end() && it->second < textures.size()) {
+        TextureEntry& e = textures[it->second];
+        if (e.texture) SDL_DestroyTexture(e.texture);
+        e.texture = tex; e.width = w; e.height = h;
+        return it->second;
+    }
+    TextureEntry entry;
+    entry.texture = tex; entry.width = w; entry.height = h;
+    u32 id = static_cast<u32>(textures.size());
+    textures.push_back(entry);
+    texture_map[name] = id;
+    return id;
+}
+
+// Rectangulo redondeado BLANCO con bisel, pensado para servirse en 9 trozos.
+//
+// El bisel va SOLO en las bandas de arriba y de abajo (las de alto `radius`), nunca en la
+// del medio: esa es la que se estira verticalmente, y un degradado ahi se deformaria con
+// cada alto de boton distinto. Asi el boton siempre tiene tapa clara, cuerpo plano y base
+// oscura, mida lo que mida. El contorno oscuro de 2,5 px es lo que hace que un boton se
+// distinga del fondo sin depender del color de relleno.
+u32 Renderer::create_panel_texture(const char* name, int size, int radius) {
+    std::vector<u8> px(static_cast<size_t>(size) * size * 4, 0);
+    const f32 half = size * 0.5f;
+    const f32 r    = static_cast<f32>(radius);
+    const f32 flat = half - r;                       // medio lado recto
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            // Distancia con signo a un rectangulo redondeado (negativa dentro)
+            const f32 qx = std::fabs(x + 0.5f - half) - flat;
+            const f32 qy = std::fabs(y + 0.5f - half) - flat;
+            const f32 mx = std::max(qx, 0.0f), my = std::max(qy, 0.0f);
+            const f32 d  = std::sqrt(mx * mx + my * my) + std::min(std::max(qx, qy), 0.0f) - r;
+
+            const f32 a    = std::min(1.0f, std::max(0.0f, 0.5f - d));   // antialias de 1 px
+            const f32 into = -d;                                         // cuanto se entra desde el borde
+
+            f32 lum;
+            if (y < radius)                 lum = 255.0f - 43.0f * (y / r);                       // tapa clara
+            else if (y >= size - radius)    lum = 212.0f - 64.0f * ((y - (size - radius)) / r);   // base oscura
+            else                            lum = 212.0f;                                         // cuerpo plano
+
+            if (into < 2.5f) lum *= 0.42f + 0.58f * std::max(0.0f, into) / 2.5f;   // contorno
+            else if (y < radius && into < 4.5f) lum = std::min(255.0f, lum + 26.0f);  // brillo bajo la tapa
+
+            u8* o = &px[(static_cast<size_t>(y) * size + x) * 4];
+            o[0] = o[1] = o[2] = static_cast<u8>(std::min(255.0f, std::max(0.0f, lum)));
+            o[3] = static_cast<u8>(a * 255.0f);
+        }
+    }
+    return create_texture_from_rgba(name, size, size, px.data());
+}
+
+void Renderer::draw_panel(Rect dst, Color tint, f32 corner) {
+    if (panel_tex == TEXTURE_NONE || dst.w <= 0.0f || dst.h <= 0.0f) {
+        draw_rect(dst, tint);
+        return;
+    }
+    const f32 ts = static_cast<f32>(PANEL_TEX_SIZE);
+    const f32 tc = ts * PANEL_CORNER_FRAC;
+    const f32 c  = std::min(corner, std::min(dst.w, dst.h) * 0.5f);
+    // La textura es cuadrada, asi que las tres franjas valen para los dos ejes.
+    const f32 so[3] = {0.0f, tc, ts - tc}, ss[3] = {tc, ts - 2.0f * tc, tc};
+    const f32 dx[3] = {dst.x, dst.x + c, dst.x + dst.w - c}, dw[3] = {c, dst.w - 2.0f * c, c};
+    const f32 dy[3] = {dst.y, dst.y + c, dst.y + dst.h - c}, dh[3] = {c, dst.h - 2.0f * c, c};
+    for (int j = 0; j < 3; j++)
+        for (int i = 0; i < 3; i++)
+            if (dw[i] > 0.01f && dh[j] > 0.01f)
+                draw_sprite_rect(panel_tex, {so[i], so[j], ss[i], ss[j]},
+                                 {dx[i], dy[j], dw[i], dh[j]}, tint);
 }
 
 void Renderer::shutdown() {

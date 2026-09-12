@@ -4,6 +4,7 @@
 
 #include "ui/menus.h"
 #include "core/config.h"
+#include <algorithm>
 #include "core/i18n.h"
 #include "game/items.h"
 
@@ -11,6 +12,71 @@ void MenuSystem::mark_row(int i, f32 y, f32 step) {
     if (i < 0 || i >= MAX_ROW_RECTS) return;
     row_rects[i] = {40.0f, y - 2.0f, static_cast<f32>(Config::GAME_WIDTH) - 80.0f, step};
     if (i + 1 > row_rect_count) row_rect_count = i + 1;
+}
+
+void MenuSystem::mark_row_rect(int i, Rect r) {
+    if (i < 0 || i >= MAX_ROW_RECTS) return;
+    row_rects[i] = r;
+    if (i + 1 > row_rect_count) row_rect_count = i + 1;
+}
+
+// =============================================================================
+// Botones de menu
+// =============================================================================
+// Hasta aqui una opcion era una linea de texto centrada con "> " delante. En un telefono
+// eso no es un boton: no se ve donde empieza y acaba la zona que responde al dedo, ni cual
+// esta elegida de un vistazo. Ahora cada opcion es una pieza con forma, contorno y bisel
+// (`Renderer::draw_panel`, el mismo panel de 9 trozos que enmarca el mapa), y la elegida
+// cambia de COLOR, de TAMANO y lleva un aro de foco: a plena luz en un movil un cambio de
+// tono no se ve, y el cambio de tamano si.
+static constexpr f32 BTN_GROW = 9.0f;     // lo que crece la elegida por cada lado
+static constexpr f32 BTN_HIT_PAD = BTN_GROW * 2.0f + 14.0f;   // margen de la zona del dedo
+
+// El ancho ya no es una constante: se MIDE. 148 fijas sobre 320 de pantalla eran una pila
+// de pildoras de media pantalla cualquiera que fuese el texto ("Reanudar" y "Reintentar
+// capitulo" salian igual de anchas), y la fila de la partida caducada —"Partida abandonada
+// +12345"— se desbordaba. Ancho COMUN a la pantalla: el del texto MAS LARGO + relleno; uno
+// por fila haria una escalera. Mismo precedente que las pestanas del Codice y la placa de
+// rotulo del mapa, que tambien se miden con `measure_text`.
+static f32 menu_button_width(const Renderer& r, const char* const* labels, int n, f32 text_scale) {
+    f32 w = 0.0f;
+    for (int i = 0; i < n; i++) w = std::max(w, r.measure_text(labels[i], text_scale));
+    return std::min(static_cast<f32>(Config::GAME_WIDTH) - 24.0f,
+                    std::max(72.0f, w + 22.0f));   // relleno 11 por lado; suelo y techo
+}
+
+static Rect menu_button_rect(int i, int selected, f32 top, f32 pitch, f32 h, f32 btn_w) {
+    const f32 w = btn_w + ((i == selected) ? BTN_GROW * 2.0f : 0.0f);
+    return {(static_cast<f32>(Config::GAME_WIDTH) - w) * 0.5f, top + i * pitch, w, h};
+}
+
+// La zona tactil NO depende de cual este elegida: si creciera con la seleccion, el sitio
+// donde hay que tocar se moveria bajo el dedo.
+static Rect menu_hit_rect(int i, f32 top, f32 pitch, f32 h, f32 btn_w) {
+    const f32 hw = btn_w + BTN_HIT_PAD;
+    return {(static_cast<f32>(Config::GAME_WIDTH) - hw) * 0.5f,
+            top + i * pitch - (pitch - h) * 0.5f, hw, pitch};
+}
+
+static void draw_menu_button(Renderer& renderer, Rect r, const char* label,
+                             bool selected, bool disabled, f32 text_scale = 0.95f) {
+    // El texto de la opcion elegida va CLARO, no oscuro. `draw_text` siempre dibuja contorno
+    // oscuro alrededor del glifo, asi que letra oscura sobre dorado sale como un borron: se
+    // vio en la primera captura y "Nueva Partida" no se leia. Lo que distingue a la elegida
+    // es el relleno dorado, el tamano y el aro, que se ven incluso a plena luz en un movil.
+    Color fill = {52, 45, 41, 240};
+    Color text = {216, 202, 182, 255};
+    if (selected) { fill = {188, 132,  38, 255}; text = {255, 249, 234, 255}; }
+    if (disabled) { fill = { 34,  30,  28, 210}; text = { 98,  90,  84, 255}; }
+
+    renderer.draw_panel({r.x, r.y + 1.7f, r.w, r.h}, {0, 0, 0, 110}, 4.2f);     // sombra
+    if (selected)                                                               // aro de foco
+        renderer.draw_panel({r.x - 1.7f, r.y - 1.7f, r.w + 3.4f, r.h + 3.4f}, {255, 214, 120, 205}, 5.6f);
+    renderer.draw_panel(r, fill, 4.2f);
+
+    const f32 lw = renderer.measure_text(label, text_scale);
+    renderer.draw_text(label, r.x + (r.w - lw) * 0.5f,
+                       r.y + (r.h - Renderer::TEXT_LINE_UNITS * text_scale) * 0.5f, text, text_scale);
 }
 
 void MenuSystem::update(Input& input) {
@@ -96,7 +162,7 @@ void MenuSystem::render_title(Renderer& renderer) {
 
     // Subtitle
     renderer.draw_text_centered(tr("El Manto del Profeta", "The Prophet's Mantle"), 56, {180, 160, 120, 200});
-    renderer.draw_text_centered(tr("Desafía reyes. Destruye altares. Hereda el manto.", "Defy kings. Tear down altars. Inherit the mantle."), 70, {120, 105, 80, 200}, 0.75f);
+    renderer.draw_text_centered(tr("Desafía reyes. Destruye altares. Hereda el manto.", "Defy kings. Tear down altars. Inherit the mantle."), 67, {120, 105, 80, 200}, 0.75f);
 
     // Menu options. Con 7 filas hay que apretar el interlineado: a 11 unidades la ultima
     // se comia la linea de ofrendas.
@@ -104,28 +170,26 @@ void MenuSystem::render_title(Renderer& renderer) {
     const char* options[] = {tr("Nueva Partida", "New Game"), tr("Continuar", "Continue"), tr("El Santuario", "The Sanctuary"), tr("El Códice", "The Codex"),
                              tr("Prólogo", "Prologue"), tr("Opciones", "Options"), tr("Controles", "Controls")};
 
+    // Una partida caducada ya no se continua: lo unico que queda de ella son ofrendas. La
+    // recompensa va EN el boton: entre las 7 filas, las ofrendas y la ayuda de teclas no
+    // queda hueco para una linea suelta en 180 unidades de alto. Se compone ANTES de medir,
+    // porque "Partida abandonada  +12345" es con mucho la fila mas larga y medir sin ella
+    // dejaria justo ese boton desbordado (que es lo que pasaba con el ancho fijo).
+    char expired[64];
+    if (has_continue && continue_expired) {
+        snprintf(expired, sizeof(expired), tr("Partida abandonada  +%d", "Abandoned run  +%d"), abandoned_offerings);
+        options[1] = expired;
+    }
+
+    // Siete botones entre el lema (y=70) y la linea de ofrendas (y=160): con 10,9 de paso y
+    // 9,5 de alto, el ultimo cierra en 152,9 y no pisa nada.
+    const f32 BTN_TOP = 78.0f, BTN_PITCH = 10.9f, BTN_H = 9.5f;
+    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.9f);
     for (int i = 0; i < option_count; i++) {
-        Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 130, 120, 255};
-
-        // Gray out "Continuar" if no save exists
-        if (i == 1 && !has_continue) {
-            c = {70, 65, 60, 150};
-        }
-
-        const char* prefix = (i == selected_option) ? "> " : "  ";
-
-        char buf[64];
-        // Una partida caducada ya no se continua: lo unico que queda de ella son ofrendas.
-        // La recompensa va EN la fila: entre las 7 filas, las ofrendas y la ayuda de teclas
-        // no queda hueco para una linea suelta en 180 unidades de alto.
-        if (i == 1 && has_continue && continue_expired) {
-            snprintf(buf, sizeof(buf), tr("%sPartida abandonada  +%d", "%sAbandoned run  +%d"), prefix, abandoned_offerings);
-            if (i != selected_option) c = {150, 118, 100, 235};
-        } else {
-            snprintf(buf, sizeof(buf), "%s%s", prefix, options[i]);
-        }
-        renderer.draw_text_centered(buf, 87.0f + i * 10.2f, c, 0.95f);
-        mark_row(i, 87.0f + i * 10.2f, 10.2f);
+        const bool disabled = (i == 1 && !has_continue);
+        draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
+                         options[i], i == selected_option, disabled, 0.9f);
+        mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
     }
 
 
@@ -151,12 +215,12 @@ void MenuSystem::render_pause(Renderer& renderer) {
     option_count = 4;
     const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"), tr("Salir", "Quit")};
 
+    const f32 BTN_TOP = 78.0f, BTN_PITCH = 15.0f, BTN_H = 12.0f;
+    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.95f);
     for (int i = 0; i < option_count; i++) {
-        Color c = (i == selected_option) ? Color::elias_gold() : Color{180, 180, 180, 255};
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%s%s", (i == selected_option) ? "> " : "  ", options[i]);
-        renderer.draw_text_centered(buf, 80.0f + i * 14.0f, c);
-        mark_row(i, 80.0f + i * 14.0f, 14.0f);
+        draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
+                         options[i], i == selected_option, false);
+        mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
     }
     if (touch_hints)
         renderer.draw_text_centered(tr("Toca una opción", "Tap an option"), 150, {100, 90, 80, 180}, 0.8f);
@@ -176,12 +240,12 @@ void MenuSystem::render_game_over(Renderer& renderer) {
     // Menu de verdad: morir y volver al menu por error costaba la partida entera
     option_count = 2;
     const char* options[] = {tr("Reintentar capítulo", "Retry chapter"), tr("Volver al menú", "Back to menu")};
+    const f32 BTN_TOP = 116.0f, BTN_PITCH = 15.0f, BTN_H = 12.0f;
+    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.95f);
     for (int i = 0; i < option_count; i++) {
-        Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 122, 112, 255};
-        char line[64];
-        snprintf(line, sizeof(line), "%s%s", (i == selected_option) ? "> " : "  ", options[i]);
-        renderer.draw_text_centered(line, 118.0f + i * 14.0f, c);
-        mark_row(i, 118.0f + i * 14.0f, 14.0f);
+        draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
+                         options[i], i == selected_option, false);
+        mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
     }
 
     renderer.draw_text_centered(tr("Tu partida sigue guardada al principio del capítulo", "Your run is still saved at the chapter start"),
@@ -238,7 +302,9 @@ void MenuSystem::render_settings(Renderer& renderer) {
     // A 15 unidades de paso, 8 filas desde y=52 acaban en 157 y dejan la ayuda en 166.
     for (int i = 0; i < option_count; i++) {
         const int row = settings_rows[i];
-        Color c = (i == selected_option) ? Color::elias_gold() : Color{140, 130, 120, 255};
+        // Misma razon que en draw_menu_button: el contorno oscuro del glifo obliga a poner
+        // texto CLARO sobre la placa dorada de la fila elegida.
+        Color c = (i == selected_option) ? Color{255, 249, 234, 255} : Color{206, 194, 176, 255};
         f32 y = 52.0f + i * 15.0f;
         const char* prefix = (i == selected_option) ? "> " : "  ";
         const char* label =
@@ -289,8 +355,15 @@ void MenuSystem::render_settings(Renderer& renderer) {
         } else {
             snprintf(buf, sizeof(buf), "%s%s", prefix, label);
         }
+        // En Opciones la fila no es un boton (se ajusta tocando su mitad izquierda o
+        // derecha), pero sin una pieza detras tampoco se ve cual esta elegida ni hasta
+        // donde llega la zona que responde al dedo.
+        const Rect plate = {26.0f, y - 3.2f, static_cast<f32>(Config::GAME_WIDTH) - 52.0f, 14.0f};
+        renderer.draw_panel({plate.x, plate.y + 1.4f, plate.w, plate.h}, {0, 0, 0, 95}, 3.8f);
+        renderer.draw_panel(plate, (i == selected_option) ? Color{188, 132, 38, 255}
+                                                         : Color{46, 40, 37, 224}, 3.8f);
         renderer.draw_text_centered(buf, y, c);
-        mark_row(i, y, 15.0f);
+        mark_row_rect(i, plate);
     }
 
     renderer.draw_text_centered(touch_hints ? tr("Toca izquierda/derecha de la fila para ajustar",

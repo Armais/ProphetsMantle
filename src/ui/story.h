@@ -52,6 +52,9 @@ struct StorySystem {
     f32  clock      = 0.0f;      // Reloj propio: el mundo esta congelado durante la historia
     bool active     = false;
     f32  auto_timer = 0.0f;     // > 0 (autoplay): pasa de pagina solo
+    // Lo escribe el Engine antes de renderizar (igual que CinematicSystem::touch_ui): en
+    // tactil el pie habla de dedos y se pinta el boton de SALTAR.
+    bool touch_ui   = false;
     StoryThen then  = StoryThen::Play;
 
     // Cache de la pagina actual (se rellena en layout)

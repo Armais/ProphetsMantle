@@ -388,6 +388,16 @@ void Engine::handle_events() {
     input.mouse_game = renderer.window_to_game(input.mouse_pos);
 }
 
+// Un toque en una pantalla de escena (prologo, intro de capitulo, carta de historia):
+// sobre el boton de SALTAR emite Cancel —cada sistema ya sabe saltarse entero con el—, en
+// cualquier otro sitio avanza. Una sola formula para las tres pantallas que lo llevan.
+static void tap_skip_or_advance(Input& input) {
+    Vec2 tp;
+    if (!input.take_tap(tp)) return;
+    input.pulse(input.touch_ui && skip_button_rect().contains(tp) ? Action::Cancel
+                                                                 : Action::Confirm);
+}
+
 // =============================================================================
 // Update (called at fixed timestep)
 // =============================================================================
@@ -399,6 +409,10 @@ void Engine::update(f32 dt) {
     // se atiende ningun control tactil: un stick que no responde es peor que ninguno.
     input.touch_gameplay = (state.scene == GameScene::Playing && boss_approach_t <= 0.0f);
     menus.touch_hints = input.touch_ui;   // las lineas de ayuda hablan de teclas o de dedos
+    // Lo mismo para las dos pantallas de texto, que ademas pintan el boton de SALTAR:
+    // sin esto anunciaban [ENTER] y [ESC] en un telefono.
+    cinematic.touch_ui = input.touch_ui;
+    story.touch_ui     = input.touch_ui;
     if (input.touch_ui) {
         if (input.touch_gameplay) {
             // Botones contextuales. Las condiciones son las MISMAS que usa el gameplay:
@@ -436,7 +450,7 @@ void Engine::update(f32 dt) {
 
     switch (state.scene) {
         case GameScene::Intro:
-            { Vec2 tp; if (input.take_tap(tp)) input.pulse(Action::Confirm); }
+            tap_skip_or_advance(input);
             if (cinematic.update(input, dt, renderer)) {
                 if (cine_then == CineThen::Play) {
                     // Intro de capitulo: se ve una vez por partida, sus capas no vuelven
@@ -900,8 +914,8 @@ void Engine::update(f32 dt) {
 
         case GameScene::Story:
             // En tactil, un toque en cualquier sitio pasa de linea (story.update ya lee
-            // Confirm). Saltar la escena entera sigue siendo Cancel = el boton atras.
-            { Vec2 tp; if (input.take_tap(tp)) input.pulse(Action::Confirm); }
+            // Confirm); sobre el boton de SALTAR se salta la secuencia entera.
+            tap_skip_or_advance(input);
             if (story.update(input, dt, renderer)) finish_story();
             break;
 
@@ -1081,7 +1095,7 @@ void Engine::render() {
                     extras[i] = choice.extras[i].c_str();
                 }
                 draw_miracle_choice(renderer, choice.title, ids, choice.count, choice.selected,
-                                    tileset_texture, extras);
+                                    tileset_texture, extras, input.touch_ui);
             } else {
                 const ItemDef* defs[3] = {nullptr, nullptr, nullptr};
                 for (int i = 0; i < choice.count; i++) defs[i] = item_registry.get(choice.ids[i]);
@@ -1089,7 +1103,7 @@ void Engine::render() {
                                     ? item_registry.get(player.relic_slot) : nullptr;
                 draw_item_choice(renderer, choice.title, defs, choice.count, choice.selected,
                                  tileset_texture, state.current_act == Act::Act_I,
-                                 held ? held->name : nullptr);
+                                 held ? held->name : nullptr, input.touch_ui);
             }
             break;
         }
@@ -1102,11 +1116,20 @@ void Engine::render() {
             if (dialogue.dark) renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH),
                                                    static_cast<f32>(Config::GAME_HEIGHT)}, {8, 6, 12, 255});
             else               render_world();
+            // Durante el paseo de una apertura se ve el mundo y NO la caja: lo que hay que
+            // mirar es al profeta llegando. El boton de SALTAR si sigue en pantalla.
+            if (scene_walk_t > 0.0f) {
+                if (input.touch_ui) draw_skip_button(renderer, world.time);
+                break;
+            }
             EventDef def = get_dialogue_def(dialogue.event_id);
             DialogueView v;
             v.speaker  = def.speaker;
             v.portrait = def.portrait;
             v.touch    = input.touch_ui;
+            // Solo una escena guionizada se salta entera: el pie lo dice en PC ([ESC]) y en
+            // tactil aparece el boton. Un encuentro del pozo no se salta.
+            v.skippable = scene_step >= 0;
             if (dialogue.resolved) {
                 v.body = dialogue.result;
             } else if (dialogue.choosing) {
@@ -1498,6 +1521,17 @@ void Engine::start_scene(int id) {
                     if (x > 0 && y > 0 && x < room.tiles_w - 1 && y < room.tiles_h - 1)
                         room.tiles[y][x] = TileType::Floor;
         }
+        // Con paseo (SceneDef::walk_after) el profeta ARRANCA fuera del claro: se abre
+        // tambien su pasillo, o llegaria atascado en un matorral o metido en una charca.
+        if (def.walk_after >= 0) {
+            const int sx = ax + def.player_dx + def.walk_from_dx;
+            const int sy = ay + def.player_dy + def.walk_from_dy;
+            const int ex = ax + def.player_dx, ey = ay + def.player_dy;
+            for (int y = std::min(sy, ey) - 2; y <= std::max(sy, ey) + 2; y++)
+                for (int x = std::min(sx, ex) - 3; x <= std::max(sx, ex) + 3; x++)
+                    if (x > 0 && y > 0 && x < room.tiles_w - 1 && y < room.tiles_h - 1)
+                        room.tiles[y][x] = TileType::Floor;
+        }
         room.door_north = room.door_south = room.door_east = room.door_west = false;
         room.has_doorway = false;
         room.enemy_spawns.clear();
@@ -1530,9 +1564,19 @@ void Engine::start_scene(int id) {
     // El profeta se coloca cara a quien habla (en la arena, tres filas bajo el jefe: donde
     // entro por el borde sur la caja lo tapaba entero) y se hornea su fila de reposo,
     // porque system_animation no corre en Dialogue y se quedaria a medio paso.
+    // El paseo: el destino es el sitio de SIEMPRE y el profeta arranca desplazado. Se
+    // apunta aqui porque `ax/ay` solo existen en esta funcion —el escenario los recalcula
+    // al generarse— y fuera no hay forma de rehacerlos.
+    scene_walk_t  = 0.0f;
+    scene_walked  = false;
+    scene_walk_to = current_room_data.tile_to_world(ax + def.player_dx, ay + def.player_dy);
+
     if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
         auto& t = world.transforms[player.entity];
-        t.position = current_room_data.tile_to_world(ax + def.player_dx, ay + def.player_dy);
+        t.position = (def.walk_after >= 0)
+                   ? current_room_data.tile_to_world(ax + def.player_dx + def.walk_from_dx,
+                                                     ay + def.player_dy + def.walk_from_dy)
+                   : scene_walk_to;
         t.facing = def.player_facing;
         if (world.has(player.entity, Component::Movement)) {
             world.movements[player.entity].velocity  = {0, 0};
@@ -1577,6 +1621,16 @@ bool Engine::event_resolved_in_run(int ev) const {
 // Siguiente caja de la escena, o el cierre si ya no quedan.
 void Engine::scene_next() {
     const SceneDef def = get_scene_def(scene_id);
+    // Paseo cinematico en la juntura de la cadena (SceneDef::walk_after): en vez de abrir
+    // la caja siguiente, el profeta CAMINA hasta su sitio y solo entonces se sigue.
+    // `scene_walked` es lo que evita repetirlo, porque al terminar el paseo se vuelve a
+    // pasar por aqui con la misma parada.
+    if (def.walk_after >= 0 && !scene_walked && scene_step == def.walk_after) {
+        scene_walked = true;
+        scene_walk_t = Config::Feel::SCENE_WALK_MAX;
+        SDL_Log("%s: paseo tras la parada %d/%d", def.tag, scene_step + 1, def.count);
+        return;
+    }
     scene_step++;
     if (scene_step < def.count) {
         int line = def.first_line + scene_step;
@@ -1602,6 +1656,12 @@ void Engine::finish_scene(bool skipped) {
     scene_step   = -1;
     scene_manual = false;
     hud.visible  = true;
+    // Ningun paseo sobrevive al cierre (ni saltado a mitad): si el profeta se quedara con
+    // velocidad, seguiria andando solo en cuanto el mundo vuelva a correr.
+    scene_walk_t = 0.0f;
+    scene_walked = false;
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement))
+        world.movements[player.entity].velocity = {0, 0};
 
     if (def.stage == StageKind::Live) {
         // Las figuras se retiran (el rey y la reina dejan la pelea a su guardia)
@@ -3032,6 +3092,66 @@ void Engine::update_boss_approach(f32 dt) {
     }
 }
 
+// El paseo de una apertura guionizada. Misma maquinaria que la entrada del jefe —se
+// EMPUJA con velocidad, no se desliza la posicion, para que `system_movement` le ponga el
+// rumbo y `system_animation` la fila de andar— pero sin adelanto de camara: aqui lo que
+// hay que mirar es al profeta LLEGANDO, no el sitio al que va.
+void Engine::update_scene_walk(f32 dt) {
+    scene_walk_t -= dt;
+
+    Vec2 pos = scene_walk_to;
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        auto& t = world.transforms[player.entity];
+        pos = t.position;
+        const Vec2 d = scene_walk_to - pos;
+        const f32 dist = d.length();
+        if (world.has(player.entity, Component::Movement)) {
+            auto& m = world.movements[player.entity];
+            m.velocity = (dist > 1.0f)
+                       ? d.normalized() * m.speed * Config::Feel::BOSS_APPROACH_SPEED
+                                        * std::min(1.0f, dist / 12.0f)
+                       : Vec2{0, 0};
+            m.knockback = {0, 0};
+        }
+        if (dist <= 2.0f) scene_walk_t = 0.0f;
+    }
+
+    world.update(dt);          // movimiento, rumbo y animacion: por eso camina de verdad
+    renderer.update_shake(dt);
+    camera.set_target(pos);
+    camera.update(dt);
+
+    if (scene_walk_t <= 0.0f) {
+        scene_walk_t = 0.0f;
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement))
+            world.movements[player.entity].velocity = {0, 0};
+        // La camara se ASIENTA aqui, no en la caja siguiente: en Dialogue nadie la
+        // actualiza, asi que un paseo cortado dejaria el recorte a medio deslizar.
+        camera.room_bounds = camera.bounds_goal;
+        camera.set_target(scene_walk_to);
+        camera.position = scene_walk_to;
+        camera.update(0.0f);
+        // Y mira a donde dice la escena. `system_animation` lo dejo con el rumbo del ultimo
+        // paso (llegando de lado, o de espaldas), y la caja siguiente es la del encuentro:
+        // tiene que estar de cara a quien habla, igual que lo deja `start_scene`.
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+            const SceneDef def = get_scene_def(scene_id);
+            world.transforms[player.entity].facing = def.player_facing;
+            const AnimID idle = facing_anim(AnimID::IdleDown, def.player_facing);
+            if (world.has(player.entity, Component::Animation))
+                play_anim(world.animations[player.entity], idle, true);
+            if (world.has(player.entity, Component::Sprite)) {
+                auto& sp = world.sprites[player.entity];
+                sp.src_rect.x = 0.0f;
+                sp.src_rect.y = static_cast<f32>(get_anim_def(idle).row * SHEET_FRAME_SIZE);
+                sp.flip_x = false;
+            }
+        }
+        SDL_Log("paseo de escena terminado");
+        scene_next();
+    }
+}
+
 // =============================================================================
 // Room state: clear detection, boss defeat, tile interactions
 // =============================================================================
@@ -3243,12 +3363,25 @@ void Engine::update_dialogue(f32 dt) {
         if (dialogue.auto_timer <= 0.0f) { confirm = true; dialogue.auto_timer = 0.8f; }
     }
 
-    // Una escena guionizada se salta ENTERA con ESC (dispara Cancel y Pause a la vez).
-    if (scene_step >= 0 && (input.is_action_just_pressed(Action::Cancel) ||
-                            input.is_action_just_pressed(Action::Pause))) {
-        finish_scene(true);
-        return;
+    // Una escena guionizada se salta ENTERA: con ESC (que dispara Cancel y Pause a la vez)
+    // o con el boton tactil de SALTAR, que es la unica salida en un telefono por gestos.
+    // Se atiende ANTES que todo lo demas para que valga tambien durante el paseo.
+    if (scene_step >= 0) {
+        Vec2 tp;
+        const bool tapped_skip = input.touch_ui && input.peek_tap(tp) &&
+                                 skip_button_rect().contains(tp);
+        if (tapped_skip) input.take_tap(tp);
+        if (tapped_skip || input.is_action_just_pressed(Action::Cancel) ||
+            input.is_action_just_pressed(Action::Pause)) {
+            finish_scene(true);
+            return;
+        }
     }
+
+    // El paseo de la apertura: el motor lleva al profeta y no hay caja que atender. Se
+    // salta TRAMO A TRAMO, como el resto: saltarlo cierra la escena, no la cadena entera
+    // de la apertura (detras sigue viniendo la intro del capitulo).
+    if (scene_walk_t > 0.0f) { update_scene_walk(dt); return; }
 
     if (dialogue.choosing && !dialogue.resolved) {
         if (input.is_action_just_pressed(Action::MoveUp))

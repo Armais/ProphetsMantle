@@ -97,9 +97,107 @@ continua** de hasta 160x88 tiles. El mapa describia una estructura que ya no exi
   mensaje se le plantaba encima), empieza en `y = 31` (justo bajo ese panel, que llega a
   30,75) y **el objetivo del capitulo bajo al pie**, porque arriba se montaba sobre el
   porcentaje de fe.
-- **El minimapa pequeno se queda en rejilla** —a 10x7 unidades por celda el terreno no dice
-  nada— pero **sin separacion entre celdas**: los huecos eran los que lo contaban como salas
-  sueltas. Su rect exterior no se mueve ni una unidad a proposito, porque lo comparte
-  `Input::touch_minimap` (`HUD::minimap_rect`): las celdas se ensanchan hasta llenarlo.
+- **El minimapa pequeno tambien pinta terreno** (2026-09-12). Quedarse en rejilla fue un
+  error: el usuario volvio a decir "sigue con el mismo estilo de celdas" mirando **esa**
+  esquina. Ahora los dos mapas salen de `draw_zone_canvas`, asi que no hay forma de que uno
+  vuelva a contar algo distinto del otro. Su rect exterior no se mueve ni una unidad a
+  proposito, porque lo comparte `Input::touch_minimap` (`HUD::minimap_rect`).
+
+### El mapa se PINTA en una textura (2026-09-12)
+
+Pintar el terreno tile a tile seguia siendo un mosaico: 1,3 unidades por tile, trece colores
+planos y la niebla recortada en rectangulos de celda. El usuario lo llamo "pixel art" y tenia
+razon. El mapa ahora es **una textura generada por codigo** (nada nuevo en `assets/`, que es
+la regla):
+
+- **Mascaras suavizadas + muestreo bilineal** (`zone_terrain_texture`, 5 px por tile): una
+  mascara binaria de solido / agua / camino / hueco, desenfocada a resolucion de tile, es un
+  campo continuo; umbralizarlo da siluetas curvas en vez de escalones. Del **gradiente** de
+  ese campo sale la luz (desde arriba-izquierda) y de su **filo**, el contorno de tinta.
+- **Terreno y niebla van en texturas separadas, y es lo que evita el tiron**: el terreno solo
+  depende del capitulo, asi que se genera UNA vez; la niebla cambia al pisar cada celda y es
+  una textura de 8 px por celda que se estira con filtrado lineal (`zone_fog_texture`).
+  Repintar medio megapixel al cruzar cada celda se nota; repintar 32x32 px, no.
+- **Tres cosas se corrigieron mirando la captura, no razonando**: los **caminos** unen centros
+  de celda y pintados con fuerza trazaban una reticula rectangular sobre el mapa entero (van
+  al 48%); el **filo de la niebla** nacia siendo una recta por celda (se mueve con ruido, y
+  solo el filo); y el rotulo del **JEFE** cuelga bajo su chincheta y no sobre el centro de su
+  celda, que en el capitulo 5 lo dejaba detras del pin.
 
 Guion: **`scripts/mapa_check.txt`**.
+
+### Botones de menu (2026-09-12)
+
+Una opcion de menu era una linea de texto centrada con `> ` delante. El usuario, mirando el
+APK: "desde el punto de vista de un juego movil es horrible, no se distingue a que estas
+haciendo clic". Ahora cada opcion es una pieza con forma: `Renderer::draw_panel` sirve un
+rectangulo redondeado con bisel en 9 trozos (`Renderer::panel_tex`, generado en `init` como
+`shadow_tex` y `vignette_tex`), y lo usan el titulo, la pausa, la derrota y las filas de
+Opciones — y tambien el marco del mapa.
+
+- La elegida cambia de **color, de tamano y lleva aro de foco**. Solo el tono no basta: a
+  plena luz en un telefono un cambio de tono no se ve.
+- Su texto va **claro**, no oscuro. `draw_text` siempre pone contorno oscuro al glifo, asi que
+  letra oscura sobre dorado sale como un borron (se vio en la primera captura).
+- La **zona tactil no crece con la seleccion** (`menu_hit_rect`): si creciera, el sitio donde
+  hay que tocar se moveria bajo el dedo. `mark_row_rect` apunta el rect que se ha dibujado,
+  para que el hit-test siga saliendo de la misma formula que el dibujo.
+
+## Pulido tras la segunda prueba del APK (2026-09-12)
+
+Otra vez cinco fallos que ninguna verificacion sintetica habia dado, y otra vez tres se
+cerraron **mirando la captura**, no razonando. Tres son de esta capa.
+
+### El boton de SALTAR y el aviso que faltaba
+
+`skip_button_rect()` / `draw_skip_button()` (`hud.cpp`, junto a `draw_dialogue`) son **una
+sola pieza compartida** por las tres pantallas que la necesitan: la cinematica
+(`CinematicSystem::render`), la carta de historia (`StorySystem::render`) y la caja de la
+escena guionizada (`draw_dialogue`). Panel de 9 trozos como los botones de menu, rotulo
+`SALTAR >>` — **no `▶▶`: el atlas de glifos no lo tiene** (`GLYPH_EXTRA` en `renderer.h`) y
+saldria un hueco. El resto (quien lo atiende, por que emite `Cancel`, el tramo a tramo) esta
+en `src/input/CLAUDE.md`.
+
+`DialogueView::skippable` lo rellena el Engine con `scene_step >= 0`. Sin el, un encuentro del
+pozo pintaria un boton que no hace nada. Y con `skippable` **en PC** el pie pasa de
+`[ENTER] seguir` a `[ENTER] seguir    [ESC] saltar`: es el unico cambio de texto en PC de toda
+la pasada, y arregla que la apertura de capitulo se pudiera saltar desde siempre sin que
+nadie lo supiera.
+
+### Los botones de menu se MIDEN
+
+`BTN_W = 148` dejo de existir. 148 unidades sobre 320 de pantalla eran una pila de pildoras de
+media pantalla dijera lo que dijera el texto ("Reanudar" igual de ancha que "Reintentar
+capitulo"), y la fila de la partida caducada —`"Partida abandonada  +12345"`— **se desbordaba
+y nadie lo habia visto**. Ahora `menu_button_width` mide con `Renderer::measure_text` (mismo
+precedente que las pestanas del Codice y la placa del mapa) y devuelve el ancho del texto **mas
+largo de la pantalla** + 22 de relleno, con suelo 72 y techo `GAME_WIDTH - 24`.
+
+- **Un ancho por PANTALLA, no por fila**: uno por fila haria una escalera.
+- La etiqueta de la partida caducada **se compone antes del bucle de medida**, o el boton mas
+  ancho seria justo el que se sale.
+- `BTN_GROW` y el margen tactil se conservan: la **zona del dedo sigue sin moverse con la
+  seleccion** (`menu_hit_rect`), que era el punto de la pasada anterior.
+- Afecta a Titulo, Pausa y Derrota, que comparten `draw_menu_button`. Opciones no: sus filas
+  no son botones.
+
+### La niebla del mapa es LUZ Y sombra, no solo velo
+
+"Lo ya descubierto se ve oscuro" era literal y eran dos cosas sumadas en `zone_fog_texture`:
+
+1. **El filo mordia hacia dentro.** El ruido del borde era simetrico (`c + n*0.85`, con
+   `n ∈ [-0.5, 0.5]`), asi que sobre una celda pisada (`c = 0`) levantaba hasta 0,42 de
+   oscuridad DENTRO de lo descubierto, y los dos desenfoques lo arrastraban ~2 px mas. Con
+   8 px por celda eso es casi medio lado: la celda salia oscura salvo en el centro. Ahora el
+   ruido va **solo hacia fuera** (`max(0, n)`) y antes de perturbarlo se **dilata lo claro**
+   (minimo sobre vecindad de 2 px), de modo que la frontera nace fuera de la celda y son el
+   ruido y el blur los que se comen ESE margen.
+2. **"Descubierto" solo significaba "sin velo"**, y el terreno base ya es pardo apagado. La
+   textura pasa a ser una capa de luz y sombra: con `f < 0,5` un **realce calido**
+   (`rgb(250,238,210)`, alfa hasta 46) y con `f > 0,5` el velo oscuro de siempre hasta 252. Lo
+   entrevisto se recalibro a 0,78 para quedar claramente entre los dos.
+
+Sigue siendo **una textura y un draw**, la cache por firma no cambia, y como el mapa grande y
+el minimapa salen los dos de `draw_zone_canvas`, el arreglo cae en los dos. Medido sobre la
+captura: perfil horizontal plano de borde a borde de la celda pisada (~130 de brillo), celda
+visitada 107 / adyacente 65 / nunca vista 22 en el centro de cada una.

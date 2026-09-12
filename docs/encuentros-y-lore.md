@@ -377,3 +377,27 @@ Guiones: **`scripts/encuentros_check.txt`** recorre los diez con el comando de a
 **`event <n>`** y fotografía cada uno dos veces (una línea del cuerpo y la decisión con sus
 dos opciones). En los dos capítulos cuya línea es más larga se fotografían **las tres
 líneas**, porque el truncado silencioso de `wrap_text` es el único fallo que no se ve venir.
+
+## La intro del capitulo 2 dejaba de repetir al dialogo (2026-09-12)
+
+Las dos lineas de prosa de `get_chapter_lore(2)` decian lo que el jugador **acababa de ver en
+pantalla**: "La viuda vive junto a la puerta de la ciudad, con un hijo y sin marido que traiga
+grano" lo ensena la propia figura de la viuda y lo dice `AP2_VIUDA_AGUA`, y "El sacerdote de la
+puerta no te ha quitado el ojo de encima" es literalmente `AP2_SACERDOTE`. Con la apertura
+guionizada delante (2026-09-10), la intro se habia quedado narrando el dialogo anterior — el
+mismo defecto que ya se corrigio en los capitulos 1, 3, 5, 7 y 8.
+
+Se reescribieron **esas dos y solo esas**, con material que ninguna caja toca: **donde** esta
+Sarepta y por que ahi. Sidon es la tierra de Etbaal, padre de Jezabel (1 R 16:31), asi que
+Jehova esconde a su profeta en la casa de sus enemigos, y el hambre que anuncio en Samaria ya
+ha cruzado la frontera.
+
+Intactos, a proposito: el **verso** (17:14, la promesa de la tinaja), que no lo dice ninguna
+caja de la apertura; el **objetivo** ("Vuelve a la casa de la viuda. Que la tinaja no se
+acabe."), porque lo pintan el HUD y el mapa; y el **outro** del capitulo. `get_chapter_lore` lo
+comparten la cinematica, la carta de texto y la ficha del Codice, asi que las tres dicen lo
+nuevo — que es lo correcto.
+
+Guiones: **`scripts/lore_check.txt`**, **`scripts/codice_check.txt`** e
+**`scripts/i18n_check.txt`** (cero `TEXT TRUNCATED` en ES y EN: las dos lineas nuevas caben en
+una sola linea de la carta).

@@ -371,8 +371,17 @@ struct Engine {
     u64  run_events_done = 0;
     bool event_resolved_in_run(int ev) const;
     Entity scene_figures[3] = {ENTITY_NONE, ENTITY_NONE, ENTITY_NONE};   // se retiran al cerrar
+    // PASEO dentro de una apertura (SceneDef::walk_after): mientras `scene_walk_t > 0` no
+    // hay caja en pantalla y el motor lleva al profeta andando hasta su sitio. Misma
+    // maquinaria que la entrada del jefe: se empuja con velocidad, el mundo sigue vivo y
+    // la camara lo sigue. `scene_walked` es lo que evita que el paseo se repita cuando
+    // `scene_next` vuelve a pasar por la misma parada al terminarlo.
+    f32  scene_walk_t  = 0.0f;
+    Vec2 scene_walk_to = {0, 0};   // = tile_to_world(anchor + def.player_dx/dy)
+    bool scene_walked  = false;
     void start_scene(int id);
     void scene_next();
+    void update_scene_walk(f32 dt);
     void finish_scene(bool skipped);
 
     // --- Zona continua (2026-09-10) ---------------------------------------------------

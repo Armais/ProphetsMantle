@@ -4,6 +4,7 @@
 
 #include "core/i18n.h"
 #include "ui/story.h"
+#include "ui/hud.h"          // draw_skip_button: el boton tactil de SALTAR
 #include "game/rooms.h"
 #include <algorithm>
 #include <cmath>
@@ -180,7 +181,11 @@ void StorySystem::render(Renderer& renderer) const {
     // Pie: solo cuando ya se ha revelado todo
     if (all_revealed()) {
         f32 blink = 0.55f + 0.45f * std::sin(clock * 3.4f);
-        const char* prompt = (page + 1 < page_count) ? tr("[ENTER] seguir leyendo", "[ENTER] keep reading") : tr("[ENTER] continuar", "[ENTER] continue");
+        const char* prompt = touch_ui
+            ? ((page + 1 < page_count) ? tr("toca para seguir", "tap to continue")
+                                       : tr("toca para continuar", "tap to continue"))
+            : ((page + 1 < page_count) ? tr("[ENTER] seguir leyendo", "[ENTER] keep reading")
+                                       : tr("[ENTER] continuar", "[ENTER] continue"));
         renderer.draw_text_centered(prompt, 166.0f, {210, 190, 150, static_cast<u8>(200 * blink)}, 0.8f);
         if (page_count > 1) {
             char pages_lbl[24];
@@ -188,6 +193,9 @@ void StorySystem::render(Renderer& renderer) const {
             renderer.draw_text_centered(pages_lbl, 175.0f, {120, 105, 85, 180}, 0.7f);
         }
     }
+    // El boton NO espera a que se revele todo: quien ya ha leido esta carta quiere salir
+    // desde el primer frame.
+    if (touch_ui) draw_skip_button(renderer, clock);
 }
 
 // =============================================================================

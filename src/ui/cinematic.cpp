@@ -1,5 +1,6 @@
 #include "ui/cinematic.h"
 #include "core/i18n.h"
+#include "ui/hud.h"          // draw_skip_button: el boton tactil de SALTAR
 #include "game/lore.h"
 #include "game/rooms.h"
 #include <SDL3/SDL.h>
@@ -289,12 +290,15 @@ void CinematicSystem::render(Renderer& r) const {
         }
     }
 
-    // --- aviso de teclas (discreto, parpadeante)
+    // --- aviso (discreto, parpadeante). En un telefono no hay ENTER ni ESC: el aviso habla
+    // de dedos y el "saltar" es el boton de arriba a la derecha.
     if (t > 1.6f) {
         const f32 a = 0.30f + 0.16f * std::sin(clock * 2.4f);
-        r.draw_text(tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip"), 8.0f, H - 9.0f,
-                    with_alpha(Color{214, 204, 190, 255}, a), 0.6f);
+        r.draw_text(touch_ui ? tr("toca para seguir", "tap to continue")
+                             : tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip"),
+                    8.0f, H - 9.0f, with_alpha(Color{214, 204, 190, 255}, a), 0.6f);
     }
+    if (touch_ui) draw_skip_button(r, clock);
 
     // --- fundido de entrada y salida de cada escena
     f32 veil = 1.0f - smoothstep(t / FADE);

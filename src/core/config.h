@@ -194,6 +194,12 @@ constexpr float BOSS_APPROACH_MAX   = 2.4f;   // tope duro en segundos (nunca at
 constexpr float BOSS_APPROACH_SPEED = 0.72f;  // fraccion de la velocidad normal: entra, no corre
 constexpr float BOSS_APPROACH_LEAD  = 0.45f;  // cuanto se adelanta la camara hacia el jefe
 
+// -- Paseo de una apertura guionizada (SceneDef::walk_after) -------------------
+// Misma idea que la entrada del jefe, pero el tramo es mas largo (la apertura del cap. 2
+// son 7 tiles) y con el tope del jefe se cortaria a mitad. Reusa su fraccion de velocidad:
+// tambien aqui el profeta llega andando, no corriendo.
+constexpr float SCENE_WALK_MAX      = 4.5f;   // tope duro en segundos
+
 } // namespace Feel
 
 // =============================================================================

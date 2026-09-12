@@ -73,8 +73,9 @@ struct ChoiceCard {
     TileSprite icon   = TileSprite::Star;
 };
 
+// `touch`: la linea de ayuda del pie habla de dedos en vez de teclas.
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,
-                       int count, int selected, u32 tileset);
+                       int count, int selected, u32 tileset, bool touch = false);
 // Rect de la carta i, en unidades de juego. Lo usan el DIBUJO y el hit-test tactil: una
 // sola formula, para que tocar una carta no dependa de recordar el reparto.
 Rect choice_card_rect(int i, int count);
@@ -85,10 +86,11 @@ Rect choice_card_rect(int i, int count);
 // jugador toma la segunda sin saber que pierde la primera.
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],
                       int count, int selected, u32 tileset, bool act_one = true,
-                      const char* held_relic = nullptr);
+                      const char* held_relic = nullptr, bool touch = false);
 // `extras[i]` is an optional line per card ("Sustituye a Cuervos de Querit").
 void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID* ids, int count,
-                         int selected, u32 tileset, const char* const* extras);
+                         int selected, u32 tileset, const char* const* extras,
+                         bool touch = false);
 
 // Encuentro biblico (GameScene::Dialogue): caja inferior sobre el mundo congelado.
 // `body` es el texto ya elegido por el Engine (linea de dialogo o resultado).
@@ -103,9 +105,25 @@ struct DialogueView {
     int  selected     = 0;
     bool more_lines   = false;                  // Quedan lineas: el pie dice "seguir"
     bool touch        = false;                  // pie con gestos en vez de teclas
+    // ¿Se puede saltar TODA la escena desde aqui? Solo una escena guionizada
+    // (Engine::scene_step >= 0). Un encuentro del pozo no se salta, y si el pie dijera
+    // que si, el boton (o el [ESC]) mentiria.
+    bool skippable    = false;
 };
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits = TEXTURE_NONE);
+
+// =============================================================================
+// Boton de SALTAR (solo tactil)
+// =============================================================================
+// Un telefono por gestos no tiene boton atras, y el toque en estas pantallas siempre
+// significaba "seguir": no habia forma de saltarse el prologo, una intro de capitulo ni
+// una apertura guionizada. Lo pintan CinematicSystem::render, StorySystem::render y
+// draw_dialogue; lo atiende el Engine (Intro / Story / Dialogue). Rect y dibujo salen de
+// la MISMA formula, que es el contrato de todo control tactil del proyecto, y NO se mueve
+// entre pantallas: el mismo sitio siempre, como la fila de accion del HUD.
+Rect skip_button_rect();
+void draw_skip_button(Renderer& renderer, f32 time);
 // Idem para las opciones del encuentro (y del Ascenso, que usa la misma pantalla). El
 // alto de la caja depende de cuantas lineas ocupe el texto, asi que el rect no se puede
 // recalcular a ciegas: lo apunta draw_dialogue y esto lo devuelve. Rect vacio si esa

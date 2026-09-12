@@ -90,6 +90,10 @@ struct CinematicSystem {
     bool active      = false;
     bool art_loaded  = false;
     f32  auto_timer  = 0.0f;    // > 0 (autoplay): pasa de escena solo
+    // Lo escribe el Engine antes de renderizar (mismo patron que MenuSystem::touch_hints):
+    // en tactil el aviso habla de dedos y ademas se pinta el boton de SALTAR, porque un
+    // telefono por gestos no tiene boton atras y el toque siempre significa "seguir".
+    bool touch_ui    = false;
 
     // Cache de la escena actual (se rellena en layout: wrap_text asigna memoria)
     std::string wrapped[MAX_LINES];

@@ -132,6 +132,12 @@ struct Renderer {
     // Procedural helper textures (created in init)
     u32 shadow_tex   = TEXTURE_NONE;   // 64x32 soft elliptical blob (white, alpha 1 -> 0)
     u32 vignette_tex = TEXTURE_NONE;   // 160x90 radial gradient (alpha 0 centre -> 1 edge)
+    // Panel redondeado BLANCO para servir en 9 trozos (draw_panel). Es lo que da botones y
+    // marcos con esquina redonda y bisel sin meter un PNG en assets/: la regla es que
+    // assets/ no crece si se puede evitar, y esto se genera en init como shadow/vignette.
+    u32 panel_tex    = TEXTURE_NONE;   // PANEL_TEX_SIZE^2, esquina = PANEL_TEX_SIZE*PANEL_CORNER_FRAC
+    static constexpr int PANEL_TEX_SIZE   = 48;
+    static constexpr f32 PANEL_CORNER_FRAC = 14.0f / 48.0f;
 
     // Text: TTF atlases at two sizes (small for scale <= 1.25, large for titles). If the
     // font is missing, draw_text falls back to SDL_RenderDebugText (8x8 bitmap font).
@@ -173,6 +179,11 @@ struct Renderer {
     // una entrada nueva. Path desconocido = no-op.
     void unload_texture(const char* path);
     u32 create_radial_texture(const char* name, int w, int h, f32 inner_a, f32 outer_a, f32 power);
+    // Textura desde un buffer RGBA en CPU. Si `name` ya existe se REEMPLAZA el contenido y
+    // se devuelve el MISMO id: el mapa del capitulo se regenera cada vez que cambia la
+    // niebla y con una entrada nueva por regeneracion se irian acumulando texturas.
+    u32 create_texture_from_rgba(const char* name, int w, int h, const u8* rgba, bool smooth = true);
+    u32 create_panel_texture(const char* name, int size, int radius);
     TextureEntry* get_texture(u32 id);
 
     // Frame lifecycle
@@ -188,6 +199,10 @@ struct Renderer {
                           Color tint = Color::white(), bool flip_x = false, f32 rotation = 0.0f);
     void draw_rect(Rect rect, Color color, bool filled = true);
     void draw_rect_outline(Rect rect, Color color);
+    // Panel/boton redondeado en 9 trozos a partir de `panel_tex`. El tinte MULTIPLICA, asi
+    // que el bisel (claro arriba, oscuro abajo) y el contorno sobreviven a cualquier color.
+    // `corner` en unidades de juego; se acota a la mitad del lado menor.
+    void draw_panel(Rect dst, Color tint, f32 corner = 5.0f);
     // Text: (x, y) = top-left in game units, line height = TEXT_LINE_UNITS * scale
     void draw_text(const char* text, f32 x, f32 y, Color color, f32 scale = 1.0f);
     void draw_text_centered(const char* text, f32 y, Color color, f32 scale = 1.0f);

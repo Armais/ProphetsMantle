@@ -96,6 +96,17 @@ struct SceneDef {
     // de `first_line`; el resto de la cadena no cambia. -1 = sin variante.
     int         alt_first_line = -1;
     int         alt_event      = -1;   // id de `namespace Ev`
+    // PASEO CINEMATICO dentro de la cadena: tras la parada `walk_after` (0-based) el motor
+    // lleva al profeta andando hasta su sitio en vez de abrir la caja siguiente, y solo
+    // entonces sigue. Es lo que convierte un corro plantado desde la primera caja en un
+    // ENCUENTRO: las figuras ya estan de pie y es el quien llega. -1 = sin paseo, que es
+    // lo que dicen las otras 19 escenas sin escribir una letra.
+    // De donde sale, en tiles RELATIVOS a player_dx/dy; el destino es el player_dx/dy de
+    // siempre, igual que en la entrada del jefe: si fuera otro, la caja siguiente
+    // teletransportaria al profeta y el corte volveria.
+    int         walk_after   = -1;
+    int         walk_from_dx = 0;
+    int         walk_from_dy = 0;
 };
 
 // =============================================================================
@@ -1058,11 +1069,24 @@ inline SceneDef get_scene_def(int id) {
         Sc::AUD_REPRENDE, 7, SceneThen::ChapterIntro
     };
     // La puerta de Sarepta: la viuda con sus lenos, y un sacerdote de Baal mirando.
+    // La cadena esta partida por sentido y el paseo cae en la juntura: la primera caja es
+    // DIOS (la palabra de Jehova, 17:8-9) y las cuatro siguientes son el ENCUENTRO (el
+    // agua, el pan, el sacerdote). Plantar a los tres juntos desde la primera caja hacia
+    // que el encuentro pareciera un spawn; ahora Elias sale al sur y CAMINA hasta ellos,
+    // que ya estan en su sitio y no se mueven.
     case Scene::APERTURA_2: return {
         "Apertura 2", "Apertura del capitulo 2: a la puerta de Sarepta (1 Reyes 17:8-11)", 2,
         StageKind::Exterior, 2, 0, 1, Direction::Up,
-        {{FK::Npc, Npc::VIUDA_SAREPTA, -1, -2, Direction::Down}, {FK::Enemy, E_PROFETA_BAAL, 5, -3, Direction::Down}, none},
-        Sc::AP2_PALABRA, 5, SceneThen::ChapterIntro
+        // El sacerdote estaba a dx 5 y al final del paseo la camara lo dejaba justo detras del
+        // boton de SALTAR: se corrio una columna adentro (visto en la captura, no calculado).
+        {{FK::Npc, Npc::VIUDA_SAREPTA, -1, -2, Direction::Down}, {FK::Enemy, E_PROFETA_BAAL, 4, -3, Direction::Down}, none},
+        Sc::AP2_PALABRA, 5, SceneThen::ChapterIntro,
+        -1, -1,                  // sin variante de primera caja
+        // Paseo tras la caja de la palabra. Sale al SUROESTE, no en linea recta al sur: al
+        // sur la camara topa con el borde de la sala y la caja de dialogo lo tapaba entero
+        // (el mismo choque que la arena del jefe). Desde aqui se le ve de pie mientras habla
+        // Jehova, y la viuda y el sacerdote entran en cuadro conforme el camina.
+        0, -9, 2
     };
     // Al pie del Carmelo: Acab con dos profetas de Baal a los flancos.
     case Scene::APERTURA_3: return {

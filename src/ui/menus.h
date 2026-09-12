@@ -83,6 +83,10 @@ struct MenuSystem {
 private:
     // Apunta el rect de la fila i tal como se acaba de dibujar (y = linea, step = paso).
     void mark_row(int i, f32 y, f32 step);
+    // Igual, pero con el rect exacto que se ha dibujado. Lo usan las pantallas con
+    // BOTONES: la zona que responde al dedo tiene que ser la que se ve, no una franja
+    // inventada de borde a borde.
+    void mark_row_rect(int i, Rect r);
 public:
 
 private:
