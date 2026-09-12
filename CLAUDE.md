@@ -102,7 +102,7 @@ src/core/           - types.h, config.h (namespace Config), engine.h/cpp (bucle 
 src/render/         - renderer.h/cpp (320x180 -> 1280x720), sprites.h/cpp, camera.h/cpp
 src/input/          - input.h/cpp (teclado / raton / mando / tactil, acciones)
 src/audio/          - audio.h/cpp (SDL3_mixer, API MIX_*)
-src/game/           - player, faith, miracles, enemies, items, rooms, combat, events, lore
+src/game/           - player, faith, miracles, enemies, items, rooms, combat, events, lore, tutorial
 src/ui/             - hud, menus, codex, cinematic
 src/systems/        - save (v9), progression, achievements
 src/platform/       - platform.h (deteccion de plataforma, rutas de assets y guardado)
@@ -214,7 +214,7 @@ de ese directorio; **si vas a trabajar en una capa, leelo antes de editar.**
 |---|---|
 | `src/` | Reglas transversales del motor: reciclado de entidades, faccion (`is_hostile`), `Scripture::ref` |
 | `src/core/` | Escenas, `Config::Feel` (tacto), i18n, discipulos en el ECS, `room_fade` |
-| `src/game/` | Mapas fijos, estado del gameplay, objetos y reliquias, el Manto, fidelidad biblica |
+| `src/game/` | Mapas fijos, estado del gameplay, objetos y reliquias, el Manto, fidelidad biblica, **el tutorial** |
 | `src/ui/` | Codice, HUD, caja de dialogo, pantalla de Opciones (filas por id) |
 | `src/render/` | Unidades de juego, escalado, look, orientacion vertical en movil |
 | `src/systems/` | Guardado y migraciones, logros, meta-progreso, cosmeticos y monetizacion |

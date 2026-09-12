@@ -54,6 +54,10 @@ struct HUDContext {
     Vec2            player_pos = {0, 0};
     bool            player_in_zone = false;
     bool            show_map  = false;     // Tab held: big map
+    // Se esta jugando el TUTORIAL (game/tutorial.h). Lo que pinta el minimapa entonces es el
+    // capitulo 1, que es el que se va a jugar al salir, y NO la sala del tutorial: la linea
+    // de objetivo lo dice en vez de dar una direccion de jefe que aqui no significa nada.
+    bool            tutorial  = false;
     bool            map_revealed = false;  // "Ojos Abiertos": todo el capitulo a la vista
     u32             tileset   = TEXTURE_NONE;
     const ItemRegistry* registry = nullptr;   // Needed to draw the inventory icons
@@ -124,7 +128,11 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
 // la MISMA formula, que es el contrato de todo control tactil del proyecto, y NO se mueve
 // entre pantallas: el mismo sitio siempre, como la fila de accion del HUD.
 Rect skip_button_rect();
+// El del tutorial: mismo boton, otro sitio (el de siempre pisa el minimapa, y en el
+// tutorial SI hay HUD debajo). Ver el comentario en hud.cpp.
+Rect tutorial_skip_rect();
 void draw_skip_button(Renderer& renderer, f32 time, bool pressed = false);
+void draw_skip_button_at(Renderer& renderer, Rect r, f32 time, bool pressed = false);
 // Idem para las opciones del encuentro (y del Ascenso, que usa la misma pantalla). El
 // alto de la caja depende de cuantas lineas ocupe el texto, asi que el rect no se puede
 // recalcular a ciegas: lo apunta draw_dialogue y esto lo devuelve. Rect vacio si esa

@@ -1,0 +1,84 @@
+# Verificacion: cambiar el idioma EN CALIENTE re-traduce lo que se tradujo una sola vez
+# Uso:  MANTLE.exe --script scripts/i18n_caliente_check.txt
+#
+# `tr()` no copia: devuelve un puntero al literal del idioma activo en el momento de la
+# llamada. Lo que GUARDA ese puntero en una estructura de larga vida se quedaba congelado, y
+# cambiar el idioma en Opciones dejaba "Honda de David" en una partida en ingles. Los tres
+# sitios los re-construye `Engine::relocalize`.
+#
+# GATES DEL LOG, en este orden:
+#   - `LOADOUT` con **Honda de David** y **Agua del Jordán**   (espanol)
+#   - una linea `i18n: registros re-traducidos (English)`
+#   - `LOADOUT` con **David's Sling** y **Water of the Jordan** (ingles, MISMA partida)
+#   - y de vuelta en espanol tras el segundo `lang 0`.
+# GATE VISUAL: El Santuario en los dos idiomas (mejoras traducidas) y la barra del jefe.
+
+lang 0
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+
+give 0
+give 9
+wait 0.5
+stats
+shot 130_i18n_objetos_es
+wait 0.3
+
+# El cambio en caliente, con la partida ya montada y los objetos ya en la mano
+lang 1
+wait 0.6
+stats
+shot 131_i18n_objetos_en
+wait 0.3
+
+# Y de vuelta: tiene que volver a decir lo mismo que al principio
+lang 0
+wait 0.6
+stats
+wait 0.3
+
+# El rotulo del jefe: la escena del jefe del cap. 1 lo deja de pie con su barra
+escena 10 1
+wait 4.0
+press cancel
+wait 1.5
+shot 132_i18n_jefe_es
+lang 1
+wait 0.8
+shot 133_i18n_jefe_en
+wait 0.3
+lang 0
+wait 0.5
+
+# El Santuario: sus 15 mejoras tambien se traducen una sola vez, en ProgressionSystem::init.
+# Se sale por la pausa (fila 3) y se entra desde el titulo (fila 2).
+press pause
+wait 0.6
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.25
+press confirm
+wait 1.8
+press down
+wait 0.12
+press down
+wait 0.3
+press confirm
+wait 1.2
+shot 134_i18n_santuario_es
+lang 1
+wait 0.8
+shot 135_i18n_santuario_en
+wait 0.3
+lang 0
+wait 0.6
+quit

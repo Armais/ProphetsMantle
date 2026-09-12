@@ -324,3 +324,36 @@ Arreglos, sin tocar la regla de tramo a tramo (el usuario la mantuvo):
 captura; en el telefono no habia dispositivo conectado por adb. Para probar de verdad en
 Android hace falta el movil por USB — `adb shell input tap` genera toques del sistema, con el
 letterbox y el DPI reales, y `adb logcat -s SDL/APP:V` enseña las lineas de gate.
+
+## El tutorial: sus dos pantallas y su cartel (2026-09-12)
+
+El sistema entero vive en `game/tutorial.h` (ahí están las decisiones de diseño). De esta
+capa son tres piezas:
+
+- **`MenuScreen::TutorialAsk`** — "¿Quieres jugar el tutorial?", dos botones, al pulsar Nueva
+  Partida. Mismo fondo que el título (se viene de ahí y no hay por qué cortar la estampa).
+  Los dos pies van a y=132/143 y **no más abajo**: el orillo del manto de la estampa cruza a
+  partir de 146 y el texto apagado se perdía encima.
+- **La pantalla de Controles estrena un botón**, "Jugar el tutorial", y con él deja de ser
+  una pantalla sin filas: tocar el botón lo juega y tocar **fuera** vuelve, que es lo que
+  hacía siempre. En PC, ENTER lo juega y ESC vuelve — es el segundo cambio de significado de
+  ENTER en la capa, y por eso el pie lo dice. Lanzado desde aquí el tutorial vuelve al
+  TÍTULO, no a una partida (`TutorialThen`): quien iba a repasar los controles no puede
+  perder la partida que tenía a medias.
+- **`Engine::render_tutorial_card`** — el cartel de dos líneas (instrucción arriba, voz del
+  juego debajo). Va en **y 34..62**, la única franja libre: el panel de vitales llega a 30,75
+  y los mensajes del HUD salen a 136. Mide con `measure_text` y baja la escala de lo que no
+  quepa, como `draw_message`. En verde mientras dura el visto bueno del paso.
+
+**El botón de SALTAR tiene aquí un rect propio** (`tutorial_skip_rect`, {196,4,52,14}) y es
+la única excepción a "el botón de SALTAR no se mueve": el de siempre ({262,4}) **pisa el
+minimapa**, y en el tutorial sí hay HUD debajo — el dedo abría el mapa grande en vez de
+saltar. `draw_skip_button_at` es el mismo dibujo con el rect que le des.
+
+**La última fila de la pausa cambia de rótulo** durante el tutorial (`MenuSystem::in_tutorial`):
+"Dejar el tutorial" en vez de "Salir". En PC es su ÚNICA salida, porque ESC ya es la pausa
+que el paso 18 enseña y no se le puede dar otro oficio.
+
+**El HUD no puede mentir sobre lo que pinta**: durante el tutorial el minimapa muestra el
+capítulo 1 —el que se va a jugar al salir—, así que `HUDContext::tutorial` cambia la línea del
+objetivo por "Mapa del cap. 1" en vez de dar una dirección de jefe que aquí no significa nada.

@@ -1,0 +1,205 @@
+# Verificacion: el tutorial jugable (game/tutorial.h, 2026-09-12)
+# Uso:  MANTLE.exe --script scripts/tutorial_check.txt
+#       MANTLE.exe --touch --script scripts/tutorial_check.txt   (instrucciones de dedo)
+#
+# El tutorial se ofrece al pulsar Nueva Partida, pero esa pregunta esta SUPRIMIDA bajo
+# autoplay a proposito (los guiones de siempre esperan entrar a jugar). El camino aqui es
+# el comando `tutorial [paso]`, que ademas puede saltar directo a un paso para fotografiar
+# la sala 3 sin jugarse doce.
+#
+# GATES DEL LOG, en este orden:
+#   - `Tutorial: empieza (19 pasos, vuelve a el titulo)`
+#   - `Tutorial: sala 1 de 3`, luego `sala 2 de 3` y `sala 3 de 3`
+#   - DIECINUEVE lineas `Tutorial: paso N/19 cumplido (...)`, y las de los pasos jugables
+#     tienen que decir **por la accion**, no "informativo": si un paso jugable se cierra
+#     por tiempo es que su sonda no funciona.
+#     Jugables: 1 2 3 4 6 8 9 10 11 13 14 16 17. Informativos: 5 7 12 15 18 19.
+#   - `Tutorial: fin (paso 19 de 19)`
+#   - NI UNA linea `Secret offerings: +N`: la ofrenda del paso 16 se cuenta pero NO se
+#     ingresa (jugar el tutorial no puede regalar moneda meta).
+#   - NI UNA `Game Over`: la vida se sujeta en 1 aunque el arquero del paso 5 acierte.
+
+wait 1.0
+tutorial
+wait 1.6
+shot 90_tut_s1_mover
+
+# --- Sala 1: el cuerpo -------------------------------------------------------------
+# 1 Mover: la sonda es la distancia recorrida (90 unidades ~ 6 tiles)
+hold right 0.9
+hold left 0.9
+wait 1.4
+shot 91_tut_s1_atacar
+
+# 2 Atacar: cinco tinajas en la fila y=5 (x = 4, 7, 10, 13, 16); el profeta nace en (10,8).
+# Se rompen la de su columna y la de x=13, que es lo que pide el paso (dos).
+aim 0 -1
+hold attack 1.8
+wait 0.5
+walk 216 136
+wait 1.6
+aim 0 -1
+hold attack 1.8
+wait 1.4
+shot 92_tut_s1_honda
+
+# 3 Arma secundaria
+aim 0 0
+press weapon
+wait 1.6
+
+# 4 Dash
+press dash
+wait 1.8
+shot 93_tut_s1_vida
+
+# 5 Vida: informativo de 7 s, y entra el arquero
+wait 8.5
+shot 94_tut_s1_consumible
+
+# 6 Consumible
+press use
+wait 1.8
+
+# La puerta del norte se ha abierto: esta en el tile (10,0)
+walk 168 10
+wait 3.5
+# El `walk` sigue vivo al cambiar de sala y empujaria al profeta contra el muro del fondo:
+# se le da un destino nuevo en el centro para cancelarlo.
+walk 168 136
+wait 1.5
+shot 95_tut_s2_fe
+
+# --- Sala 2: la fe -----------------------------------------------------------------
+# 7 Que es la fe: informativo de 7,5 s (ya han corrido 1,5 con el walk de arriba)
+wait 8.0
+
+# 8, 9 y 10: los tres milagros, uno por paso
+press m1
+wait 2.2
+press m2
+wait 2.2
+press m3
+wait 2.6
+shot 96_tut_s2_orar
+
+# 11 Orar: el altar esta en el tile (14,5), descentrado. Al pisarlo se abre la carta.
+walk 232 88
+wait 3.5
+press confirm
+wait 1.8
+
+# 12 Los grados de la fe: informativo de 8 s
+wait 9.0
+
+# La puerta otra vez
+walk 168 10
+wait 3.5
+shot 97_tut_s3_secretos
+
+# --- Sala 3: el mundo --------------------------------------------------------------
+# 13 Secretos: el profeta nace en (20,17) y tiene hierba alta a su izquierda, en su misma
+# fila. Dos aperturas es lo que pide el paso.
+aim -1 0
+hold attack 2.6
+wait 1.4
+aim 0 0
+shot 98_tut_s3_cofre
+
+# 14 Cofre, en el tile (26,16)
+walk 424 264
+wait 4.5
+press confirm
+wait 1.8
+
+# 15 La carta de eleccion: informativo de 7 s
+wait 8.0
+
+# 16 La ofrenda, sembrada en el tile (23,16)
+walk 376 264
+wait 4.5
+
+# 17 El mapa. El `shot` NO suelta lo que se mantiene: es la unica forma de fotografiarlo.
+hold map 0.8
+shot 99_tut_s3_mapa
+hold map 0.4
+wait 1.6
+
+# 18 Pausa y Codice: informativo de 7,5 s
+wait 8.5
+shot 100_tut_s3_objetivo
+
+# 19 El jefe y el arco: informativo de 8,5 s, y termina
+wait 9.5
+wait 1.5
+shot 101_tut_fin_titulo
+wait 0.3
+
+# --- Las dos pantallas de menu que estrena el tutorial ------------------------------
+# La pregunta de Nueva Partida esta SUPRIMIDA bajo autoplay (treinta guiones esperan entrar
+# a jugar con un `press confirm`), asi que `tutorialask` es el unico camino para verla.
+lang 0
+tutorialask
+wait 0.6
+shot 102_tut_pregunta_es
+wait 0.2
+press cancel
+wait 0.5
+lang 1
+tutorialask
+wait 0.6
+shot 103_tut_pregunta_en
+wait 0.2
+press cancel
+wait 0.5
+lang 0
+wait 0.3
+
+# La pantalla de Controles, que estrena el boton "Jugar el tutorial". Es la septima fila del
+# titulo; cada `press` necesita su espera, porque dos pulsaciones de la misma accion en el
+# mismo frame cuentan como UNA.
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.25
+press confirm
+wait 0.8
+shot 104_tut_controles_es
+wait 0.3
+press cancel
+wait 0.5
+
+# --- El camino de verdad: pregunta -> SI -> tutorial -> PARTIDA ---------------------
+# Lanzado desde la pregunta, el tutorial vuelve a la PARTIDA (audiencia con Acab). Lanzado
+# desde Controles vuelve al titulo. Es la unica diferencia entre los dos, y aqui se
+# comprueba la primera: el gate es `Tutorial: empieza (19 pasos, vuelve a la partida)` y,
+# tras dejarlo, `Player created: Elias` — con UN solo slot de milagro y sin honda (`stats`).
+tutorialask
+wait 0.6
+press confirm
+wait 1.5
+
+# Dejarlo desde la pausa, que en PC es su unica salida (ESC ya es la pausa del paso 18)
+press pause
+wait 0.6
+shot 105_tut_pausa_dejarlo
+wait 0.2
+press down
+wait 0.12
+press down
+wait 0.12
+press down
+wait 0.25
+press confirm
+wait 2.5
+stats
+wait 0.5
+quit

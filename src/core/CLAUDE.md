@@ -108,9 +108,10 @@ juego pregunta el idioma una sola vez.
 **Los nombres de los profetas ya van traducidos** (Elias -> Elijah, Eliseo -> Elisha) en las
 ~115 cadenas donde aparecen: escenas, lore, encuentros, milagros, objetos, logros, capitulos y
 meta-progreso. Lo que queda en castellano con esos nombres son identificadores y `SDL_Log`, que
-no se pintan. **No recarga nada**: el
-texto se pide con `tr()` en el momento de dibujar, asi que el cambio se ve en el frame
-siguiente.
+no se pintan. Casi todo se pide con `tr()` en el momento de dibujar, asi que el cambio se ve
+en el frame siguiente — pero **"no recarga nada" era falso** y costo un bug: lo que guarda el
+puntero de `tr()` en una estructura de larga vida SI hay que reconstruirlo. Ver
+"Cambiar el idioma EN CALIENTE", mas abajo.
 
 Cobertura: **todo**. Menus, HUD, mapa, cartas de eleccion, mensajes y banners del Engine,
 El Santuario, los cinco paneles del Codice, las cinco tablas de contenido (items, milagros,
@@ -208,3 +209,34 @@ de `arena_rect_world()` y llama a `enter_arena()`, que nace el jefe, sella el va
   control tactil, que un stick que no responde es peor que ninguno.
 
 Guion: **`scripts/entrada_jefe_check.txt`**, con el comando de autoplay nuevo **`entrada`**.
+
+### Cambiar el idioma EN CALIENTE (`Engine::relocalize`, 2026-09-12)
+
+**`tr()` no copia nada: devuelve un puntero al literal del idioma activo en el momento de la
+llamada.** Casi todo el juego lo llama al pintar, así que cambia solo; lo que se rompía es lo
+que GUARDA ese puntero en una estructura de larga vida, porque se queda congelado en el
+idioma de entonces. Cambiar el idioma en Opciones dejaba "Honda de David" en una partida en
+inglés — el usuario lo llamó intolerable, y tenía razón.
+
+`Engine::relocalize()` reconstruye los tres sitios donde eso pasa, y **la llaman los dos
+caminos por los que el idioma puede cambiar**: `set_language` (selector del primer arranque y
+comando `lang`) y `apply_settings_from_save` (la fila de Opciones):
+
+- `ItemRegistry` — nombre y efecto de los 22 objetos (HUD, cartas de elección, Códice).
+  `init()` pasó a ser **idempotente** (`items.clear()` al entrar): sin eso, la segunda
+  llamada duplicaba el catálogo.
+- `ProgressionSystem::upgrades` — las 15 mejoras de El Santuario. `init()` deja `unlocked` a
+  cero, así que detrás va **`sync_progression_from_save()`** o se perderían las compradas.
+- `Engine::boss_bar_name` — el rótulo de la barra del jefe que se esté peleando.
+
+**Si algún día otra estructura de larga vida guarda un `tr()`, va ahí.** Lo transitorio (un
+mensaje del HUD, una carta abierta, una página de historia, el resultado de un diálogo) no
+cuenta: dura segundos y nadie cambia el idioma a mitad.
+
+Nadie guarda un `const ItemDef*` de larga vida, y por eso reconstruir el vector es seguro; si
+algún día alguien lo guardara, quedaría colgando.
+
+Guion: **`scripts/i18n_caliente_check.txt`**. Su gate es el `LOADOUT` de `stats` **en la misma
+partida**: "Honda de David, Agua del Jordán" → `lang 1` → "David's Sling, Water of the Jordan"
+→ `lang 0` → otra vez el primero, más una línea `i18n: registros re-traducidos (...)` por
+cambio. Las capturas cubren El Santuario y la barra del jefe.

@@ -255,3 +255,22 @@ Guiones: `menus_tactil_check.txt` (re-pinneado entero) y el bloque de rejilla de
 rejilla todo lo tocable estaba centrado en x=160, que es justo el punto que el desfase no
 mueve. Su gate es que un toque en el **pilar negro** (px 40) NO pulse nada: sin descontar el
 letterbox caeria en x=10,7 unidades, dentro de la columna izquierda.
+
+### `touch_ui_rect`: un botón de pantalla DENTRO de la partida (2026-09-12)
+
+El tutorial (`game/tutorial.h`) trajo el primer botón que convive con el HUD y con el dedo
+que dispara, y destapó dos cosas:
+
+- **El rect de siempre del SALTAR pisa el minimapa.** `skip_button_rect()` es {262,4,52,14} y
+  `HUD::minimap_rect` empieza en x=271: en las escenas no importa (ahí no hay HUD), pero en el
+  tutorial el toque abría el mapa grande en vez de saltar. El del tutorial tiene rect propio,
+  `tutorial_skip_rect()` = {196,4,52,14}, en el hueco entre el panel de vitales y el minimapa.
+  Es la única excepción a "el botón de SALTAR no se mueve", y es por el HUD de debajo.
+- **`Input::touch_ui_rect`**: se comprueba en `process_touch` ANTES del minimapa y del
+  "tap = ataque", y a diferencia de los dos **no mata el tap** — quien lo dibuja lo recoge con
+  `peek_tap`. Sin él, tocar ese botón disparaba el cayado de propina. {0,0,0,0} = no hay.
+  Lo escribe `Engine::update` junto a `touch_minimap`, con las mismas condiciones.
+
+Guion: **`scripts/tutorial_tactil_check.txt`** (`--touch`). Su gate visual es que **ningún
+cartel del tutorial nombre una tecla** — mitad izquierda, mitad derecha, DASH, USAR, ARMA,
+celdas del HUD — y el del log, `Tutorial: saltado en el paso N` al tocar (222,11).

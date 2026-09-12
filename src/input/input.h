@@ -189,6 +189,12 @@ struct Input {
     Rect touch_minimap  = {0, 0, 0, 0};
     bool touch_map_open = false;
 
+    // Boton de pantalla que NO es del HUD y que se atiende DENTRO de la partida: hoy solo el
+    // SALTAR del tutorial, que vive sobre el mundo con el HUD debajo. Se comprueba antes que
+    // el "tap = ataque" y hace return CONSERVANDO el tap, para que quien lo dibuja lo recoja
+    // con peek_tap. Sin esto, tocarlo disparaba el cayado de paso. {0,0,0,0} = no hay.
+    Rect touch_ui_rect = {0, 0, 0, 0};
+
     // Viewport del renderer en fracciones de ventana. Los eventos de dedo de SDL estan
     // normalizados a la VENTANA, no al area de juego: sin esta transformacion un movil de
     // 20:9 responde a los botones ~200 px a la derecha de donde se dibujan. El raton ya

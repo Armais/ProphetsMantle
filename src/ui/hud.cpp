@@ -291,8 +291,17 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
 // minimo que se acierta sin mirar.
 Rect skip_button_rect() { return {262.0f, 4.0f, 52.0f, 14.0f}; }
 
+// El del TUTORIAL va en otro sitio, y es la unica excepcion a "el boton de SALTAR no se
+// mueve": alli hay HUD debajo y el rect de siempre PISA el minimapa (`HUD::minimap_rect`
+// empieza en x=271), asi que el dedo abria el mapa grande en vez de saltar. Este hueco —
+// entre el panel de vitales, que acaba hacia x=145, y el minimapa — no lo ocupa nada.
+Rect tutorial_skip_rect() { return {196.0f, 4.0f, 52.0f, 14.0f}; }
+
 void draw_skip_button(Renderer& renderer, f32 time, bool pressed) {
-    const Rect r = skip_button_rect();
+    draw_skip_button_at(renderer, skip_button_rect(), time, pressed);
+}
+
+void draw_skip_button_at(Renderer& renderer, Rect r, f32 time, bool pressed) {
     const f32 k = 0.72f + 0.28f * std::sin(time * 2.6f);   // respira: se ve que es un boton
     const char* label = tr("SALTAR >>", "SKIP >>");
     renderer.draw_panel({r.x, r.y + 1.4f, r.w, r.h}, {0, 0, 0, 120}, 4.0f);
@@ -1508,7 +1517,11 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     int dy = boss.grid_y - cur.grid_y;
 
     char buf[48];
-    if (dx == 0 && dy == 0) {
+    // En el tutorial el mapa es el del capitulo 1 —el que se va a jugar al salir— y no la
+    // sala de tres piezas que se esta pisando: una direccion de jefe aqui seria mentira.
+    if (ctx.tutorial) {
+        snprintf(buf, sizeof(buf), "%s", tr("Mapa del cap. 1", "Chapter 1 map"));
+    } else if (dx == 0 && dy == 0) {
         bool cleared = ctx.zone && ctx.zone->boss_cell >= 0 && ctx.zone->cells[ctx.zone->boss_cell].cleared;
         // "%s" y no el texto como formato: clang de Android compila con -Wformat-security
         // como ERROR, y un literal traducible nunca deberia hacer de cadena de formato.

@@ -21,6 +21,7 @@
 #include "game/rooms.h"
 #include "game/items.h"
 #include "game/events.h"
+#include "game/tutorial.h"
 #include "ui/menus.h"
 #include "ui/hud.h"
 #include "ui/story.h"
@@ -411,6 +412,32 @@ struct Engine {
     void update_scene_walk(f32 dt);
     void finish_scene(bool skipped);
 
+    // --- El tutorial (game/tutorial.h, 2026-09-12) --------------------------------------
+    // Se ofrece al pulsar NUEVA PARTIDA y se juega en su PROPIO mapa de tres salas: no vive
+    // dentro del capitulo 1 ni toca el mundo fijo de ninguno. Corre sobre GameScene::Playing
+    // con `tutorial.active` puesto — el bloque de Playing son 400 lineas de combate, camara,
+    // milagros y HUD que no tiene sentido duplicar — y las tres salas se montan sobre
+    // `current_room_data` igual que el escenario de una escena guionizada (start_scene).
+    //
+    // Lo que el tutorial NO puede tocar, y como se resuelve:
+    //   - el GUARDADO: `tutorial_save_backup` guarda `save.data` entera al empezar y
+    //     finish_tutorial la restaura. Sale mas barato que sembrar guardas por los sitios
+    //     que tocan total_kills, miracles_cast y los logros mientras se juega.
+    //   - las OFRENDAS: se cuentan para su paso pero no se ingresan (guarda en el bloque de
+    //     hallazgos de `update`). Jugar el tutorial no regala moneda meta.
+    //   - la MUERTE: la vida se sujeta en 1 en update_tutorial, antes de que la comprobacion
+    //     de muerte pueda verla en cero.
+    TutorialSystem tutorial;
+    SaveData tutorial_save_backup;
+    void start_tutorial(TutorialThen then);
+    void update_tutorial(f32 dt);      // avanza el paso; lo llama el bloque de Playing
+    void tutorial_enter_room(int index);
+    void tutorial_probe();                              // refresca las sondas del frame
+    bool tutorial_goal_done(TutorialGoal goal, f32 dt); // ¿se ha hecho lo que pedia el paso?
+    void tutorial_setup_step();                         // lo que el paso nuevo pone en el mundo
+    void finish_tutorial();            // termina o se salta: restaura y sale a donde toque
+    void render_tutorial_card();       // el cartel de dos lineas + el boton de SALTAR
+
     // --- Zona continua (2026-09-10) ---------------------------------------------------
     // Un capitulo es UN mapa: las celdas de la rejilla (40x22, la unidad de generacion pura)
     // cosidas en `current_room_data` (RoomType::Zone). La camara recorre la zona entera; los
@@ -455,7 +482,11 @@ struct Engine {
     void update_music();
 
     // Meta-progresion (systems/progression.h) y Santuario
-    void sync_progression_from_save();   // save.data -> progression (arranque)
+    void sync_progression_from_save();
+    // Vuelve a traducir lo que guarda un `tr()` de larga vida (objetos, mejoras de El
+    // Santuario y el rotulo del jefe en curso). Lo llaman los DOS caminos por los que el
+    // idioma puede cambiar. Detalle y por que en engine.cpp.
+    void relocalize();   // save.data -> progression (arranque)
     void sync_progression_to_save();     // progression -> save.data
     // Mejoras compradas -> SaveData::items_unlocked. Idempotente: se llama al comprar y al
     // arrancar, y NUNCA quita bits (un objeto desbloqueado no se vuelve a bloquear solo).

@@ -185,8 +185,20 @@ void MenuSystem::update(Input& input) {
     Vec2 p;
 
     // Pantallas sin filas: tocar en cualquier sitio acepta y sale.
-    if (current == MenuScreen::Controls || current == MenuScreen::Victory) {
+    if (current == MenuScreen::Victory) {
         if (input.take_tap(p)) input.pulse(Action::Confirm);
+        return;
+    }
+    // Controles: un solo boton (jugar el tutorial). Tocar FUERA vuelve, que es lo que esta
+    // pantalla hacia siempre; tocarlo a el, lo juega.
+    if (current == MenuScreen::Controls) {
+        if (rect_screen != current) return;
+        if (!input.take_tap(p)) return;
+        const bool on_button = row_rect_count > 0 && row_rects[0].contains(p);
+        selected_option = 0;
+        input.pulse(on_button ? Action::Confirm : Action::Cancel);
+        SDL_Log("Menu tap: pantalla=%d fila=%d (%.0f,%.0f)",
+                static_cast<int>(current), on_button ? 0 : -1, p.x, p.y);
         return;
     }
     // Los rects se apuntan al PINTAR, asi que el primer frame de una pantalla nueva aun
@@ -228,6 +240,7 @@ void MenuSystem::render(Renderer& renderer) {
         case MenuScreen::Victory:   render_victory(renderer); break;
         case MenuScreen::Settings:  render_settings(renderer); break;
         case MenuScreen::Controls:  render_controls(renderer); break;
+        case MenuScreen::TutorialAsk: render_tutorial_ask(renderer); break;
         default: break;
     }
 }
@@ -406,7 +419,10 @@ void MenuSystem::render_pause(Renderer& renderer) {
     renderer.draw_text_centered(tr("PAUSA", "PAUSED"), 50, Color::white(), 2);
 
     option_count = 4;
-    const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"), tr("Salir", "Quit")};
+    // En el tutorial la ultima fila es SU salida y lo dice: en PC no hay boton de SALTAR
+    // (ESC ya es esta pausa, que el paso 18 enseña) y esta es la unica puerta.
+    const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"),
+                             in_tutorial ? tr("Dejar el tutorial", "Leave the tutorial") : tr("Salir", "Quit")};
 
     // En tactil las cuatro pildoras se comen la pantalla de 70 a 167. El pie "Toca una
     // opcion" sobra en cuanto cada opcion tiene el tamaño de un dedo: explicaba lo obvio y
@@ -617,37 +633,104 @@ void MenuSystem::render_controls(Renderer& renderer) {
 
     // En un telefono no hay ni una sola de las teclas de abajo: la pantalla de ayuda tiene
     // que contar los gestos que existen de verdad, o es peor que no tenerla.
+    // El boton del tutorial es la UNICA fila de esta pantalla (y por eso `option_count` es
+    // 1): tocarlo lo juega, y tocar fuera vuelve — que es lo que la pantalla hacia siempre.
+    // El rect sale de la misma formula que lo pinta, como en el resto de la capa.
+    option_count = 1;
+    const char* play = tr("Jugar el tutorial", "Play the tutorial");
+    const f32 btn_w = menu_button_width(renderer, play, 0.9f);
+    const f32 btn_y = touch_hints ? 150.0f : 152.0f;
+    const f32 btn_h = touch_hints ? 20.0f : 14.0f;
+    const Rect btn  = {(static_cast<f32>(Config::GAME_WIDTH) - btn_w) * 0.5f, btn_y, btn_w, btn_h};
+    const bool down = press_active && btn.contains(press_pos);
+
     if (touch_hints) {
-        renderer.draw_text_centered(tr("Moverse", "Move"), 40, label);
-        renderer.draw_text_centered(tr("Pulgar en la mitad izquierda: el stick nace ahí", "Left half: the stick appears under your thumb"), 51, value, 0.8f);
+        renderer.draw_text_centered(tr("Moverse", "Move"), 38, label, 0.95f);
+        renderer.draw_text_centered(tr("Pulgar en la mitad izquierda: el stick nace ahí", "Left half: the stick appears under your thumb"), 48, value, 0.75f);
 
-        renderer.draw_text_centered(tr("Atacar y apuntar", "Attack and aim"), 65, label);
-        renderer.draw_text_centered(tr("Toca la mitad derecha; mantén y arrastra para apuntar", "Tap the right half; hold and drag to aim"), 76, value, 0.8f);
+        renderer.draw_text_centered(tr("Atacar y apuntar", "Attack and aim"), 60, label, 0.95f);
+        renderer.draw_text_centered(tr("Toca la mitad derecha; mantén y arrastra para apuntar", "Tap the right half; hold and drag to aim"), 70, value, 0.75f);
 
-        renderer.draw_text_centered(tr("Botones", "Buttons"), 90, label);
-        renderer.draw_text_centered(tr("DASH · USAR · ARMA · ORAR (solo los que apliquen)", "DASH · USE · WEAPON · PRAY (only those that apply)"), 101, value, 0.8f);
+        renderer.draw_text_centered(tr("Botones", "Buttons"), 82, label, 0.95f);
+        renderer.draw_text_centered(tr("DASH · USAR · ARMA · ORAR (solo los que apliquen)", "DASH · USE · WEAPON · PRAY (only those that apply)"), 92, value, 0.75f);
 
-        renderer.draw_text_centered(tr("Milagros", "Miracles"), 115, label);
-        renderer.draw_text_centered(tr("Toca su celda para lanzarlo; mantén para ver su ficha", "Tap its cell to cast; hold to read its card"), 126, value, 0.8f);
+        renderer.draw_text_centered(tr("Milagros", "Miracles"), 104, label, 0.95f);
+        renderer.draw_text_centered(tr("Toca su celda para lanzarlo; mantén para ver su ficha", "Tap its cell to cast; hold to read its card"), 114, value, 0.75f);
 
-        renderer.draw_text_centered(tr("Mapa: toca el minimapa     Pausa: II o el botón atrás", "Map: tap the minimap     Pause: II or the back button"), 142, value, 0.8f);
-        renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 156, label, 0.75f);
-        renderer.draw_text_centered(tr("Toca para volver", "Tap to go back"), 170, {100, 90, 80, 180}, 0.85f);
+        renderer.draw_text_centered(tr("Mapa: toca el minimapa     Pausa: II o el botón atrás", "Map: tap the minimap     Pause: II or the back button"), 128, value, 0.75f);
+        renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 140, label, 0.72f);
+
+        draw_menu_button(renderer, btn, play, down, false, 0.9f);
+        mark_row_rect(0, {16.0f, btn_y - 4.0f, static_cast<f32>(Config::GAME_WIDTH) - 32.0f, btn_h + 8.0f});
+        renderer.draw_text_centered(tr("Toca fuera para volver", "Tap outside to go back"), 176, {100, 90, 80, 180}, 0.7f);
         return;
     }
 
-    renderer.draw_text_centered(tr("Movimiento", "Movement"), 50, label);
-    renderer.draw_text_centered(tr("WASD / Flechas", "WASD / Arrows"), 62, value);
+    renderer.draw_text_centered(tr("Movimiento", "Movement"), 46, label);
+    renderer.draw_text_centered(tr("WASD / Flechas", "WASD / Arrows"), 58, value);
 
-    renderer.draw_text_centered(tr("Ataque", "Attack"), 74, label);
-    renderer.draw_text_centered(tr("K (mantener) — dispara hacia donde te mueves", "K (hold) — shoots where you move"), 86, value, 0.9f);
+    renderer.draw_text_centered(tr("Ataque", "Attack"), 70, label);
+    renderer.draw_text_centered(tr("K (mantener) — dispara hacia donde te mueves", "K (hold) — shoots where you move"), 82, value, 0.9f);
 
-    renderer.draw_text_centered(tr("Arma secundaria", "Secondary weapon"), 100, label);
-    renderer.draw_text_centered(tr("I / clic derecho — Honda o Vara, si la llevas", "I / right click — Sling or Rod, if you have one"), 112, value, 0.9f);
+    renderer.draw_text_centered(tr("Arma secundaria", "Secondary weapon"), 94, label);
+    renderer.draw_text_centered(tr("I / clic derecho — Honda o Vara, si la llevas", "I / right click — Sling or Rod, if you have one"), 106, value, 0.9f);
 
-    renderer.draw_text_centered(tr("Dash: ESPACIO / J     Consumible: R     Orar: P", "Dash: SPACE / J     Consumable: R     Pray: P"), 130, value, 0.8f);
-    renderer.draw_text_centered(tr("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", "Miracles: Q / E / F     Map: TAB     Pause: ESC"), 142, value, 0.8f);
-    renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 156, label, 0.75f);
+    renderer.draw_text_centered(tr("Dash: ESPACIO / J     Consumible: R     Orar: P", "Dash: SPACE / J     Consumable: R     Pray: P"), 122, value, 0.8f);
+    renderer.draw_text_centered(tr("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", "Miracles: Q / E / F     Map: TAB     Pause: ESC"), 132, value, 0.8f);
+    renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 138, label, 0.75f);
 
-    renderer.draw_text_centered(tr("[ENTER/ESC] Volver", "[ENTER/ESC] Back"), 170, {100, 90, 80, 180}, 0.85f);
+    draw_menu_button(renderer, btn, play, true, false, 0.9f);
+    mark_row_rect(0, menu_hit_rect(0, btn_y, btn_h + 6.0f, btn_h, btn_w));
+    // 170, y no 174: `draw_text` ancla por arriba y una linea a 0,8 ocupa ~9 unidades, asi
+    // que a 174 la ultima fila se salia por el filo de las 180 (se vio en la captura).
+    renderer.draw_text_centered(tr("[ENTER] jugarlo    [ESC] volver", "[ENTER] play it    [ESC] back"),
+                                170, {120, 108, 96, 200}, 0.8f);
+}
+
+// =============================================================================
+// "¿Quieres el tutorial?" (game/tutorial.h)
+// =============================================================================
+// Sale al pulsar Nueva Partida, y es lo unico que separa al jugador de su primera sala: dos
+// botones y fuera. Se pregunta SIEMPRE, sin bit en el guardado — decision del usuario: quien
+// repite sabe decir que no, y un tutorial que se decide solo sorprende a quien lo queria.
+void MenuSystem::render_tutorial_ask(Renderer& renderer) {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
+
+    // Mismo fondo que el titulo: se viene de ahi y no hay por que cortar la estampa.
+    renderer.clear({10, 8, 16, 255});
+    constexpr int BANDS = 30;
+    for (int i = 0; i < BANDS; i++) {
+        f32 k = 1.0f - static_cast<f32>(i) / BANDS;
+        renderer.draw_rect({0, H * i / BANDS, W, H / BANDS + 0.5f},
+                           {static_cast<u8>(58 * k), static_cast<u8>(30 * k), static_cast<u8>(34 * k), 255});
+    }
+    if (title_bg != TEXTURE_NONE)
+        renderer.draw_sprite_rect(title_bg, {0, 0, 1280, 720}, {0, 0, W, H}, {255, 255, 255, 255});
+    if (renderer.vignette_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 165});
+    if (title_bg != TEXTURE_NONE && renderer.shadow_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {40, 44, 240, 126}, {8, 6, 14, 180});
+
+    renderer.draw_text_centered(tr("ANTES DE EMPEZAR", "BEFORE YOU BEGIN"), 40, Color::elias_gold(), 1.3f);
+    renderer.draw_text_centered(tr("¿Quieres jugar el tutorial?", "Do you want to play the tutorial?"),
+                                60, {205, 184, 142, 235}, 0.95f);
+    renderer.draw_text_centered(tr("Enseña los controles, la fe, los milagros y las ofrendas",
+                                   "It teaches the controls, faith, miracles and offerings"),
+                                72, {150, 135, 105, 215}, 0.7f);
+
+    option_count = 2;
+    const char* options[] = {tr("Sí, enséñame", "Yes, teach me"), tr("No, al capítulo 1", "No, to chapter 1")};
+    draw_button_column(renderer, options, option_count,
+                       {94.0f, 17.0f, 13.0f}, {92.0f, 28.0f, 22.0f}, 1.0f);
+
+    // Los dos pies van ARRIBA de donde iban: a 146/160 el orillo del manto de la estampa
+    // cruza justo por detras y el texto apagado se perdia encima (se vio en la captura).
+    renderer.draw_text_centered(touch_hints ? tr("Se puede dejar a medias cuando quieras",
+                                                 "You can quit it whenever you like")
+                                            : tr("[W/S]  ·  [ENTER]", "[W/S]  ·  [ENTER]"),
+                                touch_hints ? 130.0f : 132.0f, {130, 118, 104, 215}, 0.75f);
+    renderer.draw_text_centered(tr("Se repite desde Controles, en el menú",
+                                   "Replay it from Controls, in the menu"),
+                                touch_hints ? 142.0f : 143.0f, {116, 105, 94, 195}, 0.66f);
 }

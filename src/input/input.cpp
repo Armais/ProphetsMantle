@@ -435,6 +435,10 @@ void Input::process_touch(const SDL_Event& event) {
             tap_active = false;
             return;
         }
+        // Boton de pantalla ajeno al HUD (el SALTAR del tutorial). Va ANTES del minimapa y
+        // del "tap = ataque", y a diferencia de ellos NO mata el tap: quien lo pinta lo
+        // recoge con peek_tap. Sin esto, tocarlo disparaba el cayado de propina.
+        if (touch_ui_rect.w > 0.0f && touch_ui_rect.contains(touch_pos)) return;
         // Tocar el minimapa abre el mapa grande (mismo rect que dibuja el HUD).
         if (touch_minimap.w > 0.0f && touch_minimap.contains(touch_pos)) {
             touch_map_open = true;

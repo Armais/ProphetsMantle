@@ -1,0 +1,42 @@
+# Verificacion: los carteles del tutorial en INGLES (game/tutorial.h, 2026-09-12)
+# Uso:  MANTLE.exe --script scripts/tutorial_en_check.txt
+#
+# Son 20 pares tr() (19 pasos + el cartel de la puerta) y el gate es VISUAL: que ninguno
+# desborde su panel ni se quede a medias. El panel mide 236 unidades y `render_tutorial_card`
+# baja la escala de lo que no quepa, asi que un texto largo no se sale: se encoge — y eso
+# tambien hay que verlo, porque a 0,5 de escala ya no se lee de un vistazo.
+#
+# GATE DEL LOG: `Tutorial (autoplay): paso N/19` por cada salto, sin ninguna linea de error.
+
+lang 1
+wait 1.0
+tutorial 1
+wait 1.3
+shot 120_en_move
+tutorial 2
+wait 1.3
+shot 121_en_attack
+tutorial 5
+wait 1.3
+shot 122_en_health
+tutorial 7
+wait 1.3
+shot 123_en_faith
+tutorial 10
+wait 1.3
+shot 124_en_miracle3
+tutorial 12
+wait 1.3
+shot 125_en_faithtier
+tutorial 15
+wait 1.3
+shot 126_en_choice
+tutorial 16
+wait 1.3
+shot 127_en_offering
+tutorial 19
+wait 1.3
+shot 128_en_objective
+wait 0.3
+lang 0
+quit

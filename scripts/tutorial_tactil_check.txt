@@ -1,0 +1,55 @@
+# Verificacion: el tutorial con el dedo (game/tutorial.h, 2026-09-12)
+# Uso:  MANTLE.exe --touch --script scripts/tutorial_tactil_check.txt
+#
+# --touch es OBLIGATORIO: en tactil los carteles hablan de DEDOS y no de teclas (la regla
+# de `src/input/CLAUDE.md`), y el boton de SALTAR solo existe aqui — en PC la salida es la
+# fila "Dejar el tutorial" de la pausa, porque ESC ya es la pausa que el paso 18 enseña.
+#
+# GATES DEL LOG:
+#   - `Tutorial: empieza`, y luego `Tutorial: saltado en el paso N` al tocar SALTAR.
+#   - Ni una linea `Input: tap descartado sin leer`.
+# GATE VISUAL: en las capturas, NI UNA tecla en los carteles (nada de "W A S D", "K", "R",
+#   "TAB", "ESC"): mitad izquierda, mitad derecha, DASH, USAR, ARMA, celdas del HUD.
+
+lang 0
+wait 1.0
+
+# El primer toque puede caer en el selector de idioma del primer arranque; si el juego ya
+# esta en el titulo, cae en el canal muerto entre columnas y no hace nada.
+touch 160 100
+wait 0.2
+untouch 160 100
+wait 0.8
+
+tutorial
+wait 1.6
+shot 105_tuttactil_s1_mover
+
+# Los carteles de dedo de cada sala: se salta directo a un paso de cada una.
+tutorial 3
+wait 1.4
+shot 106_tuttactil_honda
+tutorial 8
+wait 1.4
+shot 107_tuttactil_milagro
+tutorial 17
+wait 1.4
+shot 108_tuttactil_mapa
+
+# El boton de SALTAR del tutorial: rect {196, 4, 52, 14}, centro en (222, 11). NO es el
+# {262,4} de las escenas: ahi pisaria el minimapa, y el toque abria el mapa en vez de saltar.
+touch 222 11
+wait 0.3
+shot 109_tuttactil_saltar_pulsado
+untouch 222 11
+wait 1.2
+shot 110_tuttactil_tras_saltar
+
+# La pregunta de Nueva Partida con el dedo: "Si" es la primera fila (y 92..120 en tactil).
+tutorialask
+wait 0.8
+shot 111_tuttactil_pregunta
+wait 0.3
+press cancel
+wait 0.6
+quit

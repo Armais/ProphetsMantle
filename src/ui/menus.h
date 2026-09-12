@@ -12,6 +12,7 @@ enum class MenuScreen : u8 {
     Title,
     Settings,
     Controls,
+    TutorialAsk,   // "¿Quieres el tutorial?" — sale al pulsar Nueva Partida (game/tutorial.h)
     PauseMenu,
     GameOver,
     Victory
@@ -86,6 +87,9 @@ struct MenuSystem {
     // el Engine desde Input::ui_press, y es lo que sustituye al resaltado de seleccion.
     bool press_active = false;
     Vec2 press_pos    = {0, 0};
+    // Se esta jugando el tutorial: la ultima fila de la pausa deja de ser "Salir" y pasa a
+    // ser la salida del tutorial, que en PC es la unica (ESC ya es la pausa que enseña).
+    bool in_tutorial  = false;
 
     void update(Input& input);
     void render(Renderer& renderer);
@@ -115,4 +119,5 @@ private:
     void render_victory(Renderer& renderer);
     void render_settings(Renderer& renderer);
     void render_controls(Renderer& renderer);
+    void render_tutorial_ask(Renderer& renderer);
 };

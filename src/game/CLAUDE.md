@@ -218,3 +218,36 @@ combate.
 
 Si algún día aparecen leprosos, que sea como **NPC a los que sanar** (encuentro de
 `game/events.h`), nunca como enemigos.
+
+### El tutorial: mapa propio de tres salas (`tutorial.h/cpp`, 2026-09-12)
+
+Se ofrece al pulsar **Nueva Partida** (pregunta de dos botones) y se juega en SU mapa, no
+dentro del capítulo 1: no toca el mundo fijo de ningún capítulo ni entra en `floor_map`.
+Las decisiones de diseño, tomadas por el usuario, están en la cabecera de `tutorial.h` y no
+se re-discuten. Lo que hay que saber antes de tocarlo:
+
+- **Corre sobre `GameScene::Playing`** con `tutorial.active` puesto. No es una escena nueva:
+  el bloque de Playing son 400 líneas de combate, cámara, milagros y HUD que no tiene sentido
+  duplicar. Las tres salas se montan sobre `current_room_data` igual que el escenario de una
+  escena guionizada (`Engine::start_scene`), y se deshacen solas al salir.
+- **19 pasos** (`TUTORIAL_STEPS`): 13 se cierran HACIENDO la acción y 6 por tiempo (los que
+  no son una tecla: qué es la fe, sus grados, la carta de elección, la pausa, el objetivo).
+  Las sondas están en `Engine::tutorial_goal_done` y **miran el mundo** en vez de que medio
+  motor tenga que avisar. Dos no son evidentes: el milagro se detecta por el **flanco del
+  enfriamiento** (`Player::last_event` lo limpia el bloque de Playing antes), y las tinajas
+  y el matorral **contando los tiles que quedan**.
+- **El equipo del tutorial NO viaja** y **el guardado tampoco se toca**: `start_tutorial`
+  copia `SaveData` entera y `finish_tutorial` la restaura. Sale más barato que sembrar
+  guardas por cada sitio que toca `total_kills`, `miracles_cast` o los logros al jugar. La
+  ofrenda del paso 16 se cuenta pero **no se ingresa**.
+- **No se puede perder**: `update_tutorial` sujeta la vida en 1 antes de que la comprobación
+  de muerte la vea en cero. Los enemigos sí pegan, que es lo que hace que el dash signifique
+  algo.
+- **Tres cosas de la colocación se decidieron MIRANDO la captura, no razonando**: nada que el
+  paso mande mirar puede ir en las filas 2-3 de un interior (ahí va el cartel, y=34..62) ni a
+  más de dos tiles por encima del profeta en el exterior; el altar va **descentrado**, porque
+  en la columna del profeta se rezaba sin querer al cruzar hacia la puerta; y los escondrijos
+  van a **cuatro tiles**, porque un tiro alcanza 120 unidades (7,5 tiles) y más lejos no se
+  podían abrir sin caminar hasta ellos.
+- Guiones: `tutorial_check.txt` (los 19 pasos + las dos pantallas nuevas + el camino a la
+  partida), `tutorial_tactil_check.txt` (`--touch`) y `tutorial_en_check.txt`.

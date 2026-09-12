@@ -105,7 +105,14 @@ inline StaffSkin get_staff_skin(u32 id) {
 struct ItemRegistry {
     std::vector<ItemDef> items;
 
+    // IDEMPOTENTE a proposito: `tr()` devuelve un puntero al literal del idioma que este
+    // activo EN ESE MOMENTO, asi que al cambiar de idioma hay que volver a construir el
+    // registro entero (Engine::relocalize). Sin el clear, la segunda llamada duplicaba los
+    // 22 objetos. Nadie guarda un `const ItemDef*` de larga vida, asi que reconstruir el
+    // vector es seguro.
     void init() {
+        items.clear();
+
         // === WEAPONS ===
         items.push_back({0, tr("Honda de David", "David's Sling"),
             tr("Ataque a distancia secundario", "Secondary ranged attack"), ItemCategory::Weapon,

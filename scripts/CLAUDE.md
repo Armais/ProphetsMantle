@@ -193,3 +193,49 @@ esa y ya caia en "Continuar"— y el guion pasaba igual.
   ajustes sobreviven entre sesiones: si la pasada anterior lo dejo en ingles, el gate busca
   "Cuervos de Querit" y el log dice "Ravens of Cherith". Y **contesta al selector de idioma**
   antes de nada, por lo mismo que `menus_tactil_check`.
+
+## El tutorial (2026-09-12)
+
+Tres guiones nuevos y dos comandos:
+
+- **`tutorial [paso]`** lanza el tutorial desde donde sea y, con el número, salta DIRECTO a
+  ese paso (1-based) con su sala ya montada — sin eso, fotografiar la sala 3 exige jugarse
+  doce pasos. Vuelve al TÍTULO al acabar, para que el guion siga mandando en vez de caer en
+  una partida.
+- **`tutorialask`** abre la pregunta de Nueva Partida. Hace falta porque esa pregunta está
+  **suprimida bajo autoplay a propósito**: treinta guiones esperan entrar a jugar con un
+  `press confirm` en el título, y con la pregunta de por medio elegirían "Sí, enséñame".
+
+Guiones: **`tutorial_check.txt`** (los 19 pasos, las dos pantallas nuevas y el camino
+pregunta → tutorial → partida), **`tutorial_tactil_check.txt`** (`--touch`) y
+**`tutorial_en_check.txt`** (los 20 pares `tr()`, gate visual).
+
+Gates de `tutorial_check`: las 19 líneas `Tutorial: paso N/19 cumplido`, y las de los pasos
+jugables (1 2 3 4 6 8 9 10 11 13 14 16 17) tienen que decir **por la acción** — si uno se
+cierra "informativo" es que su sonda no funciona. Más: `Tutorial: fin (paso 19 de 19)`,
+**cero `Secret offerings`** (la ofrenda del paso 16 se cuenta pero no se ingresa) y, tras
+dejar el tutorial desde la pausa, un `LOADOUT` con **slots 1** y **objetos: -** — el equipo
+del tutorial no viaja a la partida.
+
+Tres trampas que costaron una pasada cada una:
+
+- **`walk` sigue vivo al cambiar de sala** y empuja al profeta dentro de la sala nueva. En la
+  sala 2 eso lo llevaba encima del altar y lo rezaba tres pasos antes de tiempo (se arregló
+  descentrando el altar, pero el guion además le da un destino nuevo al entrar).
+- **Un tiro alcanza 120 unidades** (`Config::PROJECTILE_RANGE`), 7,5 tiles: un blanco más
+  lejos no se abre sin caminar hasta él, y el paso se quedaba colgado sin decir por qué.
+- **Toda recogida caduca a los 14 s**, así que la ofrenda del paso 16 se siembra cuando ESE
+  paso empieza y se repone si el jugador se entretiene.
+
+## El idioma en caliente (2026-09-12)
+
+**`scripts/i18n_caliente_check.txt`**. `tr()` devuelve un puntero al literal del idioma
+activo EN EL MOMENTO DE LA LLAMADA, asi que lo que guarda ese puntero en una estructura de
+larga vida se quedaba congelado: cambiar el idioma en Opciones dejaba "Honda de David" en una
+partida en ingles. Lo arregla `Engine::relocalize` (detalle en `src/core/CLAUDE.md`).
+
+Gate del log, y es el bueno porque no depende de mirar una captura: el `LOADOUT` de `stats`
+**en la misma partida** pasa de "Honda de David, Agua del Jordan" a "David's Sling, Water of
+the Jordan" con un `lang 1` de por medio, y vuelve con `lang 0`. Mas una linea
+`i18n: registros re-traducidos (...)` por cambio. Las capturas cubren El Santuario (sus 15
+mejoras, con el estado COMPRADO intacto) y el rotulo de la barra del jefe.
