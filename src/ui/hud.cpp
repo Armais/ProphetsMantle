@@ -278,7 +278,7 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
                               : tr("[ENTER] continuar", "[ENTER] continue");
         renderer.draw_text_centered(prompt, H - 6.0f, {200, 185, 160, static_cast<u8>(210 * blink)}, 0.65f);
     }
-    if (view.touch && view.skippable) draw_skip_button(renderer, time);
+    if (view.touch && view.skippable) draw_skip_button(renderer, time, view.skip_pressed);
     (void)tileset;
 }
 
@@ -291,19 +291,24 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
 // minimo que se acierta sin mirar.
 Rect skip_button_rect() { return {262.0f, 4.0f, 52.0f, 14.0f}; }
 
-void draw_skip_button(Renderer& renderer, f32 time) {
+void draw_skip_button(Renderer& renderer, f32 time, bool pressed) {
     const Rect r = skip_button_rect();
     const f32 k = 0.72f + 0.28f * std::sin(time * 2.6f);   // respira: se ve que es un boton
     const char* label = tr("SALTAR >>", "SKIP >>");
     renderer.draw_panel({r.x, r.y + 1.4f, r.w, r.h}, {0, 0, 0, 120}, 4.0f);
+    // Mientras el dedo esta encima el boton se enciende, igual que los de menu. Sin esto el
+    // toque no daba NINGUNA señal —el tap se resuelve al soltar— y como el tramo siguiente
+    // es otra pantalla estatica con este mismo boton en el mismo pixel, saltar parecia no
+    // hacer nada. Que se vea que el boton responde es la mitad del arreglo.
     renderer.draw_panel({r.x - 1.0f, r.y - 1.0f, r.w + 2.0f, r.h + 2.0f},
-                        {214, 176, 96, static_cast<u8>(110.0f + 90.0f * k)}, 4.8f);
-    renderer.draw_panel(r, {40, 33, 30, 238}, 4.0f);
+                        pressed ? Color{255, 214, 120, 235}
+                                : Color{214, 176, 96, static_cast<u8>(110.0f + 90.0f * k)}, 4.8f);
+    renderer.draw_panel(r, pressed ? Color{188, 132, 38, 255} : Color{40, 33, 30, 238}, 4.0f);
     const f32 sc = 0.62f;
     const f32 lw = renderer.measure_text(label, sc);
     renderer.draw_text(label, r.x + (r.w - lw) * 0.5f,
                        r.y + (r.h - Renderer::TEXT_LINE_UNITS * sc) * 0.5f,
-                       {248, 228, 178, 255}, sc);
+                       pressed ? Color{255, 249, 234, 255} : Color{248, 228, 178, 255}, sc);
 }
 
 void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* const defs[3],

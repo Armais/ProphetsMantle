@@ -139,7 +139,8 @@ bool CinematicSystem::update(Input& in, f32 dt, const Renderer& r) {
     if (auto_timer > 0.0f && t >= auto_timer) advance = true;   // autoplay
 
     if (skip_all) {
-        active = false;
+        active  = false;
+        skipped = true;
         return true;
     }
     if (advance || t >= scenes[scene].duration) {
@@ -298,7 +299,7 @@ void CinematicSystem::render(Renderer& r) const {
                              : tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip"),
                     8.0f, H - 9.0f, with_alpha(Color{214, 204, 190, 255}, a), 0.6f);
     }
-    if (touch_ui) draw_skip_button(r, clock);
+    if (touch_ui) draw_skip_button(r, clock, skip_pressed);
 
     // --- fundido de entrada y salida de cada escena
     f32 veil = 1.0f - smoothstep(t / FADE);

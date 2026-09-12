@@ -55,6 +55,12 @@ struct StorySystem {
     // Lo escribe el Engine antes de renderizar (igual que CinematicSystem::touch_ui): en
     // tactil el pie habla de dedos y se pinta el boton de SALTAR.
     bool touch_ui   = false;
+    // Dedo apoyado sobre el boton de SALTAR: se enciende mientras dura. Lo escribe el
+    // Engine desde Input::ui_press, igual que touch_ui.
+    bool skip_pressed = false;
+    // El ultimo update se cerro por un SALTO y no porque el tramo terminara solo. Lo lee
+    // el Engine para meter el velo negro que hace visible que el salto ha entrado.
+    bool skipped = false;
     StoryThen then  = StoryThen::Play;
 
     // Cache de la pagina actual (se rellena en layout)

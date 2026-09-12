@@ -165,6 +165,16 @@ struct Engine {
     int         sanctuary_row_first = 0;   // mejora que ocupa el hueco 0
     int         sanctuary_row_count = 0;
     Rect        sanctuary_back_rect = {0, 0, 0, 0};
+    // Dedo apoyado en el boton de SALTAR de la caja de dialogo. Va por un campo y no
+    // por una variable local porque la vista se compone dentro de una lambda.
+    bool        dialogue_skip_pressed = false;
+    // Velo negro corto al SALTAR un tramo de escena. Sin el, saltar la apertura del
+    // capitulo dejaba en pantalla la intro cinematica —otra estampa estatica con el mismo
+    // boton de SALTAR en el mismo pixel— y no habia forma de distinguirlo de "el boton no
+    // ha hecho nada". Es un fundido de ENTRADA, no de salida: el tramo cambia en el acto y
+    // lo que se aclara es el nuevo, asi que no añade ni un milisegundo de espera.
+    f32         scene_fade = 0.0f;
+    static constexpr f32 SCENE_FADE_TIME = 0.22f;
     // Filas visibles del panel. En tactil la fila mide 20 unidades para que se pueda tocar
     // (lleva nombre y descripcion, no baja de ahi) y por eso caben cinco en vez de siete.
     int sanctuary_rows() const { return input.touch_ui ? 5 : 7; }

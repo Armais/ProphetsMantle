@@ -293,3 +293,34 @@ los lee.
 Logs de gate: **`Menu tap: pantalla=P fila=F`** y **`Santuario tap: fila=F`** (`-1` = ninguna).
 Un toque que fallaba era mudo, y por eso un guion con las coordenadas podridas pasaba sin
 que saltara nada.
+
+### El boton de SALTAR parecia no funcionar (2026-09-12)
+
+El usuario, con el APK: *"al inicio del capitulo 1, cuando le das a saltar, hay un delay y
+parece que el boton falla al tocarlo"*. No fallaba: eran dos cosas sumadas, y las dos se
+vieron mirando las capturas.
+
+1. **El capitulo 1 arranca con DOS pantallas seguidas** — la audiencia con Acab
+   (`Scene::AUDIENCIA`, escena guionizada) y, al cerrarse, la intro cinematica del capitulo.
+   Como el salto es **tramo a tramo** (decision del usuario), el primer toque llevaba a otra
+   pantalla estatica con el mismo boton de SALTAR **en el mismo pixel**: indistinguible de
+   "no ha pasado nada". Encima la intro entra con su propio fundido de 0,65 s.
+2. **El boton no daba ninguna señal al tocarlo**, y el tap se resuelve al SOLTAR el dedo.
+
+Arreglos, sin tocar la regla de tramo a tramo (el usuario la mantuvo):
+
+- **`draw_skip_button` recibe `pressed`** y se enciende en dorado mientras el dedo esta
+  encima, igual que los botones de menu. El dato sale de `Input::ui_press` y lo reparte
+  `Engine::render` a los tres sitios que comparten el boton: `CinematicSystem::skip_pressed`,
+  `StorySystem::skip_pressed` y `DialogueView::skip_pressed`.
+- **`Engine::scene_fade`**: velo negro de 0,22 s al saltar un tramo. Es un fundido de
+  ENTRADA, no de salida — el tramo cambia en el acto y lo que se aclara es el nuevo — asi que
+  hace visible el salto sin añadir ni un milisegundo de espera. Se dibuja **el ultimo** de
+  `render`, por encima de los botones. Lo arman los tres caminos de salto: `finish_scene(true)`
+  para la escena guionizada, y `CinematicSystem::skipped` / `StorySystem::skipped`, que
+  distinguen "me han saltado" de "he terminado solo".
+
+**Lo que este arreglo NO ha verificado**: el aparato. Se comprobo en PC con `--touch` y por
+captura; en el telefono no habia dispositivo conectado por adb. Para probar de verdad en
+Android hace falta el movil por USB — `adb shell input tap` genera toques del sistema, con el
+letterbox y el DPI reales, y `adb logcat -s SDL/APP:V` enseña las lineas de gate.

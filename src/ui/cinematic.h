@@ -94,6 +94,12 @@ struct CinematicSystem {
     // en tactil el aviso habla de dedos y ademas se pinta el boton de SALTAR, porque un
     // telefono por gestos no tiene boton atras y el toque siempre significa "seguir".
     bool touch_ui    = false;
+    // Dedo apoyado sobre el boton de SALTAR: se enciende mientras dura. Lo escribe el
+    // Engine desde Input::ui_press, igual que touch_ui.
+    bool skip_pressed = false;
+    // El ultimo update se cerro por un SALTO y no porque el tramo terminara solo. Lo lee
+    // el Engine para meter el velo negro que hace visible que el salto ha entrado.
+    bool skipped = false;
 
     // Cache de la escena actual (se rellena en layout: wrap_text asigna memoria)
     std::string wrapped[MAX_LINES];

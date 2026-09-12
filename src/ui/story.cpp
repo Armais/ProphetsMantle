@@ -90,7 +90,8 @@ bool StorySystem::update(Input& input, f32 dt, const Renderer& renderer) {
     }
 
     if (skip_all) {
-        active = false;
+        active  = false;
+        skipped = true;
         return true;
     }
     if (advance) {
@@ -195,7 +196,7 @@ void StorySystem::render(Renderer& renderer) const {
     }
     // El boton NO espera a que se revele todo: quien ya ha leido esta carta quiere salir
     // desde el primer frame.
-    if (touch_ui) draw_skip_button(renderer, clock);
+    if (touch_ui) draw_skip_button(renderer, clock, skip_pressed);
 }
 
 // =============================================================================

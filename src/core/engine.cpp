@@ -444,6 +444,7 @@ void Engine::update(f32 dt) {
     if (banner_timer > 0.0f)  banner_timer  -= dt;
     if (message_timer > 0.0f) message_timer -= dt;
     if (room_fade > 0.0f)     room_fade = std::max(0.0f, room_fade - dt / 0.3f);
+    if (scene_fade > 0.0f)    scene_fade = std::max(0.0f, scene_fade - dt / SCENE_FADE_TIME);
     if (world_flash > 0.0f)   world_flash = std::max(0.0f, world_flash - dt);
 
     // Menu navigation blips (any scene showing a menu)
@@ -459,6 +460,9 @@ void Engine::update(f32 dt) {
         case GameScene::Intro:
             tap_skip_or_advance(input);
             if (cinematic.update(input, dt, renderer)) {
+                // Saltada a mano: el tramo siguiente entra desde negro, o no habria forma
+                // de distinguirlo de "el boton de SALTAR no ha hecho nada".
+                if (cinematic.skipped) { scene_fade = 1.0f; cinematic.skipped = false; }
                 if (cine_then == CineThen::Play) {
                     // Intro de capitulo: se ve una vez por partida, sus capas no vuelven
                     cinematic.unload_art(renderer);
@@ -944,7 +948,10 @@ void Engine::update(f32 dt) {
             // En tactil, un toque en cualquier sitio pasa de linea (story.update ya lee
             // Confirm); sobre el boton de SALTAR se salta la secuencia entera.
             tap_skip_or_advance(input);
-            if (story.update(input, dt, renderer)) finish_story();
+            if (story.update(input, dt, renderer)) {
+                if (story.skipped) { scene_fade = 1.0f; story.skipped = false; }
+                finish_story();
+            }
             break;
 
         case GameScene::Dialogue:
@@ -1003,6 +1010,11 @@ void Engine::render() {
     menus.press_active = input.touch_ui && input.ui_press(menus.press_pos);
     codex.press_active = menus.press_active;
     codex.press_pos    = menus.press_pos;
+    // El boton de SALTAR lo comparten las tres pantallas de escena, y el dato es el mismo.
+    const bool skip_down = menus.press_active && skip_button_rect().contains(menus.press_pos);
+    cinematic.skip_pressed = skip_down;
+    story.skip_pressed     = skip_down;
+    dialogue_skip_pressed  = skip_down;
 
     auto render_world = [this]() {
         const BiomeStyle biome = get_biome_style(state.current_chapter);
@@ -1166,6 +1178,7 @@ void Engine::render() {
             // Solo una escena guionizada se salta entera: el pie lo dice en PC ([ESC]) y en
             // tactil aparece el boton. Un encuentro del pozo no se salta.
             v.skippable = scene_step >= 0;
+            v.skip_pressed = dialogue_skip_pressed;
             if (dialogue.resolved) {
                 v.body = dialogue.result;
             } else if (dialogue.choosing) {
@@ -1203,6 +1216,12 @@ void Engine::render() {
             menus.render(renderer);
             break;
     }
+
+    // El velo del salto va el ULTIMO: tapa la escena entera, botones incluidos.
+    if (scene_fade > 0.0f)
+        renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH),
+                            static_cast<f32>(Config::GAME_HEIGHT)},
+                           {0, 0, 0, static_cast<u8>(245.0f * scene_fade)});
 
     renderer.end_frame();
 
@@ -3444,6 +3463,7 @@ void Engine::update_dialogue(f32 dt) {
         if (tapped_skip) input.take_tap(tp);
         if (tapped_skip || input.is_action_just_pressed(Action::Cancel) ||
             input.is_action_just_pressed(Action::Pause)) {
+            scene_fade = 1.0f;   // que se VEA que el salto ha entrado
             finish_scene(true);
             return;
         }

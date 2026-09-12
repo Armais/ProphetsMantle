@@ -109,6 +109,7 @@ struct DialogueView {
     // (Engine::scene_step >= 0). Un encuentro del pozo no se salta, y si el pie dijera
     // que si, el boton (o el [ESC]) mentiria.
     bool skippable    = false;
+    bool skip_pressed = false;   // dedo apoyado en SALTAR: el boton se enciende
 };
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits = TEXTURE_NONE);
@@ -123,7 +124,7 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
 // la MISMA formula, que es el contrato de todo control tactil del proyecto, y NO se mueve
 // entre pantallas: el mismo sitio siempre, como la fila de accion del HUD.
 Rect skip_button_rect();
-void draw_skip_button(Renderer& renderer, f32 time);
+void draw_skip_button(Renderer& renderer, f32 time, bool pressed = false);
 // Idem para las opciones del encuentro (y del Ascenso, que usa la misma pantalla). El
 // alto de la caja depende de cuantas lineas ocupe el texto, asi que el rect no se puede
 // recalcular a ciegas: lo apunta draw_dialogue y esto lo devuelve. Rect vacio si esa
