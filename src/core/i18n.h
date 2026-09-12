@@ -43,13 +43,13 @@ namespace I18N {
 extern Language current;
 
 inline const char* language_name(Language l) {
-    return (l == Language::EN) ? "English" : "Espanol";
+    return (l == Language::EN) ? "English" : "Espanol";   // solo para el log: ASCII
 }
 
 // Nombre del idioma tal y como se ensena en Opciones (en su propio idioma, que es como se
 // hace: quien no entiende la interfaz actual tiene que reconocer el suyo).
 inline const char* language_label(Language l) {
-    return (l == Language::EN) ? "English" : "Espanol";
+    return (l == Language::EN) ? "English" : "Español";
 }
 
 }  // namespace I18N

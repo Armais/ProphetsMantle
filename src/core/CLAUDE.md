@@ -84,7 +84,31 @@ traduccion **en la misma linea**, que es donde se detecta que una traduccion est
 cambio de no inventar ni mantener sincronizados ~600 ids. `en` vacio o nulo cae al espanol.
 
 El idioma vive en `SaveData::language` (v7), se aplica en `Engine::apply_settings_from_save`
-y se cambia en Opciones o con el comando de autoplay `lang 0|1`. **No recarga nada**: el
+y se cambia en Opciones o con el comando de autoplay `lang 0|1`.
+
+**El selector del primer arranque** (`MenuScreen::Language`, 2026-09-12). Antes de nada, el
+juego pregunta el idioma una sola vez.
+
+- Es la **unica pantalla que NO pasa por `tr()`**: quien todavia no ha elegido no puede leer
+  una pregunta escrita en el idioma que no es el suyo. Rotulo y pie van en los dos a la vez y
+  cada boton lleva el nombre de su lengua EN esa lengua.
+- La respuesta se recuerda en un **bit de `SaveData::settings_flags`** (`SETTING_LANG_CHOSEN`),
+  no en un campo nuevo: un bit mas en esa mascara no cambia el formato del fichero ni pide
+  migracion. `defaults` lo limpia, asi que el selector vuelve a salir tras un reset.
+- **El prologo espera a que se conteste.** Quien lanza el prologo es `main.cpp`, no `init`; con
+  el selector en pantalla pone `Engine::intro_after_language` y es el propio selector quien
+  llama a `start_intro()` al contestarse. Sin eso la pantalla no se veria NUNCA en un arranque
+  real: el prologo tapaba el menu y `change_scene(MainMenu)` devuelve `menus.current` al Title.
+- Vale con dedo y con teclado/mando sin codigo aparte: usa los mismos `mark_row_rect` /
+  `menu_hit_rect` que el resto de menus, y `Cancel` (el boton atras de Android) acepta lo que
+  este marcado — la primera pantalla del juego no puede tener una tecla muerta.
+- Comando de guion **`langmenu`**: olvida la respuesta y abre el selector, para poder
+  fotografiarlo sin borrar el guardado (`scripts/i18n_check.txt`, `ES_00` / `EN_00`).
+
+**Los nombres de los profetas ya van traducidos** (Elias -> Elijah, Eliseo -> Elisha) en las
+~115 cadenas donde aparecen: escenas, lore, encuentros, milagros, objetos, logros, capitulos y
+meta-progreso. Lo que queda en castellano con esos nombres son identificadores y `SDL_Log`, que
+no se pintan. **No recarga nada**: el
 texto se pide con `tr()` en el momento de dibujar, asi que el cambio se ve en el frame
 siguiente.
 

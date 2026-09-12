@@ -53,6 +53,12 @@ constexpr u32 UNLOCK_ELISEO_START  = 1u << 1;   // Empezar la partida como Elise
 // esa es toda la razon de que los ajustes ON/OFF vivan en una mascara y no en bools sueltos.
 constexpr u32 SETTING_RUMBLE       = 1u << 0;   // Vibracion del mando (GDD 4.2), ON por defecto
 constexpr u32 SETTING_TOUCH_RSTICK = 1u << 1;   // Segundo joystick virtual en tactil
+// El selector de idioma del PRIMER arranque (ui/menus.h, MenuScreen::Language) ya se ha
+// contestado. Va aqui y no en un campo nuevo justamente por lo que dice el comentario de
+// arriba: un bit mas en la mascara no cambia el formato del fichero ni pide migracion. Un
+// guardado anterior a esto trae el bit a cero y ve el selector una vez, que es lo correcto:
+// nunca se le pregunto. `defaults` lo limpia, y por eso vuelve a salir tras un reset.
+constexpr u32 SETTING_LANG_CHOSEN  = 1u << 2;
 
 
 struct SaveData {

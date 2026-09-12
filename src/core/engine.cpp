@@ -176,6 +176,13 @@ bool Engine::init(const char* title) {
     faith.init();
     save.init();          // lee el fichero: la meta-progresion tiene que estar viva ya
     apply_settings_from_save();   // idioma, volumenes, mira, sensibilidad y vibracion
+    // PRIMER ARRANQUE: antes del titulo se pregunta el idioma. El arranque no pasa por
+    // change_scene (la escena inicial es MainMenu por defecto), asi que la pantalla se
+    // elige aqui; a partir de ahi `change_scene` siempre devuelve al Title.
+    if (!(save.data.settings_flags & SETTING_LANG_CHOSEN)) {
+        menus.current = MenuScreen::Language;
+        menus.selected_option = (save.data.language == 1) ? 1 : 0;
+    }
     item_registry.init();
     progression.init();
     sync_progression_from_save();
@@ -468,7 +475,28 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::MainMenu:
-            if (menus.current == MenuScreen::Settings) {
+            if (menus.current == MenuScreen::Language) {
+                menus.update(input);   // en tactil, tocar un boton lo elige y lo confirma
+                // Izquierda/derecha tambien valen: con dos opciones en columna, el stick
+                // horizontal de un mando es lo primero que se prueba.
+                if (input.is_action_just_pressed(Action::MoveLeft))  menus.selected_option = 0;
+                if (input.is_action_just_pressed(Action::MoveRight)) menus.selected_option = 1;
+                // `Cancel` (el boton atras de Android) acepta lo que este marcado en vez de
+                // no hacer nada: la primera pantalla del juego no puede tener una tecla muerta.
+                if (input.is_action_just_pressed(Action::Confirm) ||
+                    input.is_action_just_pressed(Action::Cancel)) {
+                    // El bit va ANTES: `set_language` ya escribe el fichero, y asi se guarda
+                    // una sola vez. `false` = no re-sella la fecha de la partida.
+                    save.data.settings_flags |= SETTING_LANG_CHOSEN;
+                    set_language(menus.selected_option == 1 ? Language::EN : Language::ES);
+                    load_settings_mirror();   // Opciones abrira ya con el idioma elegido
+                    menus.current = MenuScreen::Title;
+                    menus.selected_option = 0;
+                    // En el primer arranque, lo siguiente es el prologo (main.cpp no lo
+                    // lanzo para no contarlo antes de saber en que idioma).
+                    if (intro_after_language) { intro_after_language = false; start_intro(); }
+                }
+            } else if (menus.current == MenuScreen::Settings) {
                 update_settings();
             } else if (menus.current == MenuScreen::Controls) {
                 menus.update(input);   // en tactil, un toque en cualquier sitio confirma
@@ -4023,6 +4051,7 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "unlocks") { ss >> c.num; }            // fijar SaveData::unlocks
         else if (c.op == "savedump") { }                       // volcar el guardado al log
         else if (c.op == "lang")    { ss >> c.num; }            // 0 = ES, 1 = EN
+        else if (c.op == "langmenu") { }                       // abrir el selector de idioma
         else if (c.op == "defaults") { }                       // ajustes de fabrica
         else if (c.op == "aimmode") { ss >> c.num; }           // 0 OFF / 1 Asistido / 2 ON
         else if (c.op == "rstick")  { ss >> c.num; }           // 0/1: segundo joystick tactil
@@ -4334,6 +4363,22 @@ void Engine::update_autoplay(f32 dt) {
                 if (l >= static_cast<int>(Language::COUNT)) l = 0;
                 set_language(static_cast<Language>(l));
                 SDL_Log("lang = %d (%s)", l, I18N::language_name(I18N::current));
+                continue;
+            }
+            // Depuracion: volver a abrir el selector de idioma del primer arranque sin
+            // borrar el guardado. Solo asi se puede fotografiar esa pantalla desde un
+            // guion (en una partida ya jugada el bit SETTING_LANG_CHOSEN esta puesto).
+            if (c.op == "langmenu") {
+                // Olvida la respuesta: ademas de abrirlo ahora, el selector vuelve a salir
+                // en el siguiente arranque. Es lo que hace que se pueda probar dos veces
+                // seguidas sin borrar el guardado.
+                save.data.settings_flags &= ~SETTING_LANG_CHOSEN;
+                save.save(false);
+                if (state.scene == GameScene::MainMenu) {
+                    menus.current = MenuScreen::Language;
+                    menus.selected_option = (save.data.language == 1) ? 1 : 0;
+                }
+                SDL_Log("langmenu (escena %d)", static_cast<int>(state.scene));
                 continue;
             }
             // Depuracion: volcar el guardado al log. Es lo unico que permite comprobar

@@ -301,6 +301,11 @@ struct Engine {
     // el guion de autoplay se carga despues de init(), asi que dentro de init el flag
     // todavia es false y los guiones de scripts/ esperan el menu al arrancar.
     void start_intro();
+    // El prologo va DETRAS del selector de idioma del primer arranque: es la primera
+    // narracion del juego y contarla en un idioma que el jugador no ha elegido seria
+    // justo lo que el selector viene a evitar. Lo pone main.cpp (que es quien decide si
+    // hay prologo) y lo consume el propio selector al contestarse.
+    bool intro_after_language = false;
     // Intro cinematica del capitulo (mismas escenas GameScene::Intro que el prologo,
     // pero al terminar entra a jugar). Solo la dispara la primera entrada natural.
     void start_chapter_intro(int chapter);

@@ -52,6 +52,8 @@ int main(int argc, char* argv[]) {
     // Con --script no hay prologo: los guiones de scripts/ esperan el menu al arrancar.
     // Va aqui y no al final de Engine::init porque el guion se carga DESPUES de init.
     if (script) engine.autoplay.load(script);
+    // Primer arranque: manda el selector de idioma, y el prologo espera a que se conteste.
+    else if (engine.menus.current == MenuScreen::Language) engine.intro_after_language = true;
     else        engine.start_intro();
     if (touch_mode) {
         engine.input.aim_mode = Config::AimMode::On;

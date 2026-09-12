@@ -15,6 +15,21 @@
 wait 1.0
 defaults
 
+# Selector del PRIMER arranque (ui/menus.h, MenuScreen::Language). Es la unica pantalla
+# del juego que NO pasa por `tr()` —quien no ha elegido idioma no puede leer una pregunta
+# escrita en el que no es el suyo—, asi que lo que hay que mirar aqui no es la traduccion
+# sino que las dos lineas bilingues del pie quepan en las 320 unidades de ancho.
+langmenu
+wait 0.4
+shot ES_00_idioma
+press down
+wait 0.2
+shot EN_00_idioma
+press up
+wait 0.2
+press confirm
+wait 0.4
+
 # =====================  ESPANOL  =====================
 lang 0
 wait 0.3

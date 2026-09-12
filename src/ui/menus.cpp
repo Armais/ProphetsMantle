@@ -29,20 +29,21 @@ void MenuSystem::mark_row_rect(int i, Rect r) {
 // (`Renderer::draw_panel`, el mismo panel de 9 trozos que enmarca el mapa), y la elegida
 // cambia de COLOR, de TAMANO y lleva un aro de foco: a plena luz en un movil un cambio de
 // tono no se ve, y el cambio de tamano si.
-static constexpr f32 BTN_GROW = 9.0f;     // lo que crece la elegida por cada lado
+// El crecimiento de la elegida es un GUINO, no otra pildora: a 9 por lado volvia a meter
+// 18 de aire horizontal justo en el boton que se esta mirando, que es de lo que se quejaba
+// la pantalla. Con 4 basta, porque el relleno dorado y el aro ya hacen el grueso del aviso.
+static constexpr f32 BTN_GROW = 4.0f;     // lo que crece la elegida por cada lado
 static constexpr f32 BTN_HIT_PAD = BTN_GROW * 2.0f + 14.0f;   // margen de la zona del dedo
 
-// El ancho ya no es una constante: se MIDE. 148 fijas sobre 320 de pantalla eran una pila
-// de pildoras de media pantalla cualquiera que fuese el texto ("Reanudar" y "Reintentar
-// capitulo" salian igual de anchas), y la fila de la partida caducada —"Partida abandonada
-// +12345"— se desbordaba. Ancho COMUN a la pantalla: el del texto MAS LARGO + relleno; uno
-// por fila haria una escalera. Mismo precedente que las pestanas del Codice y la placa de
-// rotulo del mapa, que tambien se miden con `measure_text`.
-static f32 menu_button_width(const Renderer& r, const char* const* labels, int n, f32 text_scale) {
-    f32 w = 0.0f;
-    for (int i = 0; i < n; i++) w = std::max(w, r.measure_text(labels[i], text_scale));
+// El ancho de un boton es el de SU texto. Ni una constante (148 fijas sobre 320 eran una
+// pila de pildoras de media pantalla dijera lo que dijera el rotulo) ni el del texto MAS
+// LARGO de la pantalla, que es lo que se hizo antes y dejaba "Salir" con media pildora de
+// aire a cada lado solo porque "Nueva Partida" estaba tres filas mas arriba. Se mide con
+// `measure_text`, como las pestanas del Codice y la placa de rotulo del mapa, y el unico
+// aire es el relleno de 7 por lado que pide la esquina redondeada del panel.
+static f32 menu_button_width(const Renderer& r, const char* label, f32 text_scale) {
     return std::min(static_cast<f32>(Config::GAME_WIDTH) - 24.0f,
-                    std::max(72.0f, w + 22.0f));   // relleno 11 por lado; suelo y techo
+                    r.measure_text(label, text_scale) + 14.0f);
 }
 
 static Rect menu_button_rect(int i, int selected, f32 top, f32 pitch, f32 h, f32 btn_w) {
@@ -119,6 +120,7 @@ void MenuSystem::render(Renderer& renderer) {
     row_rect_count = 0;
     rect_screen    = current;
     switch (current) {
+        case MenuScreen::Language:  render_language(renderer); break;
         case MenuScreen::Title:     render_title(renderer); break;
         case MenuScreen::PauseMenu: render_pause(renderer); break;
         case MenuScreen::GameOver:  render_game_over(renderer); break;
@@ -127,6 +129,61 @@ void MenuSystem::render(Renderer& renderer) {
         case MenuScreen::Controls:  render_controls(renderer); break;
         default: break;
     }
+}
+
+// =============================================================================
+// Selector de idioma (primer arranque)
+// =============================================================================
+// La UNICA pantalla del juego que no pasa por `tr()`, y a proposito: quien todavia no ha
+// elegido idioma no puede leer una pregunta escrita en el que no es el suyo. El rotulo y
+// la ayuda van en los dos a la vez, y cada boton lleva el nombre de su lengua EN esa
+// lengua — que es como se reconoce el propio sin entender el resto de la pantalla.
+void MenuSystem::render_language(Renderer& renderer) {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
+
+    // Mismo fondo que el titulo: es la primera imagen del juego y no tiene por que ser
+    // una pantalla de sistema.
+    renderer.clear({10, 8, 16, 255});
+    constexpr int BANDS = 30;
+    for (int i = 0; i < BANDS; i++) {
+        f32 k = 1.0f - static_cast<f32>(i) / BANDS;
+        renderer.draw_rect({0, H * i / BANDS, W, H / BANDS + 0.5f},
+                           {static_cast<u8>(58 * k), static_cast<u8>(30 * k), static_cast<u8>(34 * k), 255});
+    }
+    if (title_bg != TEXTURE_NONE)
+        renderer.draw_sprite_rect(title_bg, {0, 0, 1280, 720}, {0, 0, W, H}, {255, 255, 255, 255});
+    if (renderer.vignette_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 165});
+    // Velo blando tras la columna central: aqui hay menos filas que en el titulo, pero el
+    // orillo de oro del manto cruza justo por detras de los dos botones.
+    if (title_bg != TEXTURE_NONE && renderer.shadow_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {40, 50, 240, 120}, {8, 6, 14, 175});
+
+    const f32 title_w = renderer.measure_text("MANTLE", 2.4f);
+    renderer.draw_text("MANTLE", (W - title_w) * 0.5f + 1.3f, 26.0f + 1.3f, {0, 0, 0, 170}, 2.4f);
+    renderer.draw_text("MANTLE", (W - title_w) * 0.5f, 26.0f, Color::elias_gold(), 2.4f);
+
+    renderer.draw_text_centered("Elige idioma", 60, {205, 184, 142, 230}, 0.95f);
+    renderer.draw_text_centered("Choose your language", 72, {150, 135, 105, 215}, 0.8f);
+
+    option_count = 2;
+    const char* options[] = {"Español", "English"};
+    const f32 BTN_TOP = 94.0f, BTN_PITCH = 17.0f, BTN_H = 13.0f;
+    for (int i = 0; i < option_count; i++) {
+        const f32 BTN_W = menu_button_width(renderer, options[i], 1.0f);
+        draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
+                         options[i], i == selected_option, false, 1.0f);
+        mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
+    }
+
+    renderer.draw_text_centered(touch_hints ? "Toca tu idioma  ·  Tap your language"
+                                            : "[W/S]  ·  [ENTER]",
+                                146, {110, 99, 88, 195}, 0.75f);
+    // Se dice aqui para que la eleccion no parezca definitiva: la fila del idioma vive en
+    // Opciones desde siempre.
+    renderer.draw_text_centered("Se cambia en Opciones  ·  Change it in Options", 160,
+                                {96, 87, 79, 175}, 0.66f);
 }
 
 void MenuSystem::render_title(Renderer& renderer) {
@@ -184,8 +241,8 @@ void MenuSystem::render_title(Renderer& renderer) {
     // Siete botones entre el lema (y=70) y la linea de ofrendas (y=160): con 10,9 de paso y
     // 9,5 de alto, el ultimo cierra en 152,9 y no pisa nada.
     const f32 BTN_TOP = 78.0f, BTN_PITCH = 10.9f, BTN_H = 9.5f;
-    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.9f);
     for (int i = 0; i < option_count; i++) {
+        const f32 BTN_W = menu_button_width(renderer, options[i], 0.9f);
         const bool disabled = (i == 1 && !has_continue);
         draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
                          options[i], i == selected_option, disabled, 0.9f);
@@ -216,8 +273,8 @@ void MenuSystem::render_pause(Renderer& renderer) {
     const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"), tr("Salir", "Quit")};
 
     const f32 BTN_TOP = 78.0f, BTN_PITCH = 15.0f, BTN_H = 12.0f;
-    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.95f);
     for (int i = 0; i < option_count; i++) {
+        const f32 BTN_W = menu_button_width(renderer, options[i], 0.95f);
         draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
                          options[i], i == selected_option, false);
         mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
@@ -241,8 +298,8 @@ void MenuSystem::render_game_over(Renderer& renderer) {
     option_count = 2;
     const char* options[] = {tr("Reintentar capítulo", "Retry chapter"), tr("Volver al menú", "Back to menu")};
     const f32 BTN_TOP = 116.0f, BTN_PITCH = 15.0f, BTN_H = 12.0f;
-    const f32 BTN_W = menu_button_width(renderer, options, option_count, 0.95f);
     for (int i = 0; i < option_count; i++) {
+        const f32 BTN_W = menu_button_width(renderer, options[i], 0.95f);
         draw_menu_button(renderer, menu_button_rect(i, selected_option, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
                          options[i], i == selected_option, false);
         mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));

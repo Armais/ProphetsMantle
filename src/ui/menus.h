@@ -8,6 +8,7 @@
 #include "input/input.h"
 
 enum class MenuScreen : u8 {
+    Language,   // Selector del PRIMER arranque: se ve una vez, antes del titulo
     Title,
     Settings,
     Controls,
@@ -90,6 +91,7 @@ private:
 public:
 
 private:
+    void render_language(Renderer& renderer);
     void render_title(Renderer& renderer);
     void render_pause(Renderer& renderer);
     void render_game_over(Renderer& renderer);
