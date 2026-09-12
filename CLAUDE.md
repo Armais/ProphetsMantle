@@ -57,6 +57,12 @@ tocarlo:
 - **Horizontal forzado** (2026-09-11): `SDL_HINT_ORIENTATIONS` + `screenOrientation="sensorLandscape"`.
   Los controles tactiles de menus y HUD estan en `src/input/CLAUDE.md`.
 
+**Para mandarle el APK al usuario: `& tools/release/make_release.ps1`** (con pwsh 7; `powershell -File` rompe la credencial).
+Lo sube a GitHub como prerelease con el APK adjunto e imprime el enlace. No hay `gh` CLI
+en esta maquina y NO hace falta: usa la API REST con la credencial que git ya tiene para
+github.com. Por Telegram no cabe (53 MB contra un limite de 50): va el enlace, no el
+fichero. Reglas y gotchas en `tools/release/CLAUDE.md`.
+
 Detalle del icono, el logo y su empaquetado: `tools/branding/CLAUDE.md`.
 
 ### IMPORTANT: Always build after finishing an implementation
