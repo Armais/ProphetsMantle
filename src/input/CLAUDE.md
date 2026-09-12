@@ -204,3 +204,54 @@ intros (`cinematic.cpp`), las cartas de historia (`story.cpp`), las cartas de el
 (`hud.cpp`) y — ya resueltas en la pasada anterior — el Códice y el Santuario. `CinematicSystem`
 y `StorySystem` reciben un `bool touch_ui` que el Engine escribe antes de renderizar, mismo
 patrón que `MenuSystem::touch_hints`.
+
+### Tercera prueba del APK: por que el dedo "no funcionaba bien" (2026-09-12)
+
+El usuario volvio del APK con "el area tocable no funciona bien". No era una impresion:
+habia cuatro fallos sumados, y el peor no se podia ver en el PC de desarrollo.
+
+**Un toque se perdia entero si su frame no daba ningun paso de update.** `pre_update` tiraba
+`tap_pending` al empezar cada frame, y el bucle de `Engine::run` es de paso fijo a 60 Hz: en
+una pantalla de 90 o 120 Hz hay frames que acumulan menos de `FIXED_DT` y **no ejecutan
+ningun paso**, asi que el tap moria sin que nadie lo leyera — a 120 Hz, uno de cada dos. Con
+el teclado era peor: el `memcpy` de `actions_prev` igualaba el flanco y esa pulsacion no
+volvia jamas. Ahora `pre_update` **no hace nada si desde la ultima vez no hubo un
+`consume_presses`** (`Input::step_since_pre`), que es exactamente "nadie ha leido esto
+todavia". Se descarto darle al tap una vida por tiempo: no arregla el flanco de teclado, y
+el contador se decrementaria en `update_touch`, o sea dentro del paso que no corre.
+
+- **Ningun guion puede cazarlo**: los `FINGER_*` sinteticos se inyectan DENTRO de `update`.
+  Su unica sonda es el log **`Input: tap descartado sin leer (x,y)`**, que solo se emite
+  fuera de la partida (dentro, lo normal es que nadie recoja el tap y seria puro ruido).
+
+**El primer dedo se queda el tap.** `tap_active/tap_finger/tap_down` se rearmaban en CADA
+bajada, asi que la palma apoyada o el otro pulgar robaban el tap y al soltar el dedo bueno
+el id ya no coincidia. Ahora solo se rearma si el dueño **ya no esta vivo** en
+`touch_fingers`, porque un `FINGER_UP` perdido (Android no los entrega al volver de segundo
+plano) dejaria la pantalla muerta para siempre.
+
+**Dos slops, no uno.** `TOUCH_TAP_SLOP` (6 unidades ~ 2,2 mm) es lo que separa el tap de
+ataque del apuntado manual y sigue igual EN PARTIDA. En un menu era demasiado fino: un
+pulgar se desplaza mas que eso solo con apoyarse, el tap moria y el gesto se convertia en
+paso de lista — el sintoma de "parece que hay que mover antes de tocar". En menus manda
+**`TOUCH_UI_TAP_SLOP` = 14** (~5 mm), y `TOUCH_SCROLL_STEP` sube de 10 a **16** para quedar
+POR ENCIMA del slop: si un paso de lista costara menos recorrido que el slop, el mismo
+arrastre seria tap y scroll a la vez. Ademas cada paso de scroll mata el tap.
+
+**Un paso de lista por evento, no todos los que quepan.** `pulse()` sobre la misma accion es
+UNA pulsacion, asi que el `while` que emitia varios `MoveDown` de golpe perdia todos menos
+el primero y un arrastre rapido recorria la mitad de lo que decia el dedo. Ahora es un `if`
+y el resto se queda en `scroll_accum` para el evento siguiente (un dedo real manda 60-120
+por segundo; un `drag` de guion, uno solo — de ahi que el guion arrastre en dos tramos).
+
+**`Input::ui_press(Vec2&)`**: el dedo sigue apoyado y todavia cuenta como tap, con su
+posicion ACTUAL (`tap_now`, apuntada en FINGER_DOWN y en FINGER_MOTION **antes** del test de
+slop, porque en un menu la rama sale antes por el `return` de `!touch_gameplay`). Es lo que
+ilumina el boton que hay debajo. Lo lee el Engine en **`render`**, no en `update`: a 120 Hz
+hay frames sin paso y el resalte parpadearia al ritmo de los pasos en vez del dedo.
+
+Guiones: `menus_tactil_check.txt` (re-pinneado entero) y el bloque de rejilla de
+`tactil_ancho_check.txt` — ese es el unico que ve un desfase de letterbox, porque hasta la
+rejilla todo lo tocable estaba centrado en x=160, que es justo el punto que el desfase no
+mueve. Su gate es que un toque en el **pilar negro** (px 40) NO pulse nada: sin descontar el
+letterbox caeria en x=10,7 unidades, dentro de la columna izquierda.

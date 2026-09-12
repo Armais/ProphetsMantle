@@ -996,6 +996,14 @@ void Engine::update(f32 dt) {
 void Engine::render() {
     renderer.begin_frame();
 
+    // El boton que hay bajo el dedo se ilumina mientras el dedo sigue apoyado: en movil no
+    // hay cursor que resaltar, asi que esto es la unica señal de que el toque ha entrado.
+    // Se apunta AQUI y no en update porque a 90 o 120 Hz hay frames que no ejecutan ningun
+    // paso de update, y el resalte parpadearia al ritmo de los pasos en vez del dedo.
+    menus.press_active = input.touch_ui && input.ui_press(menus.press_pos);
+    codex.press_active = menus.press_active;
+    codex.press_pos    = menus.press_pos;
+
     auto render_world = [this]() {
         const BiomeStyle biome = get_biome_style(state.current_chapter);
         renderer.clear(biome.background);
@@ -2141,42 +2149,52 @@ void Engine::award_offerings(bool victory) {
     SDL_Log("Run over: +%d offerings (total %d)", earned, progression.offerings);
 }
 
-// Filas visibles a la vez. 7 x 14,5 = 101,5 unidades desde y=48 acaban en 149,5, y eso
-// deja "Volver" en 156 y la ayuda de teclas en 170 sin que se toquen. Con 8 filas la fila
-// "Volver" caia justo encima de la ayuda.
-static constexpr int SANCTUARY_ROWS = 7;
+// Filas visibles a la vez: `Engine::sanctuary_rows()`. En escritorio 7 x 14,5 = 101,5
+// unidades desde y=48 acaban en 149,5, y eso deja "Volver" en 156 y la ayuda de teclas en
+// 170 sin que se toquen (con 8 filas "Volver" caia justo encima de la ayuda). En tactil
+// son 5 x 20 = 100, que da lo mismo de alto con filas que se pueden tocar.
 
 void Engine::update_sanctuary() {
     const int n = static_cast<int>(progression.upgrades.size());
     if (n <= 0) { change_scene(GameScene::MainMenu); return; }
-    if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_sel = (sanctuary_sel - 1 + n + 1) % (n + 1);
-    if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_sel = (sanctuary_sel + 1) % (n + 1);
-    // La ventana sigue a la seleccion, igual que en el Codice. "Volver" (indice n) no
-    // scrollea: se pinta siempre debajo de la lista.
-    if (sanctuary_sel < sanctuary_scroll) sanctuary_scroll = sanctuary_sel;
-    if (sanctuary_sel < n && sanctuary_sel >= sanctuary_scroll + SANCTUARY_ROWS)
-        sanctuary_scroll = sanctuary_sel - SANCTUARY_ROWS + 1;
-    sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
+    const int rows = sanctuary_rows();
+    // En tactil arrastrar mueve la VENTANA, no el cursor: alli no hay cursor pintado, y
+    // moverlo a ciegas dejaria la compra apuntando a una mejora que no se ve.
+    if (input.touch_ui) {
+        if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_scroll--;
+        if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_scroll++;
+    } else {
+        if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_sel = (sanctuary_sel - 1 + n + 1) % (n + 1);
+        if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_sel = (sanctuary_sel + 1) % (n + 1);
+        // La ventana sigue a la seleccion, igual que en el Codice. "Volver" (indice n) no
+        // scrollea: se pinta siempre debajo de la lista.
+        if (sanctuary_sel < sanctuary_scroll) sanctuary_scroll = sanctuary_sel;
+        if (sanctuary_sel < n && sanctuary_sel >= sanctuary_scroll + rows)
+            sanctuary_scroll = sanctuary_sel - rows + 1;
+    }
+    sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
 
-    // Toque: la fila que se toca se elige Y se compra. Los rects son los MISMOS que pinta
-    // render_sanctuary (filas visibles desde y=48, paso 14,5; "Volver" al pie).
+    // Toque: la fila que se toca se elige Y se compra. Los rects los apunta
+    // render_sanctuary al pintar, no se recalculan aqui.
     Vec2 tp;
     if (input.take_tap(tp)) {
-        const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
-        const int last  = std::min(n, first + SANCTUARY_ROWS);
-        const f32 W = static_cast<f32>(Config::GAME_WIDTH);
         bool hit = false;
-        for (int i = first; i < last; i++) {
-            f32 y = 48.0f + (i - first) * 14.5f;
-            if (!Rect{12.0f, y - 1.5f, W - 24.0f, 15.0f}.contains(tp)) continue;
+        int  row = -1;
+        for (int k = 0; k < sanctuary_row_count; k++) {
+            if (!sanctuary_row_rects[k].contains(tp)) continue;
+            const int i = sanctuary_row_first + k;
+            if (i >= n) break;
             sanctuary_sel = i;
+            row = i;
             hit = true;
             break;
         }
-        if (!hit && Rect{100.0f, 150.0f, 120.0f, 14.0f}.contains(tp)) {
+        if (!hit && sanctuary_back_rect.w > 0.0f && sanctuary_back_rect.contains(tp)) {
             sanctuary_sel = n;   // "Volver"
+            row = n;
             hit = true;
         }
+        SDL_Log("Santuario tap: fila=%d (%.0f,%.0f)", row, tp.x, tp.y);
         if (hit) input.pulse(Action::Confirm);
     }
 
@@ -2226,21 +2244,38 @@ void Engine::render_sanctuary() {
     const int n = static_cast<int>(progression.upgrades.size());
     // Con 8 mejoras el paso de 16 unidades se salia por abajo: 14,5 deja sitio para
     // "Volver" y para la ayuda de teclas en las 180 unidades de alto. Con 12 ya no caben
-    // ni asi, de modo que se pinta una VENTANA de SANCTUARY_ROWS filas.
-    const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - SANCTUARY_ROWS)));
-    const int last  = std::min(n, first + SANCTUARY_ROWS);
+    // ni asi, de modo que se pinta una VENTANA de sanctuary_rows() filas. En tactil la
+    // fila sube a 20 (7,4 mm de dedo, y no baja de ahi porque lleva nombre y descripcion)
+    // y por eso solo caben cinco.
+    const bool touch = input.touch_ui;
+    const int  rows  = sanctuary_rows();
+    const f32  PITCH = touch ? 20.0f : 14.5f;
+    const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
+    const int last  = std::min(n, first + rows);
     f32 y = 48.0f;
     // Las flechas de scroll van en el MARGEN IZQUIERDO, no centradas: centradas, la de
     // arriba caia justo sobre la linea de "N ofrendas".
     if (first > 0) renderer.draw_text("^", 5.0f, y + 1.0f, {180, 160, 120, 210}, 0.7f);
+
+    // Las zonas se apuntan aqui y las lee update_sanctuary: una sola formula para el
+    // dibujo y el dedo.
+    Vec2 pp;
+    const bool pressing = touch && input.ui_press(pp);
+    sanctuary_row_first = first;
+    sanctuary_row_count = last - first;
     for (int i = first; i < last; i++) {
         const MetaUpgrade& u = progression.upgrades[i];
-        bool on = (i == sanctuary_sel);
+        const Rect row_rect = {12.0f, y - 1.5f, W - 24.0f, PITCH};
+        sanctuary_row_rects[i - first] = row_rect;
+        // El cursor no existe en movil: alli se toca la mejora que se quiere comprar. Lo
+        // que SI se marca siempre es el estado (comprada, y si llegan las ofrendas).
+        bool on  = !touch && (i == sanctuary_sel);
+        bool lit = on || (pressing && row_rect.contains(pp));
         bool afford = progression.offerings >= u.cost;
-        if (on) renderer.draw_rect({12.0f, y - 1.5f, W - 24.0f, 15.0f}, {58, 46, 30, 225});
+        if (lit) renderer.draw_rect(row_rect, {58, 46, 30, 225});
 
         Color name_c = u.unlocked ? Color{130, 205, 130, 245}
-                                  : (on ? Color{250, 228, 170, 255} : Color{200, 190, 176, 235});
+                                  : (lit ? Color{250, 228, 170, 255} : Color{200, 190, 176, 235});
         renderer.draw_text(on ? ">" : " ", 14.0f, y, name_c, 0.8f);
         renderer.draw_text(u.name, 22.0f, y, name_c, 0.8f);
         renderer.draw_text(u.description, 22.0f, y + 7.0f, {150, 142, 132, 225}, 0.6f);
@@ -2252,13 +2287,21 @@ void Engine::render_sanctuary() {
                               : (afford ? Color{245, 205, 90, 245} : Color{150, 90, 80, 220});
         f32 rw = renderer.measure_text(right, 0.75f);
         renderer.draw_text(right, W - 14.0f - rw, y + 2.0f, cc, 0.75f);
-        y += 14.5f;
+        y += PITCH;
     }
 
     if (last < n) renderer.draw_text("v", 5.0f, y - 9.0f, {180, 160, 120, 210}, 0.7f);
-    bool back_on = (sanctuary_sel >= n);
-    renderer.draw_text_centered(back_on ? tr("> Volver", "> Back") : tr("  Volver", "  Back"), 156.0f,
-                                back_on ? Color::elias_gold() : Color{140, 130, 120, 235}, 0.85f);
+    bool back_on = !touch && (sanctuary_sel >= n);
+    // En tactil "Volver" es una placa que se toca, no una linea de texto con ">".
+    sanctuary_back_rect = touch ? Rect{110.0f, 152.0f, 100.0f, 16.0f}
+                                : Rect{100.0f, 150.0f, 120.0f, 14.0f};
+    if (touch)
+        renderer.draw_rect(sanctuary_back_rect,
+                           (pressing && sanctuary_back_rect.contains(pp)) ? Color{96, 74, 40, 240}
+                                                                          : Color{58, 46, 30, 225});
+    renderer.draw_text_centered(back_on ? tr("> Volver", "> Back") : tr("  Volver", "  Back"),
+                                touch ? 156.0f : 156.0f,
+                                back_on ? Color::elias_gold() : Color{200, 186, 160, 240}, 0.85f);
     renderer.draw_text_centered(input.touch_ui
                                     ? tr("Toca una mejora para comprarla   ·   arrastra para recorrer",
                                          "Tap an upgrade to buy it   ·   drag to scroll")

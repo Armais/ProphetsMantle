@@ -106,8 +106,15 @@ constexpr int TOUCH_BTN_PAUSE    = 7;
 constexpr int TOUCH_MAX_FINGERS  = 4;
 constexpr f32 TOUCH_HOLD_INFO    = 0.4f; // hold sobre un milagro = ficha, no lanzarlo
 constexpr f32 TOUCH_DRAG_AIM     = 6.0f; // unidades que hay que arrastrar para apuntar
-constexpr f32 TOUCH_TAP_SLOP     = 6.0f; // un dedo que se mueve mas que esto no es un tap
-constexpr f32 TOUCH_SCROLL_STEP  = 10.0f;// unidades de arrastre por paso de lista
+constexpr f32 TOUCH_TAP_SLOP     = 6.0f; // en PARTIDA: un dedo que se mueve mas no es un tap
+// En un MENU el mismo umbral es demasiado fino: 6 unidades son ~2,2 mm y un pulgar se
+// desplaza mas que eso solo con apoyarse, asi que el toque se convertia en paso de lista y
+// no pulsaba nada ("parece que hay que mover antes de tocar"). En partida sigue en 6, que
+// es lo que separa el tap de ataque del apuntado manual.
+constexpr f32 TOUCH_UI_TAP_SLOP  = 14.0f;// en MENUS: ~5 mm de deriva permitida
+// Por encima del slop de menu a proposito: si un paso de lista costara menos recorrido que
+// el slop, el mismo arrastre seria tap Y scroll a la vez.
+constexpr f32 TOUCH_SCROLL_STEP  = 16.0f;// unidades de arrastre por paso de lista
 
 struct TouchFinger {
     SDL_FingerID id     = 0;
@@ -165,9 +172,17 @@ struct Input {
     bool tap_pending = false;
     Vec2 tap_pos     = {0, 0};
     Vec2 tap_down    = {0, 0};
+    Vec2 tap_now     = {0, 0};     // donde esta AHORA el dedo que todavia cuenta como tap
     SDL_FingerID tap_finger = 0;
     bool tap_active  = false;
     f32  scroll_accum = 0.0f;      // arrastre vertical acumulado con el juego parado
+
+    // Un paso de update ha corrido desde el ultimo pre_update. Sin esto, un frame que no
+    // ejecuta NINGUN paso (bucle de paso fijo a 60 Hz sobre una pantalla de 90 o 120 Hz)
+    // destruia el tap y el flanco de teclado de ese frame sin que nadie los leyera: a
+    // 120 Hz, uno de cada dos toques. Es el motivo de que en el movil los menus
+    // respondieran a medias y en el PC no.
+    bool step_since_pre = true;
 
     // Minimapa tocable: tocarlo abre/cierra el mapa grande. El rect lo escribe Engine con
     // HUD::minimap_rect, para que dibujo y hit-test salgan de la MISMA formula.
@@ -241,6 +256,15 @@ struct Input {
         if (!tap_pending) return false;
         tap_pending = false;
         out = tap_pos;
+        return true;
+    }
+    // El dedo sigue apoyado y todavia cuenta como tap potencial, con su posicion ACTUAL.
+    // Es lo que permite iluminar el boton que hay debajo mientras dura y apagarlo si el
+    // dedo se va de paseo. En movil sustituye al resaltado de seleccion, que no significa
+    // nada cuando se toca directamente el boton que se quiere.
+    bool ui_press(Vec2& out) const {
+        if (!tap_active) return false;
+        out = tap_now;
         return true;
     }
     // Pulsacion de un solo frame, como un tap sobre un milagro. La usa la UI tactil para

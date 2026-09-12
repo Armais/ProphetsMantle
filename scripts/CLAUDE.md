@@ -158,3 +158,32 @@ shot 6X_lo_que_sea
 hold map 0.4
 wait 0.2
 ```
+
+## Los menus tactiles, tras la tercera prueba del APK (2026-09-12)
+
+**Un toque que falla ya NO es mudo.** `SDL_Log("Menu tap: pantalla=%d fila=%d (x,y)")` sale
+en cada toque de menu (`-1` = no acerto ninguna fila) y `Santuario tap: fila=%d` en El
+Santuario. Antes no habia forma de notarlo: `menus_tactil_check` llevaba las coordenadas del
+titulo podridas desde un cambio de paso anterior —tocaba y=90 para "Nueva Partida" cuando
+esa y ya caia en "Continuar"— y el guion pasaba igual.
+
+- **`menus_tactil_check.txt` re-pinneado entero** a la rejilla 2x4 del titulo y a la ventana
+  de 6 filas de Opciones (las coordenadas van en su cabecera). Gates nuevos: una linea
+  `Menu tap` por toque con la fila esperada, **cero `fila=-1`**, **cero
+  `Input: tap descartado sin leer`** y **ni un `Menu tap` en el bloque de arrastre**.
+- **El arrastre va en DOS `drag`**, no en uno largo: cada comando inyecta un solo evento de
+  dedo y el motor da un paso de lista por evento a proposito (dos `pulse` de la misma accion
+  en el mismo frame serian una sola pulsacion). Un dedo real manda 60-120 eventos por
+  segundo y ahi el gesto es continuo.
+- **Para fotografiar un boton pulsado hay que soltar el dedo FUERA**: tocar un menu es
+  elegir Y confirmar, asi que soltandolo encima el guion se va a otra pantalla. `touch` ->
+  `shot` -> `drag` lejos -> `shot` -> `untouch` da las dos capturas (pulsado y suelto) sin
+  navegar, y de paso comprueba que sacar el dedo cancela el toque.
+- **El primer toque del guion contesta al selector de idioma**, porque `defaults` olvida el
+  idioma elegido y la ejecucion SIGUIENTE arranca en esa pantalla. Si el juego ya esta en el
+  titulo, ese toque cae en el canal muerto entre columnas (x 156..164) y no hace nada.
+- **`tactil_ancho_check.txt`** estrena un bloque de rejilla, y es el unico sitio donde el
+  desfase de letterbox se puede cazar en un menu: hasta ahora todo lo tocable estaba
+  centrado en x=160, que es justo el punto que el desfase no mueve. Su gate es que
+  `touchpx 40 456` (pilar negro) NO pulse nada — sin descontar el letterbox caeria en x=10,7
+  unidades, dentro de la columna izquierda — y que `touchpx 366 456` de `fila=3`.

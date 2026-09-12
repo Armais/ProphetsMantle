@@ -136,7 +136,9 @@ rectangulo redondeado con bisel en 9 trozos (`Renderer::panel_tex`, generado en 
 Opciones — y tambien el marco del mapa.
 
 - La elegida cambia de **color, de tamano y lleva aro de foco**. Solo el tono no basta: a
-  plena luz en un telefono un cambio de tono no se ve.
+  plena luz en un telefono un cambio de tono no se ve. **Ojo: esto vale en PC.** En movil no
+  hay cursor desde el 2026-09-12 y ese mismo aspecto lo lleva el boton que esta bajo el dedo
+  (ver "En movil no hay cursor", mas abajo).
 - Su texto va **claro**, no oscuro. `draw_text` siempre pone contorno oscuro al glifo, asi que
   letra oscura sobre dorado sale como un borron (se vio en la primera captura).
 - La **zona tactil no crece con la seleccion** (`menu_hit_rect`): si creciera, el sitio donde
@@ -170,10 +172,13 @@ nadie lo supiera.
 media pantalla dijera lo que dijera el texto ("Reanudar" igual de ancha que "Reintentar
 capitulo"), y la fila de la partida caducada —`"Partida abandonada  +12345"`— **se desbordaba
 y nadie lo habia visto**. Ahora `menu_button_width` mide con `Renderer::measure_text` (mismo
-precedente que las pestanas del Codice y la placa del mapa) y devuelve el ancho del texto **mas
-largo de la pantalla** + 22 de relleno, con suelo 72 y techo `GAME_WIDTH - 24`.
+precedente que las pestanas del Codice y la placa del mapa) y devuelve el ancho de **SU**
+texto + 14 de relleno, con techo `GAME_WIDTH - 24`.
 
-- **Un ancho por PANTALLA, no por fila**: uno por fila haria una escalera.
+- **Un ancho por FILA en columna** (medir el texto mas largo de la pantalla dejaba "Salir"
+  con media pildora de aire a cada lado solo porque "Nueva Partida" estaba tres filas mas
+  arriba). En la **rejilla** del titulo es al reves y hay uno solo para las siete: ahi el
+  ancho lo manda la columna y uno por fila haria una escalera dentro de ella.
 - La etiqueta de la partida caducada **se compone antes del bucle de medida**, o el boton mas
   ancho seria justo el que se sale.
 - `BTN_GROW` y el margen tactil se conservan: la **zona del dedo sigue sin moverse con la
@@ -201,3 +206,80 @@ Sigue siendo **una textura y un draw**, la cache por firma no cambia, y como el 
 el minimapa salen los dos de `draw_zone_canvas`, el arreglo cae en los dos. Medido sobre la
 captura: perfil horizontal plano de borde a borde de la celda pisada (~130 de brillo), celda
 visitada 107 / adyacente 65 / nunca vista 22 en el centro de cada una.
+
+## En movil no hay cursor (tercera prueba del APK, 2026-09-12)
+
+El usuario, con el APK en la mano: *"no tiene sentido en la version movil que el boton
+seleccionado salga de un color, ya que en movil no es como en ordenador que vas cambiando
+sino que directamente tocas el boton que quieres"*. Es la regla de la capa, y vale para
+**todas** las pantallas de lista: titulo, pausa, derrota, selector de idioma, Opciones, El
+Santuario y El Codice.
+
+**Cursor y ESTADO no son lo mismo, y solo se va el cursor.** El cursor dice "aqui esta la
+flecha", que en un telefono no significa nada. El estado dice algo del contenido y se queda
+siempre: la **pestaña activa** del Codice, el **COMPRADO** verde y el coste en oro o rojo de
+El Santuario, el color de rareza de un objeto, el `[*]` de un logro y el valor entre
+corchetes de cada fila de Opciones.
+
+**Lo que sustituye al resaltado es la pulsacion**: lo que hay bajo el dedo se ilumina
+mientras el dedo sigue apoyado (`MenuSystem::press_active/press_pos`, `CodexScreen` igual,
+escritos por `Engine::render` desde `Input::ui_press`). Sacar el dedo del boton lo apaga y
+cancela el toque, que es la conducta de cualquier movil. **No crece**: con `sel = -1`
+`menu_button_rect` no aplica `BTN_GROW`, o sea que el sitio donde tocar no se mueve.
+
+**Arrastrar mueve la VENTANA, no el cursor.** Sin esto, quitar el resaltado dejaba un cursor
+invisible que el arrastre paseaba a ciegas: el jugador arrastra para ver mas filas y de paso
+cambia cual se va a ajustar o que ficha se lee. Vale en Opciones, Codice y Santuario. En PC
+no cambia: W/S mueven el cursor y la ventana lo sigue.
+
+### El titulo, en rejilla de dos columnas
+
+Siete opciones en una columna dan un paso de 10,9 unidades = **4 mm** de dedo en un movil de
+6,5" (Android pide 9). Y en apaisado sobraba todo el ancho. En tactil el titulo pasa a
+**2 columnas x 4 filas** (`menu_grid_hit` / `menu_grid_button`), celda de 148x25 = **55x9,2
+mm**, orden **por columnas** — izq. Nueva Partida / Continuar / El Santuario / El Codice,
+dcha. Prologo / Opciones / Controles — de modo que el mapeo indice -> accion de
+`Engine::update` no se toca ni una linea. Las **ofrendas** ocupan el hueco de la septima
+celda, sin panel, para que no se lean como un octavo boton. Fuera en tactil: el lema largo
+(cae justo donde empieza la rejilla) y el pie "Toca una opcion", que explica lo obvio en
+cuanto cada opcion tiene el tamaño de un dedo.
+
+**Un ancho de boton para las siete, no uno por fila**: en rejilla, medir cada rotulo hace
+una escalera dentro de la columna. Y como el ancho lo manda la columna y no el texto,
+`draw_menu_button` **baja la escala** del rotulo que no quepa (`draw_text` no recorta): la
+etiqueta de la partida caducada es la candidata natural a desbordarse.
+
+### El resto de repartos en tactil
+
+| Pantalla | PC | Tactil |
+|---|---|---|
+| Idioma | 94 / 17 / 13 | 92 / **28** / 22 |
+| Pausa | 78 / 15 / 12 | 70 / **25** / 19 |
+| Derrota | 116 / 15 / 12 | 112 / **28** / 22 (la nota sube a y=101) |
+| Opciones | 52 / 15, placa 14 | 48 / **21**, placa **19**, ventana de 6 |
+| Santuario | paso 14,5, 7 filas | paso **20**, **5** filas |
+| Codice | paso 10, 8 filas | paso **15**, **5** filas, pestañas de 16 |
+
+La **zona del dedo** en tactil ya no sale del texto de cada fila (`menu_hit_rect_wide`, de
+x=16 a 304): "Salir" tiene que ser tan facil de tocar como "Reintentar capitulo". Alto =
+paso completo, asi que no queda ni una franja muerta entre dos botones.
+
+**Opciones tenia un desbordamiento de antes**: con 9 filas (stick derecho + cayado
+desbloqueado) la ultima caia en y=172 y su placa llegaba a 182,8, fuera de la pantalla y
+encima de la ayuda. La ventana de 6 lo cierra de paso.
+
+**El panel del Codice no decia de que entrada hablaba.** En cuatro de las cinco pestañas no
+aparecia el nombre por ningun lado (Capitulos pinta "Relatos X/Y", Bestiario y Milagros
+nada, Objetos solo la descripcion; solo Logros lo llevaba), y sin fila resaltada la pantalla
+se quedaba muda. En tactil el nombre encabeza el panel; en PC no, porque lo dice el cursor y
+`wrap_text` trunca en silencio lo que no cabe.
+
+**El Santuario duplicaba a mano los rects que pinta** (y=48, paso 14,5, "Volver" en 150):
+era el unico sitio del juego que rompia la regla "el rect sale de la misma formula que
+pinta", y en cuanto cambio el paso el hit-test habria apuntado a filas que no estan ahi, en
+silencio. Ahora `render_sanctuary` apunta `Engine::sanctuary_row_rects` y `update_sanctuary`
+los lee.
+
+Logs de gate: **`Menu tap: pantalla=P fila=F`** y **`Santuario tap: fila=F`** (`-1` = ninguna).
+Un toque que fallaba era mudo, y por eso un guion con las coordenadas podridas pasaba sin
+que saltara nada.

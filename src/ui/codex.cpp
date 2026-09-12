@@ -38,13 +38,22 @@ bool CodexScreen::update(Input& input, const SaveData& save, const ItemRegistry&
         tab = static_cast<CodexTab>((static_cast<int>(tab) + 1) % static_cast<int>(CodexTab::COUNT));
         selected = 0; scroll = 0;
     }
-    if (input.is_action_just_pressed(Action::MoveUp))   selected = (selected - 1 + n) % n;
-    if (input.is_action_just_pressed(Action::MoveDown)) selected = (selected + 1) % n;
+    // En tactil la fila mide 15 unidades para que se pueda tocar y solo caben 5.
+    const int vis = touch_ui ? 5 : VISIBLE_ROWS;
 
-    // La lista sigue al cursor sin saltar de golpe
-    if (selected < scroll) scroll = selected;
-    if (selected >= scroll + VISIBLE_ROWS) scroll = selected - VISIBLE_ROWS + 1;
-    scroll = std::max(0, std::min(scroll, std::max(0, n - VISIBLE_ROWS)));
+    // En tactil arrastrar mueve la VENTANA, no el cursor: sin cursor pintado, moverlo a
+    // ciegas cambiaria la ficha de abajo mientras el jugador solo queria ver mas filas.
+    if (touch_ui) {
+        if (input.is_action_just_pressed(Action::MoveUp))   scroll--;
+        if (input.is_action_just_pressed(Action::MoveDown)) scroll++;
+    } else {
+        if (input.is_action_just_pressed(Action::MoveUp))   selected = (selected - 1 + n) % n;
+        if (input.is_action_just_pressed(Action::MoveDown)) selected = (selected + 1) % n;
+        // La lista sigue al cursor sin saltar de golpe
+        if (selected < scroll) scroll = selected;
+        if (selected >= scroll + vis) scroll = selected - vis + 1;
+    }
+    scroll = std::max(0, std::min(scroll, std::max(0, n - vis)));
 
     // --- Toque -----------------------------------------------------------------
     // Pestana: cambia de pestana. Fila: la SELECCIONA (y con ella su pasaje), no cierra —
@@ -85,25 +94,37 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     const char* tabs[] = {tr("CAPÍTULOS", "CHAPTERS"), tr("BESTIARIO", "BESTIARY"), tr("MILAGROS", "MIRACLES"), tr("OBJETOS", "ITEMS"), tr("LOGROS", "ACHIEVEMENTS")};
     // Con cinco pestañas el margen se queda corto: se arranca más a la izquierda y se
     // aprieta la separación para que la última no se salga por los 320 de ancho.
+    // En tactil la pestaña gana un tercio de alto (las cinco ya van justas de ancho, asi
+    // que solo se puede crecer hacia abajo) y el resto de la pantalla se aprieta.
+    const f32 TAB_H = touch_ui ? 16.0f : 12.0f;
     f32 tx = 8.0f;
     for (int i = 0; i < static_cast<int>(CodexTab::COUNT); i++) {
         bool on = (i == static_cast<int>(tab));
         f32 tw = renderer.measure_text(tabs[i], 0.8f) + 12.0f;
-        tab_rects[i] = {tx, 26.0f, tw, 12.0f};
-        if (on) renderer.draw_rect({tx, 26.0f, tw, 12.0f}, {70, 56, 34, 235});
-        renderer.draw_rect({tx, on ? 37.0f : 37.5f, tw, on ? 1.5f : 0.5f}, on ? Color{245, 205, 90, 255} : Color{80, 72, 64, 200});
-        renderer.draw_text(tabs[i], tx + 6.0f, 28.0f, on ? Color{250, 225, 165, 255} : Color{140, 132, 122, 230}, 0.8f);
+        tab_rects[i] = {tx, 26.0f, tw, TAB_H};
+        // La pestaña activa es ESTADO, no cursor: se marca tambien en movil, porque dice
+        // que parte del Codice se esta mirando.
+        const bool lit = on || (press_active && tab_rects[i].contains(press_pos));
+        if (lit) renderer.draw_rect(tab_rects[i], on ? Color{70, 56, 34, 235} : Color{52, 44, 32, 220});
+        renderer.draw_rect({tx, 26.0f + TAB_H - 1.0f, tw, on ? 1.5f : 0.5f}, on ? Color{245, 205, 90, 255} : Color{80, 72, 64, 200});
+        renderer.draw_text(tabs[i], tx + 6.0f, 26.0f + (TAB_H - 8.0f * 0.8f) * 0.5f,
+                           on ? Color{250, 225, 165, 255} : Color{140, 132, 122, 230}, 0.8f);
         tx += tw + 3.0f;
     }
 
     // Entrada seleccionada: nombre, si se conoce, y su pasaje
     const int n = entry_count(save, registry);
-    f32 y = 46.0f;
+    // 15 unidades de fila en tactil (5,6 mm de dedo) contra las 10 de escritorio: con 10
+    // no se acierta una entrada con el pulgar. A cambio solo caben 5 y se recorre
+    // arrastrando, que es lo que ya hacian el Santuario y esta misma lista.
+    const int vis        = touch_ui ? 5 : VISIBLE_ROWS;
+    const f32 ROW_PITCH  = touch_ui ? 15.0f : 10.0f;
+    f32 y = touch_ui ? 46.0f : 46.0f;
     int shown = 0;
     row_rect_count = 0;
-    for (int i = scroll; i < n && shown < VISIBLE_ROWS; i++, shown++) {
+    for (int i = scroll; i < n && shown < vis; i++, shown++) {
         if (shown < static_cast<int>(sizeof(row_rects) / sizeof(row_rects[0]))) {
-            row_rects[shown] = {14.0f, y - 1.0f, W - 28.0f, 10.0f};
+            row_rects[shown] = {14.0f, y - (ROW_PITCH - 8.0f) * 0.5f, W - 28.0f, ROW_PITCH};
             row_rect_count = shown + 1;
         }
         bool known = false;
@@ -159,29 +180,42 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
             }
         }
 
-        bool on = (i == selected);
-        if (on) renderer.draw_rect({14.0f, y - 1.0f, W - 28.0f, 10.0f}, {58, 46, 30, 220});
+        // En movil no hay cursor: la fila que se lee es la que se acaba de tocar, y lo
+        // unico que cambia de aspecto es la que esta bajo el dedo. Su nombre pasa a
+        // encabezar la ficha de abajo, que si no se quedaria hablando de nadie.
+        const bool cursor = !touch_ui && (i == selected);
+        const bool lit    = cursor || (press_active && row_rects[shown].contains(press_pos));
+        if (lit) renderer.draw_rect(row_rects[shown], {58, 46, 30, 220});
         Color c = !known ? Color{95, 90, 84, 200}
-                         : (on && tab != CodexTab::Items ? Color{250, 228, 170, 255} : known_color);
-        renderer.draw_text(on ? "> " : "  ", 16.0f, y, c, 0.8f);
+                         : (lit && tab != CodexTab::Items ? Color{250, 228, 170, 255} : known_color);
+        renderer.draw_text(cursor ? "> " : "  ", 16.0f, y, c, 0.8f);
         renderer.draw_text(name, 26.0f, y, c, 0.8f);
-        y += 10.0f;
+        y += ROW_PITCH;
     }
 
     // Panel inferior con el pasaje de la entrada seleccionada
-    const f32 py = 128.0f;
+    const f32 py = touch_ui ? 122.0f : 128.0f;
     renderer.draw_rect({12.0f, py, W - 24.0f, 40.0f}, {22, 18, 26, 240});
     renderer.draw_rect({12.0f, py, W - 24.0f, 1.0f}, {150, 122, 80, 200});
 
     Scripture s = {"", nullptr};
     bool known = false;
     const char* effect = nullptr;   // encima del pasaje: que hace el objeto, o cuantos relatos
+    // Nombre de la entrada, SOLO en tactil. En movil no hay fila resaltada, asi que sin
+    // esto el panel hablaba de una entrada que no decia cual era: en cuatro de las cinco
+    // pestañas no aparecia el nombre por ningun lado. En PC lo dice el cursor, y ahi la
+    // linea no se pone porque `wrap_text` trunca en silencio lo que no cabe.
+    const char* title = nullptr;
     char rel_buf[40] = {};          // vive hasta el final de la funcion: `effect` le apunta
+    char name_buf[64] = {};         // idem para `title`
     switch (tab) {
         case CodexTab::Chapters:
             known = codex_knows_chapter(save, selected + 1);
             if (known) {
                 s = get_chapter_lore(selected + 1).verse;
+                snprintf(name_buf, sizeof(name_buf), "%d. %s", selected + 1,
+                         get_chapter_def(selected + 1).name);
+                title = name_buf;
                 int total_ev = 0;
                 int seen_ev = codex_chapter_events(save, selected + 1, total_ev);
                 if (total_ev > 0) {
@@ -194,13 +228,13 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
         case CodexTab::Bestiary: {
             EnemyType t = static_cast<EnemyType>(selected);
             known = codex_knows_enemy(save, t);
-            if (known) s = get_enemy_lore(t);
+            if (known) { s = get_enemy_lore(t); title = get_enemy_def(t).name; }
             break;
         }
         case CodexTab::Items: {
             const ItemDef* d = (selected < static_cast<int>(registry.items.size())) ? &registry.items[selected] : nullptr;
             known = d && codex_knows_item(save, d->id);
-            if (known) { s = get_item_scripture(d->id); effect = d->description; }
+            if (known) { s = get_item_scripture(d->id); effect = d->description; title = d->name; }
             break;
         }
         case CodexTab::Achievements: {
@@ -219,10 +253,12 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
         default: {
             MiracleID m = static_cast<MiracleID>(selected);
             known = codex_knows_miracle(save, m);
-            if (known) s = get_miracle_scripture(m);
+            if (known) { s = get_miracle_scripture(m); title = get_miracle_def(m).name; }
             break;
         }
     }
+    // En Logros el nombre ya lo pone `effect`, y en PC lo dice el cursor de la fila.
+    if (!touch_ui || tab == CodexTab::Achievements) title = nullptr;
 
     // Retrato del bicho seleccionado, a la izquierda del panel. Es lo que convierte una
     // lista de nombres en un bestiario: el texto se corre a su derecha para dejarle sitio.
@@ -244,10 +280,15 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     } else {
         f32 ty = py + 5.0f;
         int room = 4;
+        if (title) {
+            renderer.draw_text(title, text_x, ty, {250, 225, 165, 250}, 0.8f);
+            ty += 9.0f;
+            room--;
+        }
         if (effect) {
             renderer.draw_text(effect, text_x, ty, {245, 205, 90, 240}, 0.72f);
             ty += 9.0f;
-            room = 3;
+            room--;
         }
         std::string lines[4];
         int ln = renderer.wrap_text(s.text ? s.text : "", text_w, 0.72f, lines, room);
@@ -279,11 +320,12 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     if (touch_ui) {
         // Un telefono no tiene ESC: sin este boton el Codice seria una trampa para quien
         // no sepa que el boton atras de Android tambien vale.
-        back_rect = {W - 60.0f, 166.0f, 56.0f, 12.0f};
-        renderer.draw_rect(back_rect, {58, 46, 30, 225});
-        renderer.draw_text(tr("< Volver", "< Back"), back_rect.x + 6.0f, back_rect.y + 2.0f,
+        back_rect = {W - 72.0f, 164.0f, 68.0f, 14.0f};
+        renderer.draw_rect(back_rect, (press_active && back_rect.contains(press_pos))
+                                          ? Color{96, 74, 40, 240} : Color{58, 46, 30, 225});
+        renderer.draw_text(tr("< Volver", "< Back"), back_rect.x + 8.0f, back_rect.y + 3.0f,
                            {250, 225, 165, 255}, 0.7f);
-        renderer.draw_text(tr("Toca una pestaña o una entrada", "Tap a tab or an entry"), 14.0f, 168.0f,
+        renderer.draw_text(tr("Arrastra para recorrer", "Drag to scroll"), 14.0f, 167.0f,
                            {150, 140, 130, 200}, 0.65f);
     } else {
         back_rect = {0, 0, 0, 0};

@@ -1,86 +1,163 @@
-# Verificacion: los menus se manejan CON EL DEDO (Android, 2026-09-11)
+# Verificacion: los menus se manejan CON EL DEDO (Android)
 # Uso:  MANTLE.exe --touch --script scripts/menus_tactil_check.txt
 #
-# Por que existe: hasta esta pasada toda la navegacion era MoveUp/Down/Confirm/Cancel y el
-# tactil no emitia ninguna de las cuatro. En un telefono no se podia ni pulsar "Nueva
-# Partida": el juego arrancaba y se quedaba mirando. La regresion a proteger es esa.
+# Por que existe: hasta la pasada de Android toda la navegacion era MoveUp/Down/Confirm/
+# Cancel y el tactil no emitia ninguna de las cuatro. En un telefono no se podia ni pulsar
+# "Nueva Partida". La regresion a proteger es esa.
 #
 # Regla: tocar una fila = elegirla Y confirmarla. En Opciones, la mitad IZQUIERDA de la
 # fila baja el valor y la DERECHA lo sube. En las decisiones (cartas, encuentros) hacen
 # falta DOS toques: el primero elige, el segundo decide.
 #
-# Reparto (unidades de juego, las mismas que pinta cada render_*):
-#   Titulo    fila i -> y = 87 + i*10,2    (0 Nueva Partida ... 5 Opciones)
-#   Opciones  fila i -> y = 52 + i*15      (0 Musica, 3 Sensibilidad, 7 Volver con --touch)
+# En MOVIL no se pinta ningun boton como elegido (no hay cursor: se toca el que se quiere)
+# y lo unico que cambia de aspecto es el que esta bajo el dedo. De ahi las capturas M4/M5.
+#
+# Reparto TACTIL (unidades de juego, las mismas que pinta cada render_*):
+#   Titulo    rejilla 2x4. Columna izq. x=82, columna dcha. x=238.
+#             0 Nueva Partida (82,77)   4 Prologo   (238,77)
+#             1 Continuar     (82,102)  5 Opciones  (238,102)
+#             2 El Santuario  (82,127)  6 Controles (238,127)
+#             3 El Codice     (82,152)  -- hueco de las ofrendas en (238,152)
+#             El canal entre columnas (x 156..164) es zona muerta a proposito.
+#   Opciones  ventana de 6 filas, hueco k -> y = 48 + k*21 (centros 52, 73, 94, 115, 136,
+#             157), placa de x 16 a 304. Con --touch las filas son 8 (Musica, Efectos,
+#             Auto-mira, Sensibilidad, Vibracion, Stick dcho., Idioma, Volver), asi que
+#             "Volver" (indice 7) solo se alcanza tras recorrer 2 pasos.
 #   Cartas    choice_card_rect: 3 cartas de 92 de ancho, centro de la 2a en x=160, y=77
 #
 # GATES (log):
 #   1. SAVEDUMP final:  musica=0.40  sens=6      <- ajustado a dedo, mitad izq/dcha
 #   2. `Scene change` al tocar "Nueva Partida"   <- la fila del titulo responde
 #   3. `Item taken:` tras tocar DOS veces la misma carta
+#   4. Una linea `Menu tap: pantalla=P fila=F` por toque, con los pares que dice cada
+#      bloque, y NINGUN `fila=-1` salvo el del primer toque (ver abajo)
+#   5. Cero `Input: tap descartado sin leer` fuera de ese primer toque
+#   6. El bloque de ARRASTRE no puede producir ni un `Menu tap`: un arrastre recorre la
+#      lista, y lo que recorre la lista no pulsa ademas la fila
 
 wait 1.0
+
+# --- El selector de idioma del primer arranque -------------------------------------
+# `defaults` (aqui abajo, y el de la pasada anterior) olvida el idioma elegido, asi que la
+# ejecucion SIGUIENTE arranca en el selector. Este toque contesta "Español" si esta; si el
+# juego ya esta en el titulo cae en el canal muerto entre columnas y solo deja un
+# `Menu tap: pantalla=1 fila=-1`, que es el UNICO -1 permitido del guion.
+touch 160 103
+wait 0.1
+untouch 160 103
+wait 0.5
+
 defaults
 wait 0.3
-
-# --- Titulo: tocar la fila "Opciones" (la 5) ---
-touch 160 141
+shot M0_titulo_rejilla
 wait 0.1
-untouch 160 141
+
+# --- Titulo: tocar "Opciones", que en la rejilla esta en la columna DERECHA ---
+# Gate: Menu tap: pantalla=1 fila=5
+touch 238 102
+wait 0.1
+untouch 238 102
 wait 0.5
-shot M0_opciones_por_toque
+shot M1_opciones_por_toque
 wait 0.1
 
-# --- Musica (fila 0, y=52): cuatro toques en la MITAD IZQUIERDA, 0,80 -> 0,40 ---
-touch 80 57
+# --- Musica (hueco 0, y=52): cuatro toques en la MITAD IZQUIERDA, 0,80 -> 0,40 ---
+# Gate: cuatro Menu tap: pantalla=2 fila=0
+touch 80 52
 wait 0.1
-untouch 80 57
+untouch 80 52
 wait 0.25
-touch 80 57
+touch 80 52
 wait 0.1
-untouch 80 57
+untouch 80 52
 wait 0.25
-touch 80 57
+touch 80 52
 wait 0.1
-untouch 80 57
+untouch 80 52
 wait 0.25
-touch 80 57
+touch 80 52
 wait 0.1
-untouch 80 57
+untouch 80 52
 wait 0.4
 
-# --- Sensibilidad (fila 3, y=97): un toque en la MITAD DERECHA, 5 -> 6 ---
-touch 240 100
+# --- Sensibilidad (hueco 3, y=115): un toque en la MITAD DERECHA, 5 -> 6 ---
+# Gate: Menu tap: pantalla=2 fila=3
+touch 240 115
 wait 0.1
-untouch 240 100
+untouch 240 115
 wait 0.4
-shot M1_opciones_ajustadas
+shot M2_opciones_ajustadas
 wait 0.1
 
-# --- "Volver" (fila 7, y=157): esa fila SI confirma en vez de ajustar ---
-touch 160 160
+# --- ARRASTRE: recorre la ventana y NO pulsa ninguna fila ---
+# Dos tramos de 16 unidades hacia arriba = 2 pasos de lista. Van en DOS `drag` porque cada
+# uno inyecta un solo evento de dedo y el motor da un paso por evento a proposito (dos
+# `pulse` de la misma accion en el mismo frame serian una sola pulsacion). Un dedo real
+# manda 60-120 eventos por segundo, asi que ahi el gesto es continuo.
+# El slop de menu son 14, o sea que este arrastre tampoco cuenta como toque.
+# Gate: ni un `Menu tap` entre estas seis lineas.
+touch 160 150
 wait 0.1
-untouch 160 160
+drag 160 134
+wait 0.2
+drag 160 118
+wait 0.2
+untouch 160 118
+wait 0.4
+shot M3_opciones_recorridas
+wait 0.1
+
+# --- "Volver" (indice 7, ahora en el hueco 5, y=157): esa fila SI confirma ---
+# Gate: Menu tap: pantalla=2 fila=7
+touch 160 157
+wait 0.1
+untouch 160 157
 wait 0.6
 savedump
 wait 0.2
 
-# --- Titulo: "Nueva Partida" (fila 0, y=87) ---
-touch 160 90
+# --- Feedback de pulsacion: el boton se ilumina mientras el dedo esta apoyado ---
+# Las dos capturas juntas son el gate visual: en M4 "El Santuario" sale dorado y en M5
+# vuelve a pardo. Ningun OTRO boton puede salir dorado en ninguna de las dos.
+# El dedo se ARRASTRA fuera antes de soltarlo: en un menu tocar es elegir Y confirmar, asi
+# que soltandolo encima el guion se iria al Santuario. Sacarlo del boton mata el tap, que
+# es ademas la conducta que se quiere: sacar el dedo de un boton lo cancela.
+touch 82 127
+wait 0.3
+shot M4_boton_pulsado
+wait 0.15
+drag 82 176
+wait 0.2
+shot M5_boton_suelto
 wait 0.1
-untouch 160 90
+untouch 82 176
+wait 0.3
+
+# --- Titulo: "Nueva Partida" (columna izquierda, arriba del todo) ---
+# Gate: Menu tap: pantalla=1 fila=0 y despues `Scene change`
+touch 82 77
+wait 0.1
+untouch 82 77
 wait 2.5
+
+# --- Pausa y su rejilla de cuatro (paso 25) ---
+press pause
+wait 0.6
+shot M6_pausa_sin_cursor
+wait 0.1
+press pause
+wait 0.5
 
 # --- Cartas de objeto: DOS toques sobre la MISMA carta (la del centro) ---
 cards
 wait 0.5
-shot M2_cartas
+shot M7_cartas
 wait 0.1
 touch 160 77
 wait 0.1
 untouch 160 77
 wait 0.4
-shot M3_carta_elegida
+shot M8_carta_elegida
 wait 0.1
 touch 160 77
 wait 0.1

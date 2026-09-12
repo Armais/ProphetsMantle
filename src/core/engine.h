@@ -156,6 +156,18 @@ struct Engine {
     // que la lista del Codice. Poner dos columnas se descarto: las descripciones son
     // frases enteras y a 150 unidades de ancho se truncarian en silencio.
     int         sanctuary_scroll = 0;
+    // Zonas tactiles de El Santuario, apuntadas al PINTAR. Antes update_sanctuary
+    // reescribia a mano las mismas cuentas que render_sanctuary (y=48, paso 14,5, "Volver"
+    // en 150): era el unico sitio del juego que rompia la regla "el rect sale de la misma
+    // formula que pinta", y en cuanto el paso cambio el hit-test habria apuntado a filas
+    // que no estan ahi, en silencio.
+    Rect        sanctuary_row_rects[8] = {};
+    int         sanctuary_row_first = 0;   // mejora que ocupa el hueco 0
+    int         sanctuary_row_count = 0;
+    Rect        sanctuary_back_rect = {0, 0, 0, 0};
+    // Filas visibles del panel. En tactil la fila mide 20 unidades para que se pueda tocar
+    // (lleva nombre y descripcion, no baja de ahi) y por eso caben cinco en vez de siete.
+    int sanctuary_rows() const { return input.touch_ui ? 5 : 7; }
     Player      player;
     SaveSystem  save;
     ItemRegistry item_registry;

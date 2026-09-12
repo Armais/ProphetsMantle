@@ -52,6 +52,9 @@ struct MenuSystem {
     enum SettingRow { ROW_MUSIC, ROW_SFX, ROW_AIM, ROW_SENS, ROW_RUMBLE,
                       ROW_RSTICK, ROW_SKIN, ROW_LANG, ROW_BACK, ROW_COUNT };
     int settings_rows[ROW_COUNT] = {};   // fila visible i -> SettingRow
+    // Primera fila de la ventana. Solo en tactil: alli la placa mide 19 unidades de alto
+    // para que se pueda tocar y las nueve filas ya no caben en la pantalla.
+    int settings_scroll = 0;
     int settings_row_at(int i) const {
         return (i >= 0 && i < option_count) ? settings_rows[i] : ROW_BACK;
     }
@@ -76,12 +79,26 @@ struct MenuSystem {
     MenuScreen rect_screen = MenuScreen::Title;   // pantalla a la que pertenecen los rects
     // Las lineas de ayuda hablan de teclas o de dedos. Lo pone el Engine desde
     // Input::touch_ui: "[ENTER] Seleccionar" en un telefono no ayuda a nadie.
+    // `touch_hints` es ademas la marca de "estamos en un telefono" para TODA la capa: en
+    // movil no se pinta ningun cursor, porque no se navega, se toca el boton que se quiere.
     bool touch_hints = false;
+    // El boton que hay bajo el dedo se ilumina mientras el dedo sigue apoyado. Lo escribe
+    // el Engine desde Input::ui_press, y es lo que sustituye al resaltado de seleccion.
+    bool press_active = false;
+    Vec2 press_pos    = {0, 0};
 
     void update(Input& input);
     void render(Renderer& renderer);
 
+    // Reparto vertical de una columna de botones. Hay dos por pantalla porque el telefono
+    // pide el doble de alto por boton que el escritorio y el sitio es el mismo.
+    struct Layout { f32 top, pitch, h; };
+
 private:
+    // Pinta una columna de botones, apunta sus zonas tactiles e ilumina la que este bajo
+    // el dedo. La comparten Idioma, Pausa y Derrota, que solo se diferencian en el reparto.
+    void draw_button_column(Renderer& renderer, const char* const* labels, int n,
+                            Layout pc, Layout touch, f32 text_scale, int disabled_idx = -1);
     // Apunta el rect de la fila i tal como se acaba de dibujar (y = linea, step = paso).
     void mark_row(int i, f32 y, f32 step);
     // Igual, pero con el rect exacto que se ha dibujado. Lo usan las pantallas con

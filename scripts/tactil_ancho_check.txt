@@ -19,6 +19,27 @@
 #   2) el toque en el pilar izquierdo (px 40) NO puede lanzar ningun milagro.
 
 wait 1.0
+
+# --- La rejilla del titulo, tocada en PIXELES ------------------------------------------
+# Hasta la rejilla, todo lo tocable de los menus estaba centrado en x=160, que es el UNICO
+# punto que el desfase del letterbox no mueve: por ahi no se podia cazar. Ahora hay dos
+# columnas, y el pilar negro izquierdo (px 40) sin descontar caeria en x=10,7 unidades, o
+# sea DENTRO de la columna izquierda, a la altura de "El Codice".
+#   Columna izq. centro x=82 -> px 120 + 82*3 = 366 ; fila 3 (El Codice) y=152 -> px 456
+# GATES: el toque del pilar da `fila=-1`, y el de 366 da `fila=3` + `Scene change`.
+touchpx 40 456
+wait 0.15
+untouchpx 40 456
+wait 0.5
+touchpx 366 456
+wait 0.15
+untouchpx 366 456
+wait 0.8
+shot A2_codice_por_columna
+wait 0.2
+press cancel
+wait 0.8
+
 press confirm
 wait 3.0
 press confirm

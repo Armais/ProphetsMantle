@@ -146,8 +146,23 @@ void Input::update_touch(f32 dt) {
 }
 
 void Input::pre_update() {
+    // Si desde el ultimo pre_update no ha corrido NINGUN paso de update, nadie ha leido lo
+    // que llego en ese frame: tirarlo era perder el toque entero. Pasa de forma sistematica
+    // en cuanto la pantalla va por encima de 60 Hz — el bucle de Engine::run acumula
+    // 1/120 s por frame y necesita 1/60 para dar un paso, asi que a 120 Hz la mitad de los
+    // frames no ejecutan ninguno. Con el teclado era peor todavia: el memcpy de abajo
+    // igualaba actions_prev a actions y el flanco de esa tecla no volvia nunca.
+    if (!step_since_pre) return;
+    step_since_pre = false;
+
     std::memcpy(actions_prev, actions, sizeof(actions));
-    tap_pending = false;   // un tap no sobrevive al frame en que se produjo
+    // Un toque que nadie recoge FUERA de la partida es sintoma de que el dibujo y el
+    // hit-test no cuadran, y es lo unico que delata el fallo de arriba en un telefono de
+    // verdad (los toques de un guion se inyectan DENTRO de update y nunca lo reproducen).
+    // Dentro de la partida no se dice nada: ahi lo normal es que nadie lo recoja.
+    if (tap_pending && !touch_gameplay)
+        SDL_Log("Input: tap descartado sin leer (%.0f,%.0f)", tap_pos.x, tap_pos.y);
+    tap_pending = false;   // un tap no sobrevive al frame en que se leyo
     // Las pulsaciones de un frame (tap tactil) se sueltan aqui, ya copiadas al historico
     for (u32 i = 0; i < ACTION_COUNT; i++) {
         if (!touch_pulse[i]) continue;
@@ -161,6 +176,7 @@ void Input::post_update() {
 }
 
 void Input::consume_presses() {
+    step_since_pre = true;   // este paso ya ha leido lo que hubiera
     std::memcpy(actions_prev, actions, sizeof(actions));
 }
 
@@ -390,10 +406,24 @@ void Input::process_touch(const SDL_Event& event) {
 
         // Candidato a tap: se confirma al SOLTAR si el dedo casi no se ha movido. Es lo
         // unico que los menus tactiles necesitan saber del tactil.
-        tap_active   = true;
-        tap_finger   = event.tfinger.fingerID;
-        tap_down     = touch_pos;
-        scroll_accum = 0.0f;
+        //
+        // El PRIMER dedo se queda el tap hasta que lo suelta o se va de paseo. Antes esto
+        // se rearmaba en CADA bajada, asi que la palma apoyada o el otro pulgar robaban el
+        // tap y al soltar el dedo bueno el id ya no coincidia: el toque no existia. Se
+        // rearma igualmente si el dueño ya no esta vivo en la tabla, porque un FINGER_UP
+        // perdido (Android no los entrega al volver de segundo plano) dejaria la pantalla
+        // muerta para siempre.
+        bool owner_alive = false;
+        if (tap_active)
+            for (const auto& tf : touch_fingers)
+                if (tf.active && tf.id == tap_finger) { owner_alive = true; break; }
+        if (!owner_alive) {
+            tap_active   = true;
+            tap_finger   = event.tfinger.fingerID;
+            tap_down     = touch_pos;
+            tap_now      = touch_pos;
+            scroll_accum = 0.0f;
+        }
 
         // Fuera de la partida (menus, historia, cartas) el dedo NO mueve al profeta ni
         // dispara: solo deja el tap para quien lo quiera.
@@ -464,9 +494,15 @@ void Input::process_touch(const SDL_Event& event) {
         Vec2 prev = (f >= 0) ? touch_fingers[f].pos : touch_pos;
         if (f >= 0) touch_fingers[f].pos = touch_pos;
 
-        // Un dedo que se pasea deja de ser un tap
+        // Donde esta AHORA el dedo del tap: es lo que ilumina el boton que hay debajo. Se
+        // apunta ANTES del test de slop, porque en un menu esta rama se va por el `return`
+        // de abajo y no llegaria nunca.
+        if (tap_active && event.tfinger.fingerID == tap_finger) tap_now = touch_pos;
+
+        // Un dedo que se pasea deja de ser un tap. En un menu se permite mas deriva: un
+        // pulgar se desplaza al apoyarse y 6 unidades son ~2,2 mm.
         if (tap_active && event.tfinger.fingerID == tap_finger &&
-            (touch_pos - tap_down).length() > TOUCH_TAP_SLOP) {
+            (touch_pos - tap_down).length() > (touch_gameplay ? TOUCH_TAP_SLOP : TOUCH_UI_TAP_SLOP)) {
             tap_active = false;
         }
 
@@ -475,13 +511,19 @@ void Input::process_touch(const SDL_Event& event) {
         if (!touch_ui || !touch_gameplay) {
             if (event.tfinger.fingerID == tap_finger) {
                 scroll_accum += touch_pos.y - prev.y;
-                while (scroll_accum <= -TOUCH_SCROLL_STEP) {
+                // UN paso por evento, no todos los que quepan: `pulse` sobre la misma
+                // accion es una pulsacion, asi que dos pasos en el mismo frame contaban
+                // como uno y el resto se perdia (un arrastre rapido recorria la mitad de
+                // lo que decia el dedo). Lo que sobra se queda en el acumulador y sale en
+                // el evento siguiente, que con un dedo real llegan a 60-120 por segundo.
+                if (scroll_accum <= -TOUCH_SCROLL_STEP) {
                     pulse(Action::MoveDown);
                     scroll_accum += TOUCH_SCROLL_STEP;
-                }
-                while (scroll_accum >= TOUCH_SCROLL_STEP) {
+                    tap_active = false;   // lo que recorre la lista no pulsa ademas la fila
+                } else if (scroll_accum >= TOUCH_SCROLL_STEP) {
                     pulse(Action::MoveUp);
                     scroll_accum -= TOUCH_SCROLL_STEP;
+                    tap_active = false;
                 }
             }
             return;
@@ -515,7 +557,7 @@ void Input::process_touch(const SDL_Event& event) {
 
         // El tap se confirma aqui, tambien con el juego corriendo: es lo que lee la UI.
         if (tap_active && event.tfinger.fingerID == tap_finger &&
-            (touch_pos - tap_down).length() <= TOUCH_TAP_SLOP) {
+            (touch_pos - tap_down).length() <= (touch_gameplay ? TOUCH_TAP_SLOP : TOUCH_UI_TAP_SLOP)) {
             tap_pending = true;
             tap_pos     = tap_down;
         }

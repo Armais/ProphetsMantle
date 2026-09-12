@@ -45,6 +45,11 @@ struct CodexScreen {
     mutable int  row_rect_count = 0;
     mutable Rect back_rect = {0, 0, 0, 0};   // "< Volver", solo en tactil
     bool touch_ui = false;                   // lo pone update() desde Input
+    // Lo que hay bajo el dedo se ilumina mientras el dedo sigue apoyado. Lo escribe el
+    // Engine desde Input::ui_press: en movil no hay cursor que resaltar, se toca la fila
+    // que se quiere leer, asi que esta es la unica señal de que el toque ha entrado.
+    bool press_active = false;
+    Vec2 press_pos    = {0, 0};
 
     // true = el jugador ha pedido cerrar
     bool update(Input& input, const SaveData& save, const ItemRegistry& registry);
