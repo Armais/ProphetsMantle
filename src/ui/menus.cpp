@@ -73,12 +73,18 @@ static Rect menu_hit_rect_wide(int i, f32 top, f32 pitch, f32 h) {
 // celda pasa a 25 unidades ~ 9,2 mm sin robarle sitio a nada.
 // El orden es por COLUMNAS (izq. 0..rows-1, dcha. el resto): la lista se lee entera de
 // arriba abajo antes de saltar, y el mapeo indice -> accion de Engine::update no se toca.
-static constexpr f32 GRID_MARGIN = 8.0f;
-static constexpr f32 GRID_COL_W  = 148.0f;
+// Las dos columnas cuelgan del CENTRO, no de los bordes. Con las celdas pegadas al borde
+// pasaban las dos cosas a la vez: los botones se echaban encima de los profetas —que en
+// esta pantalla flanquean el fondo— y entre columna y columna quedaban 55 unidades de aire
+// muerto justo en el medio. Ahora el bloque entero vive en la franja libre entre los dos
+// bustos (x 72..245) y el unico hueco es el canal.
+static constexpr f32 GRID_COL_W = 92.0f;    // zona del dedo por columna (~34 mm)
+static constexpr f32 GRID_GAP   = 12.0f;    // canal entre las dos columnas
+static constexpr f32 GRID_PAD   = 4.0f;     // aire entre el boton y el filo interior
 
 static f32 menu_grid_col_x(int i, int rows) {
-    return (i < rows) ? GRID_MARGIN
-                      : static_cast<f32>(Config::GAME_WIDTH) - GRID_MARGIN - GRID_COL_W;
+    const f32 cx = static_cast<f32>(Config::GAME_WIDTH) * 0.5f;
+    return (i < rows) ? cx - GRID_GAP * 0.5f - GRID_COL_W : cx + GRID_GAP * 0.5f;
 }
 
 static Rect menu_grid_hit(int i, int rows, f32 top, f32 pitch, f32 h) {
@@ -88,7 +94,12 @@ static Rect menu_grid_hit(int i, int rows, f32 top, f32 pitch, f32 h) {
 
 static Rect menu_grid_button(int i, int rows, f32 top, f32 pitch, f32 h, f32 btn_w) {
     const int row = i % rows;
-    return {menu_grid_col_x(i, rows) + (GRID_COL_W - btn_w) * 0.5f, top + row * pitch, btn_w, h};
+    const f32 x0  = menu_grid_col_x(i, rows);
+    // El boton se arrima al centro dentro de su celda (la izquierda por la derecha y al
+    // reves), asi que los dos filos interiores quedan alineados y el bloque sale simetrico
+    // y compacto. La celda entera sigue respondiendo al dedo, tambien por fuera del boton.
+    const f32 x = (i < rows) ? x0 + GRID_COL_W - GRID_PAD - btn_w : x0 + GRID_PAD;
+    return {x, top + row * pitch, btn_w, h};
 }
 
 // Fila que hay bajo el dedo, -1 si no hay ninguna. En movil es lo que sustituye al
@@ -333,7 +344,7 @@ void MenuSystem::render_title(Renderer& renderer) {
 
     if (touch_hints) {
         // Rejilla de 2x4. Siete opciones en una columna dan un paso de 10,9 unidades — 4 mm
-        // de dedo — y en apaisado el ancho estaba vacio. Aqui la celda mide 148x25 (55x9,2
+        // de dedo — y en apaisado el ancho estaba vacio. Aqui la celda mide 92x25 (34x9,2
         // mm) y la septima deja un hueco donde caben las ofrendas.
         constexpr int ROWS = 4;
         const f32 TOP = 68.0f, PITCH = 25.0f, BTN_H = 19.0f;
@@ -344,7 +355,7 @@ void MenuSystem::render_title(Renderer& renderer) {
         f32 btn_w = 0.0f;
         for (int i = 0; i < option_count; i++)
             btn_w = std::max(btn_w, renderer.measure_text(options[i], 0.9f) + 14.0f);
-        btn_w = std::min(btn_w, GRID_COL_W - 8.0f);
+        btn_w = std::min(btn_w, GRID_COL_W - GRID_PAD * 2.0f);
 
         Rect hits[7];
         for (int i = 0; i < option_count; i++) hits[i] = menu_grid_hit(i, ROWS, TOP, PITCH, BTN_H);
@@ -356,9 +367,11 @@ void MenuSystem::render_title(Renderer& renderer) {
             mark_row_rect(i, hits[i]);
         }
         // Las ofrendas van al hueco de la septima celda, SIN panel: con placa se leerian
-        // como un octavo boton.
+        // como un octavo boton. Se centran sobre el hueco del BOTON que ocuparia esa celda
+        // y no sobre la celda entera, asi que cuelgan de la columna en vez de quedarse
+        // descolgadas hacia el borde.
         if (offer_buf[0]) {
-            const Rect hole = menu_grid_hit(ROWS * 2 - 1, ROWS, TOP, PITCH, BTN_H);
+            const Rect hole = menu_grid_button(ROWS * 2 - 1, ROWS, TOP, PITCH, BTN_H, btn_w);
             const f32 ow = renderer.measure_text(offer_buf, 0.8f);
             renderer.draw_text(offer_buf, hole.x + (hole.w - ow) * 0.5f,
                                hole.y + (hole.h - Renderer::TEXT_LINE_UNITS * 0.8f) * 0.5f,

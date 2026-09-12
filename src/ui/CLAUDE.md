@@ -236,13 +236,23 @@ no cambia: W/S mueven el cursor y la ventana lo sigue.
 
 Siete opciones en una columna dan un paso de 10,9 unidades = **4 mm** de dedo en un movil de
 6,5" (Android pide 9). Y en apaisado sobraba todo el ancho. En tactil el titulo pasa a
-**2 columnas x 4 filas** (`menu_grid_hit` / `menu_grid_button`), celda de 148x25 = **55x9,2
+**2 columnas x 4 filas** (`menu_grid_hit` / `menu_grid_button`), celda de 92x25 = **34x9,2
 mm**, orden **por columnas** — izq. Nueva Partida / Continuar / El Santuario / El Codice,
 dcha. Prologo / Opciones / Controles — de modo que el mapeo indice -> accion de
 `Engine::update` no se toca ni una linea. Las **ofrendas** ocupan el hueco de la septima
 celda, sin panel, para que no se lean como un octavo boton. Fuera en tactil: el lema largo
 (cae justo donde empieza la rejilla) y el pie "Toca una opcion", que explica lo obvio en
 cuanto cada opcion tiene el tamaño de un dedo.
+
+**Las dos columnas cuelgan del CENTRO, no de los bordes** (`GRID_GAP` = 12 de canal), y
+dentro de su celda el boton se arrima al centro en vez de centrarse: la izquierda por su
+filo derecho y la derecha por el izquierdo. Con las celdas pegadas al borde pasaban las dos
+cosas de las que se quejo el usuario a la vez — los botones se echaban sobre la cara de los
+profetas, que en esta pantalla flanquean el fondo, y entre columna y columna quedaban 55
+unidades de aire muerto justo en el medio. Ahora el bloque entero vive en la franja libre
+entre los dos bustos (**x 72..245**) y el unico hueco es el canal. La **zona del dedo sigue
+siendo la celda entera**, tambien por fuera del boton, asi que arrimarlo no cuesta area
+tocable.
 
 **Un ancho de boton para las siete, no uno por fila**: en rejilla, medir cada rotulo hace
 una escalera dentro de la columna. Y como el ancho lo manda la columna y no el texto,

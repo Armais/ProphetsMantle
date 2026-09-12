@@ -184,6 +184,12 @@ esa y ya caia en "Continuar"— y el guion pasaba igual.
   titulo, ese toque cae en el canal muerto entre columnas (x 156..164) y no hace nada.
 - **`tactil_ancho_check.txt`** estrena un bloque de rejilla, y es el unico sitio donde el
   desfase de letterbox se puede cazar en un menu: hasta ahora todo lo tocable estaba
-  centrado en x=160, que es justo el punto que el desfase no mueve. Su gate es que
-  `touchpx 40 456` (pilar negro) NO pulse nada — sin descontar el letterbox caeria en x=10,7
-  unidades, dentro de la columna izquierda — y que `touchpx 366 456` de `fila=3`.
+  centrado en x=160, que es justo el punto que el desfase no mueve. La sonda es el **filo
+  interior de la columna derecha**, que es donde 16 unidades de error deciden: sin descontar
+  el letterbox `x_malo = x*0,8 + 32`, o sea que x=167 (dentro de la celda, 166..258) se
+  leeria como 165,6, en el canal muerto. Gates: `touchpx 621 381` da `fila=6` y el pilar
+  negro (`touchpx 40 381`) da `fila=-1`.
+- Ese guion **fija el idioma con `lang 0`**, porque su gate es el NOMBRE del milagro y los
+  ajustes sobreviven entre sesiones: si la pasada anterior lo dejo en ingles, el gate busca
+  "Cuervos de Querit" y el log dice "Ravens of Cherith". Y **contesta al selector de idioma**
+  antes de nada, por lo mismo que `menus_tactil_check`.

@@ -13,12 +13,13 @@
 # y lo unico que cambia de aspecto es el que esta bajo el dedo. De ahi las capturas M4/M5.
 #
 # Reparto TACTIL (unidades de juego, las mismas que pinta cada render_*):
-#   Titulo    rejilla 2x4. Columna izq. x=82, columna dcha. x=238.
-#             0 Nueva Partida (82,77)   4 Prologo   (238,77)
-#             1 Continuar     (82,102)  5 Opciones  (238,102)
-#             2 El Santuario  (82,127)  6 Controles (238,127)
-#             3 El Codice     (82,152)  -- hueco de las ofrendas en (238,152)
-#             El canal entre columnas (x 156..164) es zona muerta a proposito.
+#   Titulo    rejilla 2x4 colgada del CENTRO. Celda izq. x 62..154 (centro 108), celda
+#             dcha. x 166..258 (centro 212).
+#             0 Nueva Partida (108,77)   4 Prologo   (212,77)
+#             1 Continuar     (108,102)  5 Opciones  (212,102)
+#             2 El Santuario  (108,127)  6 Controles (212,127)
+#             3 El Codice     (108,152)  -- hueco de las ofrendas en (212,152)
+#             El canal entre columnas (x 154..166) es zona muerta a proposito.
 #   Opciones  ventana de 6 filas, hueco k -> y = 48 + k*21 (centros 52, 73, 94, 115, 136,
 #             157), placa de x 16 a 304. Con --touch las filas son 8 (Musica, Efectos,
 #             Auto-mira, Sensibilidad, Vibracion, Stick dcho., Idioma, Volver), asi que
@@ -54,9 +55,9 @@ wait 0.1
 
 # --- Titulo: tocar "Opciones", que en la rejilla esta en la columna DERECHA ---
 # Gate: Menu tap: pantalla=1 fila=5
-touch 238 102
+touch 212 102
 wait 0.1
-untouch 238 102
+untouch 212 102
 wait 0.5
 shot M1_opciones_por_toque
 wait 0.1
@@ -122,22 +123,22 @@ wait 0.2
 # El dedo se ARRASTRA fuera antes de soltarlo: en un menu tocar es elegir Y confirmar, asi
 # que soltandolo encima el guion se iria al Santuario. Sacarlo del boton mata el tap, que
 # es ademas la conducta que se quiere: sacar el dedo de un boton lo cancela.
-touch 82 127
+touch 108 127
 wait 0.3
 shot M4_boton_pulsado
 wait 0.15
-drag 82 176
+drag 108 176
 wait 0.2
 shot M5_boton_suelto
 wait 0.1
-untouch 82 176
+untouch 108 176
 wait 0.3
 
 # --- Titulo: "Nueva Partida" (columna izquierda, arriba del todo) ---
 # Gate: Menu tap: pantalla=1 fila=0 y despues `Scene change`
-touch 82 77
+touch 108 77
 wait 0.1
-untouch 82 77
+untouch 108 77
 wait 2.5
 
 # --- Pausa y su rejilla de cuatro (paso 25) ---

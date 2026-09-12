@@ -20,25 +20,41 @@
 
 wait 1.0
 
+# El selector de idioma del primer arranque, si esta: un `defaults` de cualquier pasada
+# anterior lo reabre, y sin contestarlo la sonda de abajo mediria esa pantalla y no el
+# titulo (y de paso dejaria el juego en ingles). En el titulo, x=160 cae en el canal muerto
+# entre columnas y no pulsa nada.  px = 120 + 160*3 = 600 , y = 103*3 = 309
+touchpx 600 309
+wait 0.15
+untouchpx 600 309
+wait 0.6
+
 # --- La rejilla del titulo, tocada en PIXELES ------------------------------------------
 # Hasta la rejilla, todo lo tocable de los menus estaba centrado en x=160, que es el UNICO
-# punto que el desfase del letterbox no mueve: por ahi no se podia cazar. Ahora hay dos
-# columnas, y el pilar negro izquierdo (px 40) sin descontar caeria en x=10,7 unidades, o
-# sea DENTRO de la columna izquierda, a la altura de "El Codice".
-#   Columna izq. centro x=82 -> px 120 + 82*3 = 366 ; fila 3 (El Codice) y=152 -> px 456
-# GATES: el toque del pilar da `fila=-1`, y el de 366 da `fila=3` + `Scene change`.
-touchpx 40 456
+# punto que el desfase del letterbox no mueve: por ahi no habia forma de cazarlo. La sonda
+# es el FILO INTERIOR de la columna derecha, que es donde 16 unidades de error deciden.
+# Sin descontar el letterbox, x_malo = x*0,8 + 32:
+#   x=167 (dentro de la celda derecha, que va de 166 a 258) se leeria como 165,6, o sea
+#   dentro del canal muerto entre columnas -> `fila=-1` en vez de `fila=6`.
+#   px = 120 + 167*3 = 621 ; fila 2 de esa columna (Controles) y=127 -> px 381
+# GATES: `Menu tap: pantalla=1 fila=6` con ese toque, y `fila=-1` con el del pilar negro.
+touchpx 40 381
 wait 0.15
-untouchpx 40 456
+untouchpx 40 381
 wait 0.5
-touchpx 366 456
+touchpx 621 381
 wait 0.15
-untouchpx 366 456
+untouchpx 621 381
 wait 0.8
-shot A2_codice_por_columna
+shot A2_controles_por_columna
 wait 0.2
 press cancel
 wait 0.8
+
+# El gate de este guion es el NOMBRE del milagro, asi que el idioma no puede depender de en
+# que lo dejara la pasada anterior: "Ravens of Cherith" no es "Cuervos de Querit".
+lang 0
+wait 0.3
 
 press confirm
 wait 3.0
