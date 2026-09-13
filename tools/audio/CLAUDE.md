@@ -88,6 +88,32 @@ las diez viejas da **0/10 en verde**):
   pista nueva salia con ganancia 1,0 y a otro volumen. Dos de las viejas **clipean** (pico 1,02).
 - **Encode a 32 kHz `-q:a 3`**: con 27 pistas, `assets/` crece ~15 MB en vez de ~26.
 
+**Los WAV de `tools/audio/sonicpi/tmp/` NO se borran** (723 MB, fuera del repo por
+.gitignore). Son la grabacion cruda de cada pista —2 periodos en PCM 16 bits, 176 KB/s— y con
+ellos `record.py reprocess <pista> <periodo>` rehace la mezcla en SEGUNDOS en vez de regrabar
+en minutos: sonoridad, brillo, filtros y crossfade. Solo hay que regrabar si cambia la MUSICA
+(una nota, un instrumento, el nivel de una capa).
+
+**El periodo de cada pista** (segundo argumento de `capture` y de `reprocess`; si se falla, el
+bucle no cierra):
+
+| pista | periodo | apertura | periodo |
+|---|---|---|---|
+| cap01 | 96 | cap01_intro | 53.333333 |
+| cap02 | 87.272727 | cap02_intro | 54.857143 |
+| cap03 | 80 | cap03_intro | 50.526316 |
+| cap04 | 128 | cap04_intro | 68.571429 |
+| cap05 | 83.478261 | cap05_intro | 48 |
+| cap06 | 76.8 | cap06_intro | 45.714286 |
+| cap07 | 80 | cap07_intro | 45.714286 |
+| cap08 | 101.052632 | cap08_intro | 56.470588 |
+| cap09 | 73.846154 | cap09_intro | 43.636364 |
+| cap10 | 68.571429 | cap10_intro | 41.739130 |
+| main_theme | 96 | menu | 90 |
+| boss_theme | 58.181818 | victory | 31.304348 |
+| death | 48 | ascension | 75.789474 |
+| prologue | 87.272727 | | |
+
 **Dos trampas que costaron varias tomas** y que conviene mirar ANTES de grabar:
 
 - **Una nota por debajo de 55 Hz no existe**: el paso alto de bus se la come. `cap04` tenia
