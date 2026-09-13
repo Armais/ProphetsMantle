@@ -435,7 +435,9 @@ struct Engine {
     void tutorial_probe();                              // refresca las sondas del frame
     bool tutorial_goal_done(TutorialGoal goal, f32 dt); // ¿se ha hecho lo que pedia el paso?
     void tutorial_setup_step();                         // lo que el paso nuevo pone en el mundo
-    void finish_tutorial();            // termina o se salta: restaura y sale a donde toque
+    void finish_tutorial(bool completed);  // `completed` = se cerro el paso CrossExit; si no
+                                           // es un SALTO y sale sin las paginas de cierre
+    void tutorial_back_to_title();     // la salida de quien lo lanzo desde Controles
     void render_tutorial_card();       // el cartel de dos lineas + el boton de SALTAR
 
     // --- Zona continua (2026-09-10) ---------------------------------------------------

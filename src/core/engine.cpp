@@ -461,6 +461,9 @@ void Engine::update(f32 dt) {
     }
     update_music();
 
+    // La escena con la que ENTRA el frame: la lee la guarda del toggle de pausa de mas abajo.
+    const GameScene scene_at_frame_start = state.scene;
+
     switch (state.scene) {
         case GameScene::Intro:
             tap_skip_or_advance(input);
@@ -977,8 +980,8 @@ void Engine::update(f32 dt) {
                             break;
                         case 3:
                             // En el tutorial esta fila es la salida (en PC no hay boton de
-                            // SALTAR, y ESC ya es la pausa que el paso 18 enseña).
-                            if (tutorial.active) { finish_tutorial(); break; }
+                            // SALTAR, y ESC ya es la pausa que el paso 14 enseña).
+                            if (tutorial.active) { finish_tutorial(false); break; }
                             populate_save_data();
                             save.save();
                             change_scene(GameScene::MainMenu);
@@ -1037,9 +1040,17 @@ void Engine::update(f32 dt) {
             break;
     }
 
-    // Pause toggle (available during gameplay)
-    if (state.scene == GameScene::Playing &&
+    // Pause toggle (available during gameplay). `scene_at_frame_start` es lo que impide que
+    // ESC se anule a si mismo: el `case Paused` de arriba ya ha reanudado en ESTE frame, y
+    // sin la guarda esta linea volvia a pausar en el acto — o sea que ESC abria la pausa y
+    // no la cerraba nunca. Se vio al hacer comprobable el paso de la pausa del tutorial,
+    // que es justo el que manda pulsarla.
+    if (scene_at_frame_start == GameScene::Playing && state.scene == GameScene::Playing &&
         input.is_action_just_pressed(Action::Pause)) {
+        // El paso `Pause` del tutorial se cierra AQUI, y solo aqui: la pausa automatica al
+        // irse la app a segundo plano (arriba, en el manejo de eventos) no la pide nadie.
+        if (tutorial.active && tutorial.current().goal == TutorialGoal::Pause)
+            tutorial.pause_seen = true;
         change_scene(GameScene::Paused);
     }
 }
@@ -1468,7 +1479,7 @@ void Engine::tutorial_enter_room(int index) {
     room_fade = 1.0f;
     room_change_grace = Config::Feel::COYOTE_TIME;   // el Doorway recien pisado no rebota
     player.took_damage_this_room = false;
-    // Sala nueva, profeta entero: el arquero del paso 5 deja media vida por el camino y
+    // Sala nueva, profeta entero: el arquero del paso del dash deja media vida por el camino y
     // llegar tocado a la sala de la fe no significa nada aqui (esto no es una partida).
     if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
         auto& h = world.healths[player.entity];
@@ -1497,14 +1508,20 @@ bool Engine::tutorial_goal_done(TutorialGoal goal, f32 dt) {
             if (!has_player || !world.has(player.entity, Component::Movement)) return false;
             const Vec2 v = world.movements[player.entity].velocity;
             tutorial.acc += std::sqrt(v.x * v.x + v.y * v.y) * dt;
-            return tutorial.acc >= 90.0f;   // ~6 tiles: lo justo para saber que respondes tu
+            // 220 unidades (~2,2 s de andar de verdad) y no 90: con 90 el paso se cerraba
+            // en 0,9 s, o de un solo dash suelto (75), antes de que nadie leyera el cartel.
+            return tutorial.acc >= 220.0f;
         }
-        case TutorialGoal::Attack:
-        case TutorialGoal::Secrets: {
+        case TutorialGoal::Attack: {
+            // Props de la sala 1, donde los unicos que hay son las 5 tinajas plantadas.
             const int left = tutorial_count_props(room);
             tutorial.progress = std::max(tutorial.progress, tutorial.prev_props - left);
-            return tutorial.progress >= 2;
+            return tutorial.progress >= tutorial.current().target;
         }
+        case TutorialGoal::Secrets:
+            // Sonda PROPIA, por posicion de tile: en el exterior el bioma decora con
+            // matorral y contar props cerraba el paso con dos tiros perdidos.
+            return tutorial_secrets_opened(room) >= tutorial.current().target;
         case TutorialGoal::Secondary:
             return tutorial.prev_secondary_cd <= 0.0f && player.secondary_cd > 0.0f;
         case TutorialGoal::Dash:
@@ -1525,7 +1542,11 @@ bool Engine::tutorial_goal_done(TutorialGoal goal, f32 dt) {
         case TutorialGoal::Chest:  return room.cells[0].chest_opened;
         case TutorialGoal::Offering: return tutorial.offerings_picked > 0;
         case TutorialGoal::Map:    return input.is_action_pressed(Action::Map) || input.touch_map_open;
-        default:                   return false;   // los informativos se cierran por tiempo
+        // Las dos que el motor apunta a mano, porque pasan con el juego fuera de Playing:
+        // la pausa (change_scene a Paused) y el arco (update_room_state).
+        case TutorialGoal::Pause:     return tutorial.pause_seen;
+        case TutorialGoal::CrossExit: return tutorial.exit_reached;
+        default:                   return false;
     }
 }
 
@@ -1558,15 +1579,25 @@ void Engine::tutorial_setup_step() {
                      ItemComponent::Pickup::Offering, 3.0f);
     }
 
-    // El arquero del paso de la vida: dispara de verdad, que es justo lo que hay que ver.
-    if (goal == TutorialGoal::Health)
+    // El arquero del paso del dash: dispara de verdad, que es lo que hace que esquivar
+    // signifique algo. Y el mordisco que te lleva deja el paso siguiente de la sala (el
+    // consumible) con algo que curar.
+    if (goal == TutorialGoal::Dash)
         spawn_enemy(world, EnemyType::ArqueroReal, at, enemy_textures[static_cast<u32>(EnemyType::ArqueroReal)], 1);
 
-    // Los milagros piden a quien lanzarselos. Se repone solo si no queda nadie: sin esto, el
-    // que se despacha con el primer milagro deja los dos pasos siguientes sin blanco.
-    if ((goal == TutorialGoal::Miracle1 || goal == TutorialGoal::Miracle2 ||
-         goal == TutorialGoal::Miracle3) && world.count_living_enemies(0) == 0)
-        spawn_enemy(world, EnemyType::SoldadoDeAcab, at, enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)], 1);
+    if (goal == TutorialGoal::Miracle1 || goal == TutorialGoal::Miracle2 ||
+        goal == TutorialGoal::Miracle3) {
+        // La FE, y esto no es un lujo desde que ningun paso se cierra solo: Fuego del Cielo
+        // es Tier 3 (pide 50) y cuesta 20, asi que llegar aqui con la fe mordida por el
+        // arquero —o gastada en los dos milagros anteriores— dejaba el paso IMPOSIBLE y el
+        // tutorial colgado para siempre. Se repone entera al abrirse cada paso de milagro:
+        // el tutorial ensena a lanzarlos, no a administrar la fe.
+        if (faith.current < Config::FAITH_MAX) faith.current = Config::FAITH_MAX;
+        // Y a quien lanzarselos. Se repone solo si no queda nadie: sin esto, el que se
+        // despacha con el primer milagro deja los dos pasos siguientes sin blanco.
+        if (world.count_living_enemies(0) == 0)
+            spawn_enemy(world, EnemyType::SoldadoDeAcab, at, enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)], 1);
+    }
 }
 
 void Engine::update_tutorial(f32 dt) {
@@ -1579,17 +1610,24 @@ void Engine::update_tutorial(f32 dt) {
         if (h.current < 1.0f) h.current = 1.0f;
     }
 
+    // NADA se evalua fuera de Playing, y esto es lo que arregla el orden del cofre: pisarlo
+    // llama a open_item_choice, que fija `state.scene` EN EL ACTO (change_scene), asi que el
+    // mismo frame en que se abre la carta el tutorial ya no mira nada. El paso `Chest` se
+    // cierra al VOLVER de la pantalla de eleccion, con la carta ya en la mano. Igual valen
+    // el altar del paso `Pray` y la pausa.
+    if (state.scene != GameScene::Playing) return;
+
     // Saltarlo en tactil: el mismo boton de SALTAR de las escenas. En PC se sale por la
-    // pausa (ESC ya es Pausa aqui, y el paso 18 la enseña: no se le puede dar otro oficio).
+    // pausa (ESC ya es Pausa aqui, y el paso 14 la enseña: no se le puede dar otro oficio).
     Vec2 tp;
     if (input.touch_ui && input.peek_tap(tp) && tutorial_skip_rect().contains(tp)) {
         input.take_tap(tp);
         SDL_Log("Tutorial: saltado en el paso %d", tutorial.step + 1);
-        finish_tutorial();
+        finish_tutorial(false);
         return;
     }
 
-    if (tutorial.finished()) { finish_tutorial(); return; }
+    if (tutorial.finished()) { finish_tutorial(true); return; }
 
     // Puerta abierta y sin cruzar: no se evalua ningun paso hasta estar en la sala nueva.
     if (tutorial.waiting_door) { tutorial_probe(); return; }
@@ -1605,7 +1643,7 @@ void Engine::update_tutorial(f32 dt) {
             tutorial.acc = 0.0f;
             tutorial.progress = 0;
             tutorial.prev_props = tutorial_count_props(current_room_data);
-            if (tutorial.finished()) { finish_tutorial(); return; }
+            if (tutorial.finished()) { finish_tutorial(true); return; }
             if (tutorial.current().room != prev_room) {
                 tutorial_open_north_door(current_room_data);
                 tutorial.door_open = true;
@@ -1624,18 +1662,29 @@ void Engine::update_tutorial(f32 dt) {
     if (st.goal == TutorialGoal::Offering && tutorial.step_t > 0.0f && !tutorial_offering_alive(world))
         tutorial_setup_step();
     tutorial.step_t += dt;
-    const bool done = (st.seconds > 0.0f) ? (tutorial.step_t >= st.seconds)
-                                          : tutorial_goal_done(st.goal, dt);
+    const bool done = tutorial_goal_done(st.goal, dt);
     tutorial_probe();
     if (done) {
         tutorial.done_t = 0.9f;
         audio.play_sfx(SfxID::Notification, 0.7f);
-        SDL_Log("Tutorial: paso %d/%d cumplido (%s)", tutorial.step + 1, TUTORIAL_STEP_COUNT,
-                st.seconds > 0.0f ? "informativo" : "por la accion");
+        SDL_Log("Tutorial: paso %d/%d cumplido", tutorial.step + 1, TUTORIAL_STEP_COUNT);
     }
 }
 
-void Engine::finish_tutorial() {
+// Desde la pantalla de Controles se vuelve al titulo: quien solo iba a repasar los controles
+// no puede perder la partida que tenia a medias. Separado de finish_tutorial porque tambien
+// es la salida de las paginas de cierre (StoryThen::TutorialToTitle).
+void Engine::tutorial_back_to_title() {
+    world.clear();
+    player = Player{};
+    hud.visible = true;
+    refresh_continue_state();
+    change_scene(GameScene::MainMenu);
+    menus.current = MenuScreen::Title;
+    menus.selected_option = 0;
+}
+
+void Engine::finish_tutorial(bool completed) {
     const TutorialThen then = tutorial.then;
     SDL_Log("Tutorial: fin (paso %d de %d)", std::min(tutorial.step + 1, TUTORIAL_STEP_COUNT),
             TUTORIAL_STEP_COUNT);
@@ -1645,19 +1694,23 @@ void Engine::finish_tutorial() {
     save.data = tutorial_save_backup;
     sync_progression_from_save();
 
+    // Terminado: las dos paginas de cierre cuentan lo que no era una accion (la vida, la fe
+    // y sus grados, las ofrendas) y son la pantalla que faltaba antes de Acab y Jezabel. El
+    // destino viaja en el StoryThen porque `tutorial` ya esta limpio a estas alturas.
+    if (completed) {
+        story.begin();
+        story_tutorial_outro(story);
+        play_story(then == TutorialThen::NewRun ? StoryThen::TutorialToRun
+                                                : StoryThen::TutorialToTitle);
+        return;
+    }
+
+    // Saltado: quien pulsa SALTAR pide salir, no leer dos pantallas mas.
     if (then == TutorialThen::NewRun) {
         start_new_run();
         return;
     }
-    // Desde la pantalla de Controles se vuelve al titulo: quien solo iba a repasar no puede
-    // perder la partida que tenia a medias.
-    world.clear();
-    player = Player{};
-    hud.visible = true;
-    refresh_continue_state();
-    change_scene(GameScene::MainMenu);
-    menus.current = MenuScreen::Title;
-    menus.selected_option = 0;
+    tutorial_back_to_title();
 }
 
 void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
@@ -2293,6 +2346,10 @@ void Engine::finish_story_action(StoryThen then) {
             menus.stats_time    = state.run_time;
             change_scene(GameScene::Victory);
             break;
+        // Cierre del tutorial (Engine::finish_tutorial): a donde se iba viaja en el StoryThen
+        // porque `tutorial` ya se limpio antes de encolar las paginas.
+        case StoryThen::TutorialToRun:   start_new_run();          break;
+        case StoryThen::TutorialToTitle: tutorial_back_to_title(); break;
     }
 }
 
@@ -2303,15 +2360,14 @@ void Engine::update_music() {
     MusicID want = MusicID::COUNT;
     switch (state.scene) {
         case GameScene::Intro:
-            // El prologo tiene su tema; la intro de capitulo mantiene el ambiente del
-            // acto, por lo mismo que la carta (case Story): no cortar la musica cada
-            // vez que empieza un capitulo.
+            // El prologo tiene el suyo; el Ascenso conserva el que ya suena desde
+            // trigger_ascension (cortarlo justo cuando aparece el carro seria lo
+            // contrario de una cinematica). La cinematica de capitulo estrena el
+            // tema de ese capitulo: es la primera vez que el jugador lo oye, y
+            // entra desnudo antes de sonar entero al empezar a jugar.
             if      (cine_then == CineThen::MainMenu)        want = MusicID::Prologue;
-            // El Ascenso conserva su tema (sonando desde trigger_ascension): cortarlo
-            // justo cuando aparece el carro seria lo contrario de una cinematica.
             else if (cine_then == CineThen::FinishAscension) want = MusicID::Ascension;
-            else want = (state.current_act == Act::Act_I) ? MusicID::Exploration
-                                                          : MusicID::EliseoCombat;
+            else want = chapter_intro(state.current_chapter);
             break;
         case GameScene::MainMenu:   want = MusicID::MainTheme; break;
         case GameScene::Playing:
@@ -2322,19 +2378,23 @@ void Engine::update_music() {
             const Room* zone = zone_ptr();
             bool boss_room = current_room_data.type == RoomType::Zone && zone && zone->arena_sealed;
             if (boss_room) want = MusicID::BossTheme;
-            else want = (state.current_act == Act::Act_I) ? MusicID::Exploration : MusicID::EliseoCombat;
+            else want = chapter_theme(state.current_chapter);
             break;
         }
         case GameScene::Story:
-            // La ascension tiene su propio tema; el resto de paginas mantienen el ambiente
-            // del acto para no cortar la musica cada vez que empieza un capitulo.
+            // La ascension y el epilogo tienen tema propio. El tutorial no es un
+            // capitulo, asi que se queda con el tema del titulo. Lo demas —carta de
+            // apertura y outro— es el tema desnudo del capitulo.
             if      (story.then == StoryThen::FinishAscension) want = MusicID::Ascension;
             else if (story.then == StoryThen::VictoryMenu)     want = MusicID::Victory;
-            else if (state.current_act == Act::Act_I)          want = MusicID::Exploration;
-            else                                               want = MusicID::EliseoCombat;
+            else if (story.then == StoryThen::TutorialToRun ||
+                     story.then == StoryThen::TutorialToTitle) want = MusicID::MainTheme;
+            else                                               want = chapter_intro(state.current_chapter);
             break;
         case GameScene::Codex:      break;   // sin cambio: se abre sobre lo que ya suene
-        case GameScene::Sanctuary:  want = MusicID::MainTheme; break;
+        // El Santuario deja de sonar como el titulo: `menu.ogg` existia desde la
+        // primera tanda y no la pedia nadie.
+        case GameScene::Sanctuary:  want = MusicID::Menu; break;
         case GameScene::GameOver:   want = MusicID::Death; break;
         case GameScene::Victory:    want = MusicID::Victory; break;
     }
@@ -2657,7 +2717,7 @@ void Engine::render_tutorial_card() {
                        {150, 138, 120, 200}, 0.5f);
 
     // Salir: en tactil, el boton de SALTAR de siempre. En PC no lo hay (ESC ya es la pausa
-    // que el paso 18 enseña), asi que se dice donde esta la puerta — y solo al principio.
+    // que el paso 14 enseña), asi que se dice donde esta la puerta — y solo al principio.
     if (touch)
         draw_skip_button_at(renderer, tutorial_skip_rect(), world.time,
                             menus.press_active && tutorial_skip_rect().contains(menus.press_pos));
@@ -3784,6 +3844,13 @@ void Engine::update_room_state() {
         Vec2 exit_pos = room.tile_to_world(room.exit_tx, room.exit_ty);
         Vec2 center = world.transforms[player.entity].position;
         if (std::abs(center.x - exit_pos.x) < 20.0f && std::abs(feet.y - exit_pos.y) < 20.0f) {
+            // En el tutorial el arco es SU salida, nunca la del capitulo: sin esta guarda,
+            // caminar sobre el en cualquiera de los ultimos pasos lanzaba el epilogo narrado
+            // del capitulo 1 y advance_chapter() con el tutorial todavia puesto.
+            if (tutorial.active) {
+                if (tutorial.current().goal == TutorialGoal::CrossExit) tutorial.exit_reached = true;
+                return;
+            }
             // Cierre narrado del capitulo antes de pasar al siguiente
             story.begin();
             story_chapter_outro(story, state.current_chapter);
@@ -3809,7 +3876,10 @@ void Engine::update_room_state() {
                 room.tiles[ty][tx] = TileType::Path;
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(15.0f);
                 faith.modify(5.0f);
-                open_item_choice(tr("EL COFRE SE ABRE", "THE CHEST OPENS"));
+                // En el tutorial la carta se explica MIENTRAS esta abierta: el cartel de
+                // despues llegaba con la carta ya cerrada y nada que hacer.
+                open_item_choice(tutorial.active ? tutorial_choice_title()
+                                                 : tr("EL COFRE SE ABRE", "THE CHEST OPENS"));
             }
             break;
         case TileType::Event:
@@ -4253,7 +4323,11 @@ void Engine::open_item_choice(const char* title) {
             offered += offered.empty() ? "" : " / ";
             offered += d ? d->name : "?";
         }
-        SDL_Log("Item choice: %s", offered.c_str());
+        // El TITULO va en el log porque es lo unico que distingue de donde sale la carta, y
+        // en el tutorial es contenido: la explicacion de "eliges una de tres" se da ahi,
+        // con la carta abierta. Fotografiarla no vale de gate: bajo autoplay se toma sola
+        // a los 0,7 s y el `shot` de un guion llega tarde.
+        SDL_Log("Item choice [%s]: %s", title ? title : "-", offered.c_str());
     }
     choice.count = static_cast<int>(ids.size());
     for (int i = 0; i < choice.count; i++) { choice.ids[i] = ids[i]; choice.extras[i].clear(); }

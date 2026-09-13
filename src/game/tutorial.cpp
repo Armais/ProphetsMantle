@@ -12,31 +12,27 @@
 // =============================================================================
 // Tabla
 // =============================================================================
-// `seconds` > 0 = paso informativo: no hay accion que validar y se cierra solo.
-// `target`  > 1 = hay que repetir la accion esas veces.
+// `target` > 1 = hay que repetir la accion esas veces. No hay relojes: TODOS los pasos se
+// cierran haciendo lo que el cartel nombra (la decision de 2026-09-13, en tutorial.h).
 const TutorialStep TUTORIAL_STEPS[] = {
     // Sala 1 - el cuerpo
-    {TutorialGoal::Move,       0, 0.0f, 1},
-    {TutorialGoal::Attack,     0, 0.0f, 2},
-    {TutorialGoal::Secondary,  0, 0.0f, 1},
-    {TutorialGoal::Dash,       0, 0.0f, 1},
-    {TutorialGoal::Health,     0, 7.0f, 1},
-    {TutorialGoal::Consumable, 0, 0.0f, 1},
+    {TutorialGoal::Move,       0, 1},
+    {TutorialGoal::Attack,     0, 2},
+    {TutorialGoal::Secondary,  0, 1},
+    {TutorialGoal::Dash,       0, 1},
+    {TutorialGoal::Consumable, 0, 1},
     // Sala 2 - la fe
-    {TutorialGoal::Faith,      1, 7.5f, 1},
-    {TutorialGoal::Miracle1,   1, 0.0f, 1},
-    {TutorialGoal::Miracle2,   1, 0.0f, 1},
-    {TutorialGoal::Miracle3,   1, 0.0f, 1},
-    {TutorialGoal::Pray,       1, 0.0f, 1},
-    {TutorialGoal::FaithTier,  1, 8.0f, 1},
+    {TutorialGoal::Miracle1,   1, 1},
+    {TutorialGoal::Miracle2,   1, 1},
+    {TutorialGoal::Miracle3,   1, 1},
+    {TutorialGoal::Pray,       1, 1},
     // Sala 3 - el mundo
-    {TutorialGoal::Secrets,    2, 0.0f, 2},
-    {TutorialGoal::Chest,      2, 0.0f, 1},
-    {TutorialGoal::Choice,     2, 7.0f, 1},
-    {TutorialGoal::Offering,   2, 0.0f, 1},
-    {TutorialGoal::Map,        2, 0.0f, 1},
-    {TutorialGoal::Pause,      2, 7.5f, 1},
-    {TutorialGoal::Objective,  2, 8.5f, 1},
+    {TutorialGoal::Secrets,    2, 2},
+    {TutorialGoal::Chest,      2, 1},
+    {TutorialGoal::Offering,   2, 1},
+    {TutorialGoal::Map,        2, 1},
+    {TutorialGoal::Pause,      2, 1},
+    {TutorialGoal::CrossExit,  2, 1},
 };
 const int TUTORIAL_STEP_COUNT = static_cast<int>(sizeof(TUTORIAL_STEPS) / sizeof(TUTORIAL_STEPS[0]));
 
@@ -77,18 +73,12 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                        "The sling reaches where the hand cannot.")};
 
         case TutorialGoal::Dash:
-            return {touch ? tr("Esquiva: botón DASH", "Dodge: DASH button")
-                          : tr("Esquiva: ESPACIO o J", "Dodge: SPACE or J"),
+            // Aqui entra el arquero (Engine::tutorial_setup_step): esquivar con alguien
+            // disparandote es lo que hace que el dash signifique algo.
+            return {touch ? tr("Esquiva al arquero: botón DASH", "Dodge the archer: DASH button")
+                          : tr("Esquiva al arquero: ESPACIO o J", "Dodge the archer: SPACE or J"),
                     tr("Mientras esquivas, nada te toca.",
                        "While you dodge, nothing touches you.")};
-
-        case TutorialGoal::Health:
-            // "La barra roja" era falso y se vio en la captura: la barra de vida es VERDE
-            // por encima de la mitad, y ahi el profeta estaba intacto.
-            return {tr("La barra de arriba a la izquierda es tu vida",
-                       "The top-left bar is your life"),
-                    tr("El arquero no perdona. Aquí no puedes caer; fuera, sí.",
-                       "The archer does not forgive. Here you cannot fall; outside, you can.")};
 
         case TutorialGoal::Consumable:
             return {touch ? tr("Bébete el agua: botón USAR",
@@ -96,14 +86,6 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                           : tr("Bébete el agua: R", "Drink the water: R"),
                     tr("Come y bebe, que el camino es largo.",
                        "Eat and drink, for the road is long.")};
-
-        case TutorialGoal::Faith:
-            // Ni "la barra azul" ni "la roja": las dos cambian de color con su nivel y el
-            // cartel mentia a partir del 90 % de fe (dorada) o del 50 % de vida (verde).
-            return {tr("Debajo de la vida, la barra de la FE",
-                       "Under your life, the FAITH bar"),
-                    tr("Sube al vencer y al orar; baja al obrar milagros y al ser herido.",
-                       "It rises when you win and pray; it falls with miracles and wounds.")};
 
         case TutorialGoal::Miracle1:
             return {touch ? tr("Lanza el primer milagro: su celda del HUD",
@@ -132,12 +114,6 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                     tr("Orando se recobra la fe, y de orar vienen los milagros nuevos.",
                        "Praying restores faith, and from praying come new miracles.")};
 
-        case TutorialGoal::FaithTier:
-            return {tr("La fe tiene grados",
-                       "Faith has degrees"),
-                    tr("Cuanta más llevas, más daño haces y más milagros se te abren.",
-                       "The more you carry, the harder you strike and the more miracles open.")};
-
         case TutorialGoal::Secrets:
             return {tr("Dispara al matorral y a la tinaja: dos escondrijos",
                        "Shoot the brush and the jar: two caches"),
@@ -149,12 +125,6 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                        "Walk up to the chest"),
                     tr("Un cofre cura, da fe y ofrece una bendición.",
                        "A chest heals, gives faith and offers a blessing.")};
-
-        case TutorialGoal::Choice:
-            return {tr("Eso es una bendición: eliges una de tres",
-                       "That was a blessing: you pick one of three"),
-                    tr("Lo elegido te acompaña hasta el final de la partida, no más allá.",
-                       "What you choose walks with you to the end of the run, no further.")};
 
         case TutorialGoal::Offering:
             return {tr("Recoge la ofrenda dorada",
@@ -176,11 +146,11 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                     tr("En la pausa vive el Códice, donde se anota todo lo que ves.",
                        "The Codex lives in the pause menu: everything you meet is written there.")};
 
-        case TutorialGoal::Objective:
-            return {tr("Ya está: limpia salas, halla al JEFE y cruza el arco",
-                       "That's all: clear rooms, find the BOSS, cross the arch"),
-                    tr("Ve, pues, y que tu fe no se apague por el camino.",
-                       "Go, then, and let your faith not go out along the way.")};
+        case TutorialGoal::CrossExit:
+            return {tr("Cruza el arco: ahí acaba cada capítulo",
+                       "Cross the arch: that is how a chapter ends"),
+                    tr("Limpia las salas, halla al jefe y cruza su arco.",
+                       "Clear the rooms, find the boss and cross his arch.")};
 
         default:
             return {"", ""};
@@ -192,6 +162,10 @@ TutorialText tutorial_door_text() {
                "Cross the north door"),
             tr("Se abre lo que estaba cerrado, y hay más que ver.",
                "What was shut is opened, and there is more to see.")};
+}
+
+const char* tutorial_choice_title() {
+    return tr("ELIGES UNA DE TRES", "YOU PICK ONE OF THREE");
 }
 
 // =============================================================================
@@ -286,9 +260,10 @@ void tutorial_build_room(Room& room, int index, int chapter) {
     // El cofre, al otro lado: hay que cruzar el claro para llegar.
     room.tiles[cy - 1][cx + 6] = TileType::Chest;
 
-    // El arco de salida del capitulo, al fondo y ya abierto. No lleva a ninguna parte (el
-    // ultimo paso es informativo y el tutorial se cierra solo), pero es LA pieza que hay que
-    // reconocer cuando caiga el primer jefe de verdad.
+    // El arco de salida del capitulo, al fondo y ya abierto. Es la SALIDA del tutorial
+    // (paso `CrossExit`) y la pieza que hay que reconocer cuando caiga el primer jefe de
+    // verdad. Pisarlo en un paso anterior no hace nada: Engine::update_room_state guarda
+    // esa rama contra `tutorial.active`, asi que de aqui no sale ningun epilogo narrado.
     // Cerca y DESCENTRADO. Medido sobre la captura: con la camara pegada al borde de abajo
     // de la celda, todo lo que este a mas de dos tiles por encima del profeta cae detras del
     // cartel del tutorial (y 34..62), y el cartel del ultimo paso habla justo de este arco.
@@ -300,6 +275,26 @@ void tutorial_build_room(Room& room, int index, int chapter) {
     room.has_doorway = false;
     room.cells[0].cleared = true;
     room.cells[0].visited = true;
+}
+
+// Los SEIS escondrijos de la sala 3, por posicion: las mismas coordenadas que siembra
+// `tutorial_build_room`. Contar props de la sala no vale — el bioma decora con matorral y
+// un Fuego del Cielo lanzado a otra cosa cerraba el paso sin que el jugador lo entendiera.
+int tutorial_secrets_opened(const Room& room) {
+    const int cx = room.tiles_w / 2, cy = room.tiles_h - 5;
+    const int spots[6][2] = {              // {tx, ty}
+        {cx - 4, cy}, {cx - 5, cy},
+        {cx - 4, cy - 2}, {cx - 5, cy - 2},
+        {cx - 6, cy - 1}, {cx - 6, cy + 1},
+    };
+    int opened = 0;
+    for (const auto& sp : spots) {
+        const int tx = sp[0], ty = sp[1];
+        if (tx < 0 || tx >= room.tiles_w || ty < 0 || ty >= room.tiles_h) continue;
+        const TileType t = room.tiles[ty][tx];
+        if (t != TileType::Jar && t != TileType::Bush && t != TileType::TallGrass) opened++;
+    }
+    return opened;
 }
 
 void tutorial_spawn_tile(int index, int& tx, int& ty) {

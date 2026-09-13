@@ -13,6 +13,13 @@ ampliar **tres** switches a la vez: `Engine::update`, `Engine::render` y
 
 `Choice` is the "elige 1 de 3" screen (items or miracles) drawn over the frozen world.
 
+**El toggle de la pausa se anulaba a sí mismo** (arreglado el 2026-09-13). `Engine::update`
+resuelve la escena en el `switch` y DESPUÉS comprueba `Playing && just_pressed(Pause)` para
+pausar. Con ESC estando en pausa el `case Paused` reanudaba y esa comprobación volvía a
+pausar **en el mismo frame**: ESC abría la pausa y no la cerraba nunca. La guarda es
+`scene_at_frame_start`, la escena con la que entra el frame. Salió al hacer comprobable el
+paso de la pausa del tutorial, que es justo el que manda pulsarla.
+
 With special `Transition` state for room changes and `Ascension` for Act I→II switch.
 
 El fundido de sala:

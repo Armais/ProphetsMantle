@@ -14,9 +14,12 @@
 //     unica forma de que "explicalo todo" y "se valida haciendolo" quepan juntos.
 //   - Los enemigos pegan de verdad pero el tutorial NO se puede perder: la vida no baja
 //     de 1 (Engine::update_tutorial).
-//   - Cada paso se cierra HACIENDO la accion; el mundo no se congela en ningun momento.
-//     Los pasos que no son una tecla (que es la fe, que son las ofrendas, cual es el
-//     objetivo) se cierran solos por tiempo.
+//   - NINGUN paso se cierra solo (2026-09-13): si el cartel nombra una accion, esa accion
+//     es lo que lo cierra. No quedan relojes. Lo puramente informativo (que es la vida, que
+//     es la fe, sus grados) dejo de ser un paso: no es una accion, es una explicacion, y va
+//     al FINAL en forma de dialogo (`story_tutorial_outro`), que es ademas la pantalla que
+//     falta entre el tutorial y Acab. El mundo no se congela en ningun momento.
+//   - CRUZAR EL ARCO termina el tutorial: el arco de la sala 3 es la salida de verdad.
 //   - Se salta entero en cualquier momento, con el mismo boton de SALTAR de las escenas.
 //   - Al terminar (o al saltar) arranca la partida de verdad: el equipo del tutorial NO
 //     viaja, y el guardado se restaura tal como estaba (Engine::finish_tutorial). Pero
@@ -40,32 +43,28 @@ struct Room;
 // Los pasos
 // =============================================================================
 // El orden de este enum ES el orden del tutorial. `TUTORIAL_STEPS` (tutorial.cpp) dice en
-// que sala vive cada uno y cuanto dura si es informativo.
+// que sala vive cada uno y cuantas veces hay que hacerlo.
 enum class TutorialGoal : u8 {
     // Sala 1 - el cuerpo
     Move = 0,       // moverse
     Attack,         // romper dos tinajas a tiros
     Secondary,      // disparar el arma secundaria
-    Dash,           // esquivar
-    Health,         // informativo: la barra de vida (entra un arquero)
-    Consumable,     // beberse el consumible
+    Dash,           // esquivar (entra un arquero: esquivar con alguien disparandote)
+    Consumable,     // beberse el consumible (el mordisco del arquero deja algo que curar)
 
     // Sala 2 - la fe
-    Faith,          // informativo: que es la barra azul
     Miracle1,       // lanzar el milagro del primer slot
     Miracle2,       // ... el del segundo
     Miracle3,       // ... el del tercero
     Pray,           // orar en el altar
-    FaithTier,      // informativo: los niveles de fe
 
     // Sala 3 - el mundo
     Secrets,        // abrir dos escondrijos (matorral, tinaja)
-    Chest,          // abrir el cofre
-    Choice,         // informativo: la carta de "elige 1 de 3" que acaba de salir
+    Chest,          // abrir el cofre (la carta de 1 de 3 se explica ESTANDO abierta)
     Offering,       // recoger una ofrenda
     Map,            // abrir el mapa
-    Pause,          // informativo: la pausa y el Codice
-    Objective,      // informativo: el jefe y el arco de salida
+    Pause,          // abrir la pausa (y salir de ella)
+    CrossExit,      // cruzar el arco: ahi se acaba el tutorial
 
     COUNT
 };
@@ -73,7 +72,6 @@ enum class TutorialGoal : u8 {
 struct TutorialStep {
     TutorialGoal goal;
     int  room;      // 0, 1 o 2: en que sala se juega
-    f32  seconds;   // > 0: informativo, se cierra solo a los N segundos
     int  target;    // > 1: hay que repetir la accion N veces
 };
 
@@ -92,6 +90,15 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch);
 
 // Cartel mientras la puerta del norte esta abierta y queda cruzarla.
 TutorialText tutorial_door_text();
+
+// Titulo de la carta de "elige 1 de 3" cuando la abre el cofre del tutorial: la explicacion
+// se da MIENTRAS la carta esta en pantalla, no en un cartel posterior con la carta ya cerrada.
+const char* tutorial_choice_title();
+
+// Cuantos de los SEIS escondrijos que siembra `tutorial_build_room` en la sala 3 estan ya
+// abiertos. Por posicion de tile y no contando props de la sala: asi ni el matorral
+// decorativo del bioma ni un Fuego del Cielo lanzado a otra cosa cierran el paso.
+int tutorial_secrets_opened(const Room& room);
 
 // Monta la sala `index` (0..2) del tutorial sobre una Room reutilizada. Determinista: las
 // tres salas son identicas en todas las partidas, como el resto del mundo del juego.
@@ -132,6 +139,8 @@ struct TutorialSystem {
     int  prev_props = 0;          // tinajas + matorral que quedaban en la sala
     int  prev_charges = 0;        // Player::consumable_charges
     int  offerings_picked = 0;
+    bool pause_seen   = false;    // se abrio la pausa desde el juego (paso `Pause`)
+    bool exit_reached = false;    // se piso el arco de salida (paso `CrossExit`)
 
     const TutorialStep& current() const {
         const int i = (step < 0) ? 0 : (step >= TUTORIAL_STEP_COUNT ? TUTORIAL_STEP_COUNT - 1 : step);

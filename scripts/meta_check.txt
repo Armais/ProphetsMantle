@@ -84,8 +84,8 @@ savedump
 
 # --- Gate duro: un objeto bloqueado NO sale en las cartas ---
 # Se le dan TODOS los sorteables que no estan bloqueados y se piden varias tiradas. La
-# linea "Item choice: ..." del log dice lo que se OFRECIO, no solo lo que se tomo, que es
-# lo unico que permite comprobar esto desde un guion.
+# linea "Item choice [titulo]: ..." del log dice lo que se OFRECIO, no solo lo que se tomo,
+# que es lo unico que permite comprobar esto desde un guion.
 #
 # Ojo: las dos reliquias no pueden estar las dos en la mano (un solo slot, GDD 7.3), asi
 # que la que quedo fuera SIGUE siendo candidata. Por eso el gate NO es "no se ofrece

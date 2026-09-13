@@ -1,15 +1,21 @@
-# Verificacion: el tutorial con el dedo (game/tutorial.h, 2026-09-12)
+# Verificacion: el tutorial con el dedo (game/tutorial.h; 15 pasos desde 2026-09-13)
 # Uso:  MANTLE.exe --touch --script scripts/tutorial_tactil_check.txt
 #
 # --touch es OBLIGATORIO: en tactil los carteles hablan de DEDOS y no de teclas (la regla
 # de `src/input/CLAUDE.md`), y el boton de SALTAR solo existe aqui — en PC la salida es la
-# fila "Dejar el tutorial" de la pausa, porque ESC ya es la pausa que el paso 18 enseña.
+# fila "Dejar el tutorial" de la pausa, porque ESC ya es la pausa que el paso 14 enseña.
 #
 # GATES DEL LOG:
-#   - `Tutorial: empieza`, y luego `Tutorial: saltado en el paso N` al tocar SALTAR.
+#   - `Tutorial: empieza`, y luego `Tutorial: saltado en el paso N` al tocar SALTAR. Saltado
+#     NO es terminado: sale directo, sin las dos paginas de cierre.
 #   - Ni una linea `Input: tap descartado sin leer`.
 # GATE VISUAL: en las capturas, NI UNA tecla en los carteles (nada de "W A S D", "K", "R",
 #   "TAB", "ESC"): mitad izquierda, mitad derecha, DASH, USAR, ARMA, celdas del HUD.
+# GATE VISUAL, el que motivo la pasada: en `111_tuttactil_pregunta` el rotulo del segundo
+#   boton ("No, al capitulo 1") tiene que leerse LIMPIO. Con el reparto viejo ({92,28,22})
+#   el pie de ayuda caia en y=130, dentro del panel y encima del rotulo, letra sobre letra.
+#   Los dos pies van ahora a 131 y 139, por debajo del boton (ink 104..124, dedo 101..127)
+#   y por encima del orillo del manto, que cruza desde y=146.
 
 lang 0
 wait 1.0
@@ -29,27 +35,36 @@ shot 105_tuttactil_s1_mover
 tutorial 3
 wait 1.4
 shot 106_tuttactil_honda
-tutorial 8
+tutorial 6
 wait 1.4
 shot 107_tuttactil_milagro
-tutorial 17
+tutorial 13
 wait 1.4
 shot 108_tuttactil_mapa
+tutorial 14
+wait 1.4
+shot 109_tuttactil_pausa
 
 # El boton de SALTAR del tutorial: rect {196, 4, 52, 14}, centro en (222, 11). NO es el
 # {262,4} de las escenas: ahi pisaria el minimapa, y el toque abria el mapa en vez de saltar.
 touch 222 11
 wait 0.3
-shot 109_tuttactil_saltar_pulsado
+shot 110_tuttactil_saltar_pulsado
 untouch 222 11
 wait 1.2
-shot 110_tuttactil_tras_saltar
+shot 110b_tuttactil_tras_saltar
 
-# La pregunta de Nueva Partida con el dedo: "Si" es la primera fila (y 92..120 en tactil).
+# La pregunta de Nueva Partida con el dedo. Reparto tactil {78, 26, 20}: "Si" ocupa la zona
+# 75..101 e "y=88" es su centro; "No" la 101..127.
 tutorialask
 wait 0.8
 shot 111_tuttactil_pregunta
 wait 0.3
-press cancel
-wait 0.6
+touch 160 88
+wait 0.3
+shot 112_tuttactil_pregunta_si_pulsado
+untouch 160 88
+wait 2.0
+shot 113_tuttactil_si_entra
+wait 1.0
 quit

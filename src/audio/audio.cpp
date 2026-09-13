@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "audio/audio.h"
+#include "core/config.h"
 #include "platform/platform.h"
 #include <algorithm>
 
@@ -110,6 +111,21 @@ bool Audio::load_music(MusicID id, const char* path) {
     return true;
 }
 
+bool Audio::load_music_or(MusicID id, const char* path, const char* fallback) {
+    if (load_music(id, path)) {
+        u32 idx = static_cast<u32>(id);
+        SDL_strlcpy(music_names[idx], path, sizeof(music_names[idx]));
+        return true;
+    }
+    SDL_Log("Music: '%s' no esta; uso '%s'", path, fallback);
+    if (load_music(id, fallback)) {
+        u32 idx = static_cast<u32>(id);
+        SDL_strlcpy(music_names[idx], fallback, sizeof(music_names[idx]));
+        return true;
+    }
+    return false;
+}
+
 void Audio::play_music(MusicID id, bool loop, f32 fade_in_ms) {
     if (!initialized || !music_track) return;
 
@@ -134,6 +150,9 @@ void Audio::play_music(MusicID id, bool loop, f32 fade_in_ms) {
     SDL_DestroyProperties(props);
 
     current_music = id;
+    // Gate de los guiones de autoplay: que suene la pista del capitulo no se
+    // puede comprobar de oido desde un script (src/CLAUDE.md).
+    SDL_Log("Music: %u '%s'", idx, music_names[idx][0] ? music_names[idx] : "?");
 }
 
 void Audio::stop_music(f32 fade_out_ms) {
@@ -239,17 +258,27 @@ void Audio::update(f32 dt) {
 // =============================================================================
 // Bulk loading (standard file names)
 // =============================================================================
+static_assert(MUSIC_CHAPTERS == Config::CHAPTERS_ACT_I + Config::CHAPTERS_ACT_II,
+              "MusicID tiene un tema por capitulo: los dos numeros van juntos");
+
 void Audio::load_all_music() {
-    load_music(MusicID::MainTheme,    "main_theme.ogg");
-    load_music(MusicID::EliasCombat,  "elias_combat.ogg");
-    load_music(MusicID::EliseoCombat, "eliseo_combat.ogg");
-    load_music(MusicID::Exploration,  "exploration.ogg");
-    load_music(MusicID::BossTheme,    "boss_theme.ogg");
-    load_music(MusicID::Menu,         "menu.ogg");
-    load_music(MusicID::Victory,      "victory.ogg");
-    load_music(MusicID::Death,        "death.ogg");
-    load_music(MusicID::Ascension,    "ascension.ogg");
-    load_music(MusicID::Prologue,     "prologue.ogg");
+    load_music_or(MusicID::MainTheme, "main_theme.ogg", "main_theme.ogg");
+    load_music_or(MusicID::Menu,      "menu.ogg",       "main_theme.ogg");
+    load_music_or(MusicID::BossTheme, "boss_theme.ogg", "main_theme.ogg");
+    load_music_or(MusicID::Victory,   "victory.ogg",    "main_theme.ogg");
+    load_music_or(MusicID::Death,     "death.ogg",      "main_theme.ogg");
+    load_music_or(MusicID::Ascension, "ascension.ogg",  "main_theme.ogg");
+    load_music_or(MusicID::Prologue,  "prologue.ogg",   "main_theme.ogg");
+
+    // Dos pistas por capitulo: capNN.ogg para jugar, capNN_intro.ogg para la
+    // cinematica y el dialogo de apertura.
+    for (int c = 1; c <= MUSIC_CHAPTERS; c++) {
+        char path[32];
+        SDL_snprintf(path, sizeof(path), "cap%02d.ogg", c);
+        load_music_or(chapter_theme(c), path, "main_theme.ogg");
+        SDL_snprintf(path, sizeof(path), "cap%02d_intro.ogg", c);
+        load_music_or(chapter_intro(c), path, "prologue.ogg");
+    }
 }
 
 void Audio::load_all_sfx() {

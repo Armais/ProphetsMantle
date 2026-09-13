@@ -61,3 +61,7 @@ android/app/.cxx/
 *.apk
 *.aab
 __pycache__/
+
+# Sonic Pi: estado del daemon y grabaciones intermedias (723 MB de WAV)
+tools/audio/sonicpi/ports.json
+tools/audio/sonicpi/tmp/

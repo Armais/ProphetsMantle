@@ -420,7 +420,7 @@ void MenuSystem::render_pause(Renderer& renderer) {
 
     option_count = 4;
     // En el tutorial la ultima fila es SU salida y lo dice: en PC no hay boton de SALTAR
-    // (ESC ya es esta pausa, que el paso 18 enseña) y esta es la unica puerta.
+    // (ESC ya es esta pausa, que el paso 14 enseña) y esta es la unica puerta.
     const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"),
                              in_tutorial ? tr("Dejar el tutorial", "Leave the tutorial") : tr("Salir", "Quit")};
 
@@ -712,25 +712,33 @@ void MenuSystem::render_tutorial_ask(Renderer& renderer) {
     if (title_bg != TEXTURE_NONE && renderer.shadow_tex != TEXTURE_NONE)
         renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {40, 44, 240, 126}, {8, 6, 14, 180});
 
-    renderer.draw_text_centered(tr("ANTES DE EMPEZAR", "BEFORE YOU BEGIN"), 40, Color::elias_gold(), 1.3f);
+    // En tactil todo sube cuatro unidades y los botones crecen: el presupuesto vertical
+    // aqui es duro por los dos extremos. El orillo del manto de la estampa cruza desde
+    // y=146 y se come el texto apagado, y abajo las zonas del dedo de los dos botones
+    // ocupan 75..127 — con el reparto de antes ({92, 28, 22}) el pie caia en y=130,
+    // DENTRO del panel y encima del rotulo "No, al capitulo 1", letra sobre letra.
+    renderer.draw_text_centered(tr("ANTES DE EMPEZAR", "BEFORE YOU BEGIN"),
+                                touch_hints ? 38.0f : 40.0f, Color::elias_gold(), 1.3f);
     renderer.draw_text_centered(tr("¿Quieres jugar el tutorial?", "Do you want to play the tutorial?"),
-                                60, {205, 184, 142, 235}, 0.95f);
+                                touch_hints ? 56.0f : 60.0f, {205, 184, 142, 235}, 0.95f);
     renderer.draw_text_centered(tr("Enseña los controles, la fe, los milagros y las ofrendas",
                                    "It teaches the controls, faith, miracles and offerings"),
-                                72, {150, 135, 105, 215}, 0.7f);
+                                touch_hints ? 68.0f : 72.0f, {150, 135, 105, 215}, 0.7f);
 
     option_count = 2;
     const char* options[] = {tr("Sí, enséñame", "Yes, teach me"), tr("No, al capítulo 1", "No, to chapter 1")};
+    // Paso 26 y alto 20 (antes 28 y 22): 26 unidades de 180 siguen siendo ~10,4 mm de dedo
+    // en un movil de 6,5" apaisado, por encima de los 9 que pide Android.
     draw_button_column(renderer, options, option_count,
-                       {94.0f, 17.0f, 13.0f}, {92.0f, 28.0f, 22.0f}, 1.0f);
+                       {94.0f, 17.0f, 13.0f}, {78.0f, 26.0f, 20.0f}, 1.0f);
 
     // Los dos pies van ARRIBA de donde iban: a 146/160 el orillo del manto de la estampa
     // cruza justo por detras y el texto apagado se perdia encima (se vio en la captura).
     renderer.draw_text_centered(touch_hints ? tr("Se puede dejar a medias cuando quieras",
                                                  "You can quit it whenever you like")
                                             : tr("[W/S]  ·  [ENTER]", "[W/S]  ·  [ENTER]"),
-                                touch_hints ? 130.0f : 132.0f, {130, 118, 104, 215}, 0.75f);
+                                touch_hints ? 131.0f : 132.0f, {130, 118, 104, 215}, 0.75f);
     renderer.draw_text_centered(tr("Se repite desde Controles, en el menú",
                                    "Replay it from Controls, in the menu"),
-                                touch_hints ? 142.0f : 143.0f, {116, 105, 94, 195}, 0.66f);
+                                touch_hints ? 139.0f : 143.0f, {116, 105, 94, 195}, 0.66f);
 }

@@ -230,16 +230,39 @@ se re-discuten. Lo que hay que saber antes de tocarlo:
   el bloque de Playing son 400 líneas de combate, cámara, milagros y HUD que no tiene sentido
   duplicar. Las tres salas se montan sobre `current_room_data` igual que el escenario de una
   escena guionizada (`Engine::start_scene`), y se deshacen solas al salir.
-- **19 pasos** (`TUTORIAL_STEPS`): 13 se cierran HACIENDO la acción y 6 por tiempo (los que
-  no son una tecla: qué es la fe, sus grados, la carta de elección, la pausa, el objetivo).
+- **15 pasos** (`TUTORIAL_STEPS`), y **ninguno se cierra solo** (2026-09-13): si el cartel
+  nombra una acción, esa acción es lo que lo cierra. Ya no hay relojes. Lo puramente
+  informativo (qué es la vida, qué es la fe, sus grados) dejó de ser un paso —no es una
+  acción, es una explicación— y va al final en forma de diálogo (`story_tutorial_outro`).
   Las sondas están en `Engine::tutorial_goal_done` y **miran el mundo** en vez de que medio
-  motor tenga que avisar. Dos no son evidentes: el milagro se detecta por el **flanco del
-  enfriamiento** (`Player::last_event` lo limpia el bloque de Playing antes), y las tinajas
-  y el matorral **contando los tiles que quedan**.
+  motor tenga que avisar. Cuatro no son evidentes: el milagro se detecta por el **flanco del
+  enfriamiento** (`Player::last_event` lo limpia el bloque de Playing antes); las tinajas de
+  la sala 1 **contando los tiles que quedan**; los escondrijos de la sala 3 por **posición de
+  tile** (`tutorial_secrets_opened`, porque ahí el bioma decora con matorral y contar props
+  cerraba el paso con dos tiros perdidos); y la pausa y el arco con **dos flags que el motor
+  apunta a mano** (`pause_seen`, `exit_reached`), porque pasan con el juego fuera de Playing.
+- **`update_tutorial` no evalúa NADA fuera de `GameScene::Playing`**, y eso es lo que pone el
+  cofre en su orden: pisarlo llama a `open_item_choice`, que fija `state.scene` en el acto, así
+  que el paso `Chest` se cierra al VOLVER de la carta, con ella ya en la mano. Antes salía
+  después un cartel explicando "eliges una de tres" con la carta cerrada y nada que hacer;
+  ahora la explicación va en el **título** de la propia carta (`tutorial_choice_title`). Lo
+  mismo vale para el altar del paso `Pray` y para la pausa.
+- **Cruzar el arco termina el tutorial** (paso `CrossExit`) y la rama del arco de
+  `update_room_state` está guardada contra `tutorial.active`: sin esa guarda, caminar sobre él
+  en cualquiera de los últimos pasos lanzaba el epílogo narrado del capítulo 1 y
+  `advance_chapter()` con el tutorial todavía puesto.
+- **Cada paso de milagro repone la fe entera** (`tutorial_setup_step`). No es un lujo desde que
+  no hay relojes: Fuego del Cielo es Tier 3 (pide 50) y cuesta 20, así que llegar ahí con la fe
+  mordida por el arquero dejaba el paso IMPOSIBLE y el tutorial colgado para siempre.
+- **Al terminar salen dos páginas de cierre** (`story_tutorial_outro`, `ui/story.h`): la vida,
+  la fe y sus grados, las ofrendas; y el camino que queda, con el objetivo del capítulo 1 al
+  pie. Son además la pantalla que faltaba entre el tutorial y el diálogo de Acab y Jezabel.
+  **Saltarlo no las enseña**: quien pulsa SALTAR pide salir, no leer dos pantallas más
+  (`finish_tutorial(bool completed)`).
 - **El equipo del tutorial NO viaja** y **el guardado tampoco se toca**: `start_tutorial`
   copia `SaveData` entera y `finish_tutorial` la restaura. Sale más barato que sembrar
   guardas por cada sitio que toca `total_kills`, `miracles_cast` o los logros al jugar. La
-  ofrenda del paso 16 se cuenta pero **no se ingresa**.
+  ofrenda del paso 12 se cuenta pero **no se ingresa**.
 - **No se puede perder**: `update_tutorial` sujeta la vida en 1 antes de que la comprobación
   de muerte la vea en cero. Los enemigos sí pegan, que es lo que hace que el dash signifique
   algo.
@@ -249,5 +272,5 @@ se re-discuten. Lo que hay que saber antes de tocarlo:
   en la columna del profeta se rezaba sin querer al cruzar hacia la puerta; y los escondrijos
   van a **cuatro tiles**, porque un tiro alcanza 120 unidades (7,5 tiles) y más lejos no se
   podían abrir sin caminar hasta ellos.
-- Guiones: `tutorial_check.txt` (los 19 pasos + las dos pantallas nuevas + el camino a la
+- Guiones: `tutorial_check.txt` (los 15 pasos + las dos pantallas nuevas + el camino a la
   partida), `tutorial_tactil_check.txt` (`--touch`) y `tutorial_en_check.txt`.

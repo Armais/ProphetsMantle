@@ -14,18 +14,22 @@ trámite que respetar la OFL de la fuente.
 
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
-| 10 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
+| 27 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
 | 37 efectos de sonido | `assets/audio/sfx/*.ogg` | `tools/audio/gen_audio.py` |
 | 15 exclamaciones de voz | `assets/audio/sfx/voz_*.ogg` | `tools/audio/gen_audio.py` (132 KB) |
 
-**Música (2026-08-26): compuesta por el proyecto en Sonic Pi.** Las 10 partituras viven en
-`tools/audio/sonicpi/*.rb` y son composición original (reorquestan los temas que ya generaba
-`gen_audio.py`); `record.py` arranca el daemon de Sonic Pi sin GUI, graba la salida de
+**Música (2026-09-13): compuesta por el proyecto en Sonic Pi.** Las 27 partituras viven en
+`tools/audio/sonicpi/*.rb` y son composición original: **siete globales y dos por capítulo**
+—el tema de juego y su variación desnuda para la cinemática y el diálogo de apertura—, cada
+capítulo con su propio modo, su solista y su percusión. `record.py` arranca el daemon de Sonic
+Pi sin GUI, graba la salida de
 SuperCollider bit a bit, corta el periodo exacto del bucle y encodea el `.ogg`. Sonic Pi y
 SuperCollider son **herramientas de generación** (como Blender o ffmpeg): no se distribuye ni
 se enlaza nada suyo con el juego. La percusión usa samples que Sonic Pi trae de serie
-(tablas, bombos, platos), publicados bajo **CC0 1.0 (dominio público)**, sin obligación de
-atribución; el resto es síntesis de los sintetizadores de Sonic Pi. Las versiones anteriores
+(tablas, bombos, platos, cabasa, y también `ambi_choir` para las voces, `misc_crow` para los
+cuervos de Querit y `drum_cowbell` para las yuntas del cap. 5), publicados bajo **CC0 1.0
+(dominio público)**, sin obligación de atribución; el resto es síntesis de los sintetizadores
+de Sonic Pi. Las versiones anteriores
 (síntesis numpy) quedan en `tools/audio/music_backup/` y `gen_audio.py` sigue pudiendo
 regenerarlas.
 
@@ -48,6 +52,10 @@ python tools/audio/gen_audio.py voz_       # solo un grupo, por prefijo de nombr
 # Música (Sonic Pi): arrancar el daemon y grabar cada pista
 python tools/audio/sonicpi/record.py boot            # proceso de larga vida
 python tools/audio/sonicpi/record.py capture <pista> <periodo_s>   # y mandar el .rb por el MCP
+python tools/audio/sonicpi/record.py batch <pista>:<periodo> ...  # en cadena, sin MCP
+python tools/audio/sonicpi/record.py reprocess <pista> <periodo>  # rehacer la mezcla sin regrabar
+python tools/audio/sonicpi/analyze.py assets/audio/music          # gates de calidad
+python tools/audio/sonicpi/check_names.py                         # nombres de sample/synth
 ```
 
 La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compilación

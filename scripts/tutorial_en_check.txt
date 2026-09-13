@@ -1,12 +1,13 @@
-# Verificacion: los carteles del tutorial en INGLES (game/tutorial.h, 2026-09-12)
+# Verificacion: los carteles del tutorial en INGLES (game/tutorial.h, 15 pasos)
 # Uso:  MANTLE.exe --script scripts/tutorial_en_check.txt
 #
-# Son 20 pares tr() (19 pasos + el cartel de la puerta) y el gate es VISUAL: que ninguno
-# desborde su panel ni se quede a medias. El panel mide 236 unidades y `render_tutorial_card`
-# baja la escala de lo que no quepa, asi que un texto largo no se sale: se encoge — y eso
-# tambien hay que verlo, porque a 0,5 de escala ya no se lee de un vistazo.
+# Son 16 pares tr() (15 pasos + el cartel de la puerta), mas el titulo de la carta del cofre
+# y las DOS paginas de cierre. El gate es VISUAL: que ninguno desborde su panel ni se quede a
+# medias. El panel mide 236 unidades y `render_tutorial_card` baja la escala de lo que no
+# quepa, asi que un texto largo no se sale: se encoge — y eso tambien hay que verlo, porque a
+# 0,5 de escala ya no se lee de un vistazo.
 #
-# GATE DEL LOG: `Tutorial (autoplay): paso N/19` por cada salto, sin ninguna linea de error.
+# GATE DEL LOG: `Tutorial (autoplay): paso N/15` por cada salto, sin ninguna linea de error.
 
 lang 1
 wait 1.0
@@ -16,27 +17,45 @@ shot 120_en_move
 tutorial 2
 wait 1.3
 shot 121_en_attack
+tutorial 4
+wait 1.3
+shot 122_en_dash
 tutorial 5
 wait 1.3
-shot 122_en_health
-tutorial 7
-wait 1.3
-shot 123_en_faith
-tutorial 10
+shot 123_en_consumable
+tutorial 8
 wait 1.3
 shot 124_en_miracle3
+tutorial 9
+wait 1.3
+shot 125_en_pray
+tutorial 10
+wait 1.3
+shot 126_en_secrets
+tutorial 11
+wait 1.3
+shot 127_en_chest
 tutorial 12
 wait 1.3
-shot 125_en_faithtier
+shot 128_en_offering
+tutorial 14
+wait 1.3
+shot 129_en_pause
+
+# El ultimo paso y su salida: el arco esta en el tile (24,15) = (392,248) y el profeta nace
+# en (20,17) = (328,280). Cruzarlo termina el tutorial y abre las dos paginas de cierre, que
+# son la pantalla que faltaba antes de Acab y Jezabel.
 tutorial 15
 wait 1.3
-shot 126_en_choice
-tutorial 16
-wait 1.3
-shot 127_en_offering
-tutorial 19
-wait 1.3
-shot 128_en_objective
-wait 0.3
+shot 130_en_crossexit
+# El reloj va justo: `walk` es bloqueante y vuelve al pisar el arco, luego 0,9 s de visto
+# bueno del paso, y bajo autoplay cada pagina se revela de golpe a los ~1,2 s y pasa a la
+# siguiente 1 s despues. Con esperas mas largas la captura sale siendo el TITULO.
+walk 392 244
+wait 2.2
+shot 131_en_cierre_1
+wait 2.1
+shot 132_en_cierre_2
+wait 1.8
 lang 0
 quit

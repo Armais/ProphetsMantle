@@ -8,6 +8,30 @@ La API es la de SDL3_mixer 3.1.2 (`MIX_*` en mayusculas, NO el `Mix_*` de SDL2):
 "Important: SDL3 API differences from SDL2" en el `CLAUDE.md` de la raiz. `Audio::load_*`
 cae `.ogg` -> `.wav`.
 
+## Musica: dos pistas por capitulo
+
+`MusicID` tiene **siete globales y dos bloques CONTIGUOS de diez** (`ChapterTheme1..10` y
+`ChapterIntro1..10`). Los bloques se indexan con aritmetica desde el numero de capitulo
+—`chapter_theme(c)` / `chapter_intro(c)`, en `audio.h`—, igual que las variantes
+consecutivas de SFX: **no los reordenes ni metas un ID en medio**.
+
+- `ChapterTheme` suena jugando; `ChapterIntro` es el MISMO tema desnudo y suena en la
+  cinematica de capitulo y en su carta de apertura. Lo elige `Engine::update_music`
+  (`core/engine.cpp`) leyendo `state.current_chapter`.
+- Antes de esto, `update_music` mandaba `Exploration` en todo el Acto I y `EliseoCombat`
+  en todo el Acto II: **diez capitulos con dos pistas**. `EliasCombat` y `Menu` se
+  cargaban y no las pedia nadie. Ahora el Santuario usa `Menu` y el titulo `MainTheme`.
+- **`load_music_or(id, path, fallback)`**: si el `.ogg` de un capitulo no esta, carga el
+  de respaldo y lo dice por log. Un capitulo mudo se nota mucho mas que un capitulo con
+  la pista de al lado, y durante una tanda de musica a medias eso pasa por definicion.
+- La musica va con `predecode = false`, o sea **streaming**: 27 pistas cargadas no cuestan
+  RAM, solo descriptores.
+- **`play_music` loguea `Music: <idx> '<fichero>'`** en cada cambio. Sin eso, un guion de
+  autoplay puede comprobar que el fichero se CARGO pero no que suene el del capitulo en
+  el que esta (`scripts/musica_check.txt`).
+
+Como se generan las pistas: `tools/audio/CLAUDE.md`.
+
 ## Variantes y ducking
 
 **Variacion por disparo**: `Audio::play_sfx_variant(first, count, vol)` sortea entre

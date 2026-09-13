@@ -22,7 +22,11 @@ enum class StoryThen : u8 {
     Play,              // Prologo / carta de capitulo -> jugar
     AdvanceChapter,    // Outro -> siguiente capitulo / ascension / victoria
     FinishAscension,   // El manto cae -> convertirse en Eliseo
-    VictoryMenu        // Epilogo -> pantalla final
+    VictoryMenu,       // Epilogo -> pantalla final
+    // Cierre del tutorial. Son DOS porque Engine::finish_tutorial limpia `tutorial` (y con
+    // el su `TutorialThen`) antes de encolar las paginas: a donde se va tiene que viajar aqui.
+    TutorialToRun,     // se ofrecio en Nueva Partida -> empezar la partida
+    TutorialToTitle    // se lanzo desde Controles -> volver al titulo
 };
 
 struct StoryPage {
@@ -83,6 +87,9 @@ struct StorySystem {
 void story_prologue(StorySystem& s);
 void story_chapter_card(StorySystem& s, int chapter);
 void story_chapter_outro(StorySystem& s, int chapter);
+// Las dos paginas con que se cierra el tutorial: lo que no es una accion y por tanto no
+// puede ser un paso (la vida, la fe y sus grados, las ofrendas) y el camino que queda.
+void story_tutorial_outro(StorySystem& s);
 // `asked_double` = Engine::ascent_double (la cuarta parada): cambia la peticion de la
 // pagina 0 y la linea de la herencia (sin doble porcion no hay milagro heredado).
 void story_ascension(StorySystem& s, bool asked_double = true);

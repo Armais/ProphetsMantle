@@ -249,6 +249,37 @@ void story_chapter_outro(StorySystem& s, int chapter) {
     s.add(p);
 }
 
+// El tutorial no explica en un cartel lo que no se puede HACER: la vida, la fe, sus grados
+// y las ofrendas se cuentan aqui, al final, y de paso esta es la pantalla que faltaba entre
+// el tutorial y el dialogo de Acab y Jezabel. Va en `body`/`footer` y no en `verse`: esto
+// son las reglas del juego, no un pasaje.
+void story_tutorial_outro(StorySystem& s) {
+    StoryPage p;
+    p.title    = tr("ANTES DE IR", "BEFORE YOU GO");
+    p.subtitle = tr("Lo que llevas encima", "What you carry");
+    p.body[0]  = tr("Arriba a la izquierda, tu VIDA. Aquí no podías caer; fuera, sí.",
+                    "Top left, your LIFE. Here you could not fall; outside, you can.");
+    p.body[1]  = tr("Debajo, la FE: sube al vencer y al orar, baja al obrar milagros y al ser herido.",
+                    "Below it, FAITH: it rises when you win and pray, and falls with miracles and wounds.");
+    p.body[2]  = tr("La fe tiene grados: cuanta más llevas, más daño haces y más milagros se te abren.",
+                    "Faith has degrees: the more you carry, the harder you strike and the more miracles open.");
+    p.body[3]  = tr("Las ofrendas no se pierden al morir: se gastan en El Santuario.",
+                    "Offerings are not lost when you die: spend them in the Sanctuary.");
+    s.add(p);
+
+    StoryPage q;
+    q.title    = tr("TU CAMINO", "YOUR ROAD");
+    q.subtitle = tr("Israel te espera", "Israel is waiting");
+    q.body[0]  = tr("Limpia las salas, halla al jefe y cruza su arco.",
+                    "Clear the rooms, find the boss and cross his arch.");
+    q.body[1]  = tr("Lo elegido en un cofre te acompaña hasta el final de la partida, no más allá.",
+                    "What a chest gives you walks with you to the end of the run, no further.");
+    q.body[2]  = tr("En la pausa vive el Códice, donde se anota todo lo que ves.",
+                    "The Codex lives in the pause menu: everything you meet is written there.");
+    q.footer   = get_chapter_lore(1).objective;
+    s.add(q);
+}
+
 void story_ascension(StorySystem& s, bool asked_double) {
     for (int page = 0; page < 3; page++) {
         ChapterLore l = get_ascension_lore(page, asked_double);

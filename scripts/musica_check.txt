@@ -1,0 +1,59 @@
+# Verificacion del MAPEO DE MUSICA (2026-09-13): cada capitulo tiene su tema y su
+# apertura, y las dos pistas que estaban huerfanas vuelven a sonar.
+# Uso:  MANTLE.exe --script scripts/musica_check.txt
+#
+# GATES DEL LOG (lo que manda; `Audio::play_music` loguea "Music: <idx> '<fichero>'"):
+#   - Al arrancar, "Music: 0 'main_theme.ogg'" (titulo).
+#   - Ni una linea "Failed to load" y ni una "no esta; uso": eso significaria que a un
+#     capitulo le falta su .ogg y esta sonando con el respaldo.
+#   - Una linea "Music: N 'capNN_intro.ogg'" por cada carta de apertura, y
+#     "Music: N 'capNN.ogg'" al empezar a jugar cada capitulo. El numero de capitulo
+#     del fichero tiene que coincidir con el capitulo al que se ha saltado.
+#   - "Music: 7 'cap01.ogg'" en el capitulo 1 (ChapterTheme1 es el indice 7: siete
+#     globales delante). El cap. 3 es el 9, el 10 es el 16; las aperturas van del 17
+#     al 26.
+#   - El Santuario ya NO suena como el titulo: "Music: 1 'menu.ogg'".
+
+defaults
+wait 1.0
+press confirm
+wait 3.2
+press confirm
+wait 3.2
+press confirm
+wait 1.4
+god
+
+# --- Capitulo 1: cap01_intro en la carta, cap01 al jugar ---
+wait 1.5
+shot M0_cap01
+wait 0.1
+
+# --- Salto de capitulo: cada uno tiene que pedir SU pista ---
+chapter 3
+wait 1.0
+press confirm
+wait 2.0
+shot M1_cap03
+wait 0.1
+
+chapter 5
+wait 1.0
+press confirm
+wait 2.0
+
+chapter 6
+wait 1.0
+press confirm
+wait 2.0
+shot M2_cap06
+wait 0.1
+
+chapter 10
+wait 1.0
+press confirm
+wait 2.0
+shot M3_cap10
+wait 0.1
+
+quit

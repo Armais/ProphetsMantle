@@ -206,26 +206,45 @@ Tres guiones nuevos y dos comandos:
   **suprimida bajo autoplay a propósito**: treinta guiones esperan entrar a jugar con un
   `press confirm` en el título, y con la pregunta de por medio elegirían "Sí, enséñame".
 
-Guiones: **`tutorial_check.txt`** (los 19 pasos, las dos pantallas nuevas y el camino
+Guiones: **`tutorial_check.txt`** (los 15 pasos, las dos pantallas nuevas y el camino
 pregunta → tutorial → partida), **`tutorial_tactil_check.txt`** (`--touch`) y
-**`tutorial_en_check.txt`** (los 20 pares `tr()`, gate visual).
+**`tutorial_en_check.txt`** (los 16 pares `tr()` + las dos páginas de cierre, gate visual).
 
-Gates de `tutorial_check`: las 19 líneas `Tutorial: paso N/19 cumplido`, y las de los pasos
-jugables (1 2 3 4 6 8 9 10 11 13 14 16 17) tienen que decir **por la acción** — si uno se
-cierra "informativo" es que su sonda no funciona. Más: `Tutorial: fin (paso 19 de 19)`,
-**cero `Secret offerings`** (la ofrenda del paso 16 se cuenta pero no se ingresa) y, tras
-dejar el tutorial desde la pausa, un `LOADOUT` con **slots 1** y **objetos: -** — el equipo
-del tutorial no viaja a la partida.
+Gates de `tutorial_check`: las 15 líneas `Tutorial: paso N/15 cumplido` en orden,
+`Tutorial: fin (paso 15 de 15)`, **UNA SOLA** `Scene change: 2 -> 5` y **después** del paso
+15 (es la pantalla de cierre; cualquier otra sería el bug del arco, que lanzaba el epílogo
+del capítulo 1 desde la sala 3), **cero `Chapter 1 complete`**, **cero `Secret offerings`**
+(la ofrenda del paso 12 se cuenta pero no se ingresa), `Item choice [ELIGES UNA DE TRES]` al
+abrir el cofre y, tras dejar el tutorial desde la pausa, un `LOADOUT` con **slots 1** y
+**objetos: -** — el equipo del tutorial no viaja a la partida.
 
-Tres trampas que costaron una pasada cada una:
+Desde el 2026-09-13 **ningún paso se cierra solo**, así que el bot tiene que hacer los quince:
+abrir y cerrar la pausa (`press pause` x2) y caminar hasta el arco.
+
+Seis trampas, cada una de una pasada:
 
 - **`walk` sigue vivo al cambiar de sala** y empuja al profeta dentro de la sala nueva. En la
   sala 2 eso lo llevaba encima del altar y lo rezaba tres pasos antes de tiempo (se arregló
   descentrando el altar, pero el guion además le da un destino nuevo al entrar).
 - **Un tiro alcanza 120 unidades** (`Config::PROJECTILE_RANGE`), 7,5 tiles: un blanco más
   lejos no se abre sin caminar hasta él, y el paso se quedaba colgado sin decir por qué.
-- **Toda recogida caduca a los 14 s**, así que la ofrenda del paso 16 se siembra cuando ESE
+- **Toda recogida caduca a los 14 s**, así que la ofrenda del paso 12 se siembra cuando ESE
   paso empieza y se repone si el jugador se entretiene.
+- **No se dispara desde donde el profeta se quede al andar.** El acelerado no es simétrico y
+  tras el paso de moverse queda a caballo entre dos columnas: desde ahí el tiro hacia arriba
+  no encuentra ninguna tinaja y el paso se cuelga con las cinco intactas. Se camina a la
+  columna de la tinaja (`walk 120 136` y `walk 216 136`) antes de cada ráfaga.
+- **Un `press` dura DOS TICKS y se pierde si te están empujando.** Los tres milagros se
+  intentan dos veces cada uno: el soldado que el paso planta como blanco empuja al profeta y
+  el tercer milagro se perdía con la celda encendida y la fe al 96 %.
+- **Entre las dos pulsaciones de la pausa NO cabe un `shot`.** Un `shot` re-arma lo que se
+  estuviera manteniendo, y lo que se mantenía era Pause: la captura metía un tercer flanco y
+  el juego se quedaba en pausa el resto del guion.
+
+Y dos cosas que **no se pueden fotografiar** desde un guion: el título de la carta del cofre
+(se abre a mitad del `walk` y bajo autoplay se toma sola a los 0,7 s — el gate es el log,
+`Item choice [...]`) y las páginas de cierre con esperas largas (duran ~5 s enteras: el
+`shot` va a 2,2 s y a 4,3 s del `walk`, o sale el título del juego).
 
 ## El idioma en caliente (2026-09-12)
 

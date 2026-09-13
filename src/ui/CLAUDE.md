@@ -269,6 +269,7 @@ etiqueta de la partida caducada es la candidata natural a desbordarse.
 | Opciones | 52 / 15, placa 14 | 48 / **21**, placa **19**, ventana de 6 |
 | Santuario | paso 14,5, 7 filas | paso **20**, **5** filas |
 | Codice | paso 10, 8 filas | paso **15**, **5** filas, pestañas de 16 |
+| Pregunta del tutorial | 94 / 17 / 13 | 92 / **26** / 20, top **78** |
 
 La **zona del dedo** en tactil ya no sale del texto de cada fila (`menu_hit_rect_wide`, de
 x=16 a 304): "Salir" tiene que ser tan facil de tocar como "Reintentar capitulo". Alto =
@@ -332,8 +333,14 @@ capa son tres piezas:
 
 - **`MenuScreen::TutorialAsk`** — "¿Quieres jugar el tutorial?", dos botones, al pulsar Nueva
   Partida. Mismo fondo que el título (se viene de ahí y no hay por qué cortar la estampa).
-  Los dos pies van a y=132/143 y **no más abajo**: el orillo del manto de la estampa cruza a
-  partir de 146 y el texto apagado se perdía encima.
+  Los pies van a y=132/143 en PC y a **131/139 en táctil**, y **no más abajo**: el orillo del
+  manto de la estampa cruza a partir de 146 y el texto apagado se perdía encima.
+  **En táctil el presupuesto vertical es duro por los dos extremos** (2026-09-13). Con el
+  reparto de antes (`{92, 28, 22}`) el segundo botón ocupaba y 120..142 y el pie caía en
+  y=130: dentro del panel y **encima del rótulo "No, al capítulo 1"**, letra sobre letra. Lo
+  vio el usuario jugando el APK. Reparto nuevo, con todo subido cuatro unidades: título 38,
+  pregunta 56, subtítulo 68, botones **`{78, 26, 20}`** (tinta 78..98 y 104..124, zonas del
+  dedo 75..101 y 101..127) y los pies en 131 y 139. En PC no se movió nada.
 - **La pantalla de Controles estrena un botón**, "Jugar el tutorial", y con él deja de ser
   una pantalla sin filas: tocar el botón lo juega y tocar **fuera** vuelve, que es lo que
   hacía siempre. En PC, ENTER lo juega y ESC vuelve — es el segundo cambio de significado de
@@ -352,7 +359,9 @@ saltar. `draw_skip_button_at` es el mismo dibujo con el rect que le des.
 
 **La última fila de la pausa cambia de rótulo** durante el tutorial (`MenuSystem::in_tutorial`):
 "Dejar el tutorial" en vez de "Salir". En PC es su ÚNICA salida, porque ESC ya es la pausa
-que el paso 18 enseña y no se le puede dar otro oficio.
+que el paso 14 enseña y no se le puede dar otro oficio. Dejarlo por ahí cuenta como SALTARLO,
+no como terminarlo: sale directo, sin las dos páginas de cierre (`Engine::finish_tutorial`
+recibe `completed`).
 
 **El HUD no puede mentir sobre lo que pinta**: durante el tutorial el minimapa muestra el
 capítulo 1 —el que se va a jugar al salir—, así que `HUDContext::tutorial` cambia la línea del

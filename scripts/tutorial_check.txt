@@ -1,23 +1,29 @@
-# Verificacion: el tutorial jugable (game/tutorial.h, 2026-09-12)
+# Verificacion: el tutorial jugable (game/tutorial.h; 15 pasos desde 2026-09-13)
 # Uso:  MANTLE.exe --script scripts/tutorial_check.txt
 #       MANTLE.exe --touch --script scripts/tutorial_check.txt   (instrucciones de dedo)
 #
 # El tutorial se ofrece al pulsar Nueva Partida, pero esa pregunta esta SUPRIMIDA bajo
 # autoplay a proposito (los guiones de siempre esperan entrar a jugar). El camino aqui es
 # el comando `tutorial [paso]`, que ademas puede saltar directo a un paso para fotografiar
-# la sala 3 sin jugarse doce.
+# la sala 3 sin jugarse nueve.
+#
+# NINGUN paso se cierra solo: ya no hay relojes, asi que el bot tiene que HACER los quince,
+# abrir y cerrar la pausa y caminar hasta el arco.
 #
 # GATES DEL LOG, en este orden:
-#   - `Tutorial: empieza (19 pasos, vuelve a el titulo)`
+#   - `Tutorial: empieza (15 pasos, vuelve a el titulo)`
 #   - `Tutorial: sala 1 de 3`, luego `sala 2 de 3` y `sala 3 de 3`
-#   - DIECINUEVE lineas `Tutorial: paso N/19 cumplido (...)`, y las de los pasos jugables
-#     tienen que decir **por la accion**, no "informativo": si un paso jugable se cierra
-#     por tiempo es que su sonda no funciona.
-#     Jugables: 1 2 3 4 6 8 9 10 11 13 14 16 17. Informativos: 5 7 12 15 18 19.
-#   - `Tutorial: fin (paso 19 de 19)`
-#   - NI UNA linea `Secret offerings: +N`: la ofrenda del paso 16 se cuenta pero NO se
+#   - QUINCE lineas `Tutorial: paso N/15 cumplido`, de la 1 a la 15 y en orden.
+#   - `Tutorial: fin (paso 15 de 15)`
+#   - UNA SOLA linea `Scene change: 2 -> 5` (Playing -> Story) en todo el tutorial, y
+#     DESPUES de `paso 15/15 cumplido`: son las paginas de cierre. Cualquier otra seria el
+#     bug del arco (pisarlo en un paso anterior lanzaba el epilogo del capitulo 1).
+#   - NI UNA `Chapter 1 complete`: el arco del tutorial no avanza de capitulo.
+#   - `Item choice [ELIGES UNA DE TRES]: ...` al abrir el cofre: durante el tutorial la carta
+#     lleva SU titulo, porque es ahi donde se explica lo de elegir una de tres.
+#   - NI UNA linea `Secret offerings: +N`: la ofrenda del paso 12 se cuenta pero NO se
 #     ingresa (jugar el tutorial no puede regalar moneda meta).
-#   - NI UNA `Game Over`: la vida se sujeta en 1 aunque el arquero del paso 5 acierte.
+#   - NI UNA `Game Over`: la vida se sujeta en 1 aunque el arquero del paso 4 acierte.
 
 wait 1.0
 tutorial
@@ -25,19 +31,27 @@ wait 1.6
 shot 90_tut_s1_mover
 
 # --- Sala 1: el cuerpo -------------------------------------------------------------
-# 1 Mover: la sonda es la distancia recorrida (90 unidades ~ 6 tiles)
-hold right 0.9
-hold left 0.9
+# 1 Mover: la sonda pide 220 unidades andadas (~2,2 s). Antes eran 90 y el paso se cerraba
+# en 0,9 s, o de un dash suelto, antes de que nadie leyera el cartel. El profeta nace en
+# (10,8) = (168,136) y la sala mide 20x11 tiles: estos tres tramos caben sin tocar muro.
+hold right 0.8
+hold left 1.6
+hold right 0.8
 wait 1.4
 shot 91_tut_s1_atacar
 
-# 2 Atacar: cinco tinajas en la fila y=5 (x = 4, 7, 10, 13, 16); el profeta nace en (10,8).
-# Se rompen la de su columna y la de x=13, que es lo que pide el paso (dos).
+# 2 Atacar: cinco tinajas en la fila y=5 (x = 4, 7, 10, 13, 16). Se disparan las de x=7 y
+# x=13, que es lo que pide el paso (target 2). NO se dispara desde donde el profeta se
+# quede al acabar el paso 1: el acelerado no es simetrico y lo deja a caballo entre dos
+# columnas, y desde ahi el tiro hacia arriba no encuentra ninguna tinaja (se vio en la
+# captura 91, con las cinco intactas y el paso colgado).
+walk 120 136
+wait 1.8
 aim 0 -1
 hold attack 1.8
 wait 0.5
 walk 216 136
-wait 1.6
+wait 1.8
 aim 0 -1
 hold attack 1.8
 wait 1.4
@@ -46,20 +60,19 @@ shot 92_tut_s1_honda
 # 3 Arma secundaria
 aim 0 0
 press weapon
-wait 1.6
+wait 1.8
 
-# 4 Dash
+# 4 Dash: aqui entra el arquero (antes entraba en el paso informativo de la vida, que ya no
+# existe). Esquivar con alguien disparandote es lo que hace que el dash signifique algo.
+wait 1.2
+shot 93_tut_s1_dash
 press dash
 wait 1.8
-shot 93_tut_s1_vida
 
-# 5 Vida: informativo de 7 s, y entra el arquero
-wait 8.5
-shot 94_tut_s1_consumible
-
-# 6 Consumible
+# 5 Consumible: el mordisco del arquero deja algo que curar
 press use
 wait 1.8
+shot 94_tut_s1_consumible
 
 # La puerta del norte se ha abierto: esta en el tile (10,0)
 walk 168 10
@@ -68,29 +81,33 @@ wait 3.5
 # se le da un destino nuevo en el centro para cancelarlo.
 walk 168 136
 wait 1.5
-shot 95_tut_s2_fe
+shot 95_tut_s2_milagros
 
 # --- Sala 2: la fe -----------------------------------------------------------------
-# 7 Que es la fe: informativo de 7,5 s (ya han corrido 1,5 con el walk de arriba)
-wait 8.0
-
-# 8, 9 y 10: los tres milagros, uno por paso
+# 6, 7 y 8: los tres milagros, uno por paso. Cada uno se intenta DOS veces: un `press` dura
+# dos ticks y el soldado que el paso planta como blanco puede estar empujando al profeta
+# justo en ese instante (se vio: el tercer milagro se perdia con la celda encendida y la fe
+# al 96 %). El segundo intento es inofensivo — si el primero entro, el slot esta recargando.
 press m1
-wait 2.2
+wait 1.2
+press m1
+wait 1.4
 press m2
-wait 2.2
+wait 1.2
+press m2
+wait 1.4
 press m3
-wait 2.6
+wait 1.2
+press m3
+wait 1.6
 shot 96_tut_s2_orar
 
-# 11 Orar: el altar esta en el tile (14,5), descentrado. Al pisarlo se abre la carta.
+# 9 Orar: el altar esta en el tile (14,5), descentrado. Al pisarlo se abre la carta, y el
+# paso se cierra al VOLVER de ella (update_tutorial no evalua nada fuera de Playing).
 walk 232 88
 wait 3.5
 press confirm
-wait 1.8
-
-# 12 Los grados de la fe: informativo de 8 s
-wait 9.0
+wait 2.2
 
 # La puerta otra vez
 walk 168 10
@@ -98,41 +115,59 @@ wait 3.5
 shot 97_tut_s3_secretos
 
 # --- Sala 3: el mundo --------------------------------------------------------------
-# 13 Secretos: el profeta nace en (20,17) y tiene hierba alta a su izquierda, en su misma
-# fila. Dos aperturas es lo que pide el paso.
+# 10 Secretos: sonda PROPIA, por posicion de tile (ya no cuenta props de la sala, que con el
+# matorral del bioma se cerraba con dos tiros perdidos). El profeta nace en (20,17) y tiene
+# hierba alta en (16,17) y (15,17), su misma fila. Dos aperturas es lo que pide el paso.
 aim -1 0
 hold attack 2.6
 wait 1.4
 aim 0 0
 shot 98_tut_s3_cofre
 
-# 14 Cofre, en el tile (26,16)
+# 11 Cofre, en el tile (26,16). La carta de las tres bendiciones se titula ahora "ELIGES UNA
+# DE TRES" y el paso se cierra al volver de ella, con la carta ya en la mano.
+# El titulo de la carta NO se fotografia: el cofre se abre a mitad del `walk` y bajo autoplay
+# la carta se toma sola a los 0,7 s, asi que cualquier `shot` del guion llega tarde. El gate
+# es el log: `Item choice [ELIGES UNA DE TRES]: ...`, y en ingles `[YOU PICK ONE OF THREE]`.
 walk 424 264
-wait 4.5
-press confirm
-wait 1.8
+wait 2.4
 
-# 15 La carta de eleccion: informativo de 7 s
-wait 8.0
-
-# 16 La ofrenda, sembrada en el tile (23,16)
+# 12 La ofrenda, sembrada en el tile (23,16)
 walk 376 264
 wait 4.5
 
-# 17 El mapa. El `shot` NO suelta lo que se mantiene: es la unica forma de fotografiarlo.
+# 13 El mapa. El `shot` NO suelta lo que se mantiene: es la unica forma de fotografiarlo.
 hold map 0.8
-shot 99_tut_s3_mapa
+shot 100_tut_s3_mapa
 hold map 0.4
-wait 1.6
+wait 1.8
 
-# 18 Pausa y Codice: informativo de 7,5 s
-wait 8.5
-shot 100_tut_s3_objetivo
+# 14 La pausa: ahora se COMPRUEBA. Se abre y se cierra con la misma tecla; el paso se cierra
+# al salir de ella, porque con el juego en Paused el tutorial no evalua nada.
+# OJO: aqui NO cabe un `shot`. Un `shot` RE-ARMA lo que se estuviera manteniendo, y lo que
+# se mantenia era Pause: la captura entre las dos pulsaciones metia un tercer flanco y el
+# juego se quedaba en pausa el resto del guion (se vio: `103_tut_cierre_1` salio siendo el
+# menu de pausa). La pausa del tutorial ya se fotografia en `109_tut_pausa_dejarlo`.
+press pause
+wait 1.0
+press pause
+wait 1.8
 
-# 19 El jefe y el arco: informativo de 8,5 s, y termina
-wait 9.5
-wait 1.5
-shot 101_tut_fin_titulo
+# 15 Cruzar el arco: es la salida de verdad del tutorial. Esta en el tile (24,15) = (392,248)
+# y el test mira los pies, que van 6 unidades por debajo del centro.
+shot 102_tut_s3_arco
+walk 392 244
+
+# Las dos paginas de cierre: lo que no es una accion (la vida, la fe y sus grados, las
+# ofrendas) y el camino que queda. El reloj va justo: `walk` es bloqueante y vuelve al pisar
+# el arco, luego 0,9 s de visto bueno del paso, la historia arranca y bajo autoplay cada
+# pagina se revela de golpe a los ~1,2 s y pasa a la siguiente 1 s despues. Entera dura ~5 s.
+wait 2.2
+shot 103_tut_cierre_1
+wait 2.1
+shot 104_tut_cierre_2
+wait 1.8
+shot 105_tut_fin_titulo
 wait 0.3
 
 # --- Las dos pantallas de menu que estrena el tutorial ------------------------------
@@ -141,14 +176,14 @@ wait 0.3
 lang 0
 tutorialask
 wait 0.6
-shot 102_tut_pregunta_es
+shot 106_tut_pregunta_es
 wait 0.2
 press cancel
 wait 0.5
 lang 1
 tutorialask
 wait 0.6
-shot 103_tut_pregunta_en
+shot 107_tut_pregunta_en
 wait 0.2
 press cancel
 wait 0.5
@@ -172,7 +207,7 @@ press down
 wait 0.25
 press confirm
 wait 0.8
-shot 104_tut_controles_es
+shot 108_tut_controles_es
 wait 0.3
 press cancel
 wait 0.5
@@ -180,17 +215,19 @@ wait 0.5
 # --- El camino de verdad: pregunta -> SI -> tutorial -> PARTIDA ---------------------
 # Lanzado desde la pregunta, el tutorial vuelve a la PARTIDA (audiencia con Acab). Lanzado
 # desde Controles vuelve al titulo. Es la unica diferencia entre los dos, y aqui se
-# comprueba la primera: el gate es `Tutorial: empieza (19 pasos, vuelve a la partida)` y,
+# comprueba la primera: el gate es `Tutorial: empieza (15 pasos, vuelve a la partida)` y,
 # tras dejarlo, `Player created: Elias` — con UN solo slot de milagro y sin honda (`stats`).
 tutorialask
 wait 0.6
 press confirm
 wait 1.5
 
-# Dejarlo desde la pausa, que en PC es su unica salida (ESC ya es la pausa del paso 18)
+# Dejarlo desde la pausa, que en PC es su unica salida (ESC ya es la pausa del paso 14).
+# SALTADO, no terminado: sale directo a la partida, sin las dos paginas de cierre — quien
+# pide salir no quiere leer dos pantallas mas.
 press pause
 wait 0.6
-shot 105_tut_pausa_dejarlo
+shot 109_tut_pausa_dejarlo
 wait 0.2
 press down
 wait 0.12
