@@ -437,9 +437,112 @@ def voz_eliseo_dolor(i=0):
     return _voz('a', 132 + i * 5, 0.38 + i * 0.03, -1.4 - i * 0.2, 0.68, 0.22)
 
 
-# Al lanzar un milagro grande: no es un grito de dolor sino uno sostenido, casi cantado.
+# Al lanzar un milagro grande: un GRITO DE GUERRA (2026-09-24). La toma anterior era una 'a'
+# sostenida y casi cantada (f0 118, esfuerzo 0,35) y el usuario la oyo como lo que era: una
+# queja. Lo que pidio, literal: "mas epico, como Kratos en God of War, un sonido de lucha".
+# Lo que separa un rugido de una queja, y lo que hace cada pieza de `grito_guerra`:
+#   * el TONO SUBE con el esfuerzo y solo cae al final (la queja cae desde el principio);
+#   * GRUNIDO: cada segundo pulso glotal mas fuerte (doblado de periodo) = subarmonico a
+#     f0/2, que es la "garganta rota" de un grito de verdad;
+#   * RASPADO: ruido de aire por encima de 1 kHz que crece con el esfuerzo;
+#   * la VOCAL SE MUEVE: arranca cerrada, se abre a una 'a' gritada (F1 alto, ~860 Hz) y se
+#     cierra hacia 'o' al soltar el aire — "rrAAAHH". Una vocal fija suena a nota tenida;
+#   * PECHO: el fundamental reforzado, que da el peso (los formantes paso-banda lo quitan);
+#   * SATURACION (tanh) y DOBLE TOMA desafinada 13 centesimas: el grosor de una voz grabada
+#     gritando, no de un sintetizador.
+# Una toma por profeta, separadas por tono como el resto de la voz: Elias grave y Eliseo mas
+# alto (Engine::play_voice elige por profeta, ya no sortea).
+
+def _smooth_noise(rg, n, cutoff):
+    """Ruido suavizado y NORMALIZADO a [-1, 1]: lowpass_fast promedia y deja el ruido en
+    una fraccion de su amplitud, asi que sin normalizar un 'jitter 0,03' era casi nada."""
+    x = lowpass_fast(rg.uniform(-1, 1, n), cutoff)
+    m = np.max(np.abs(x))
+    return x / m if m > 1e-9 else x
+
+
+def _formant_bp(x, f, bw, sr=SR):
+    """Formante que se MUEVE, y PASO-BANDA de verdad. El `_resonator` de las otras voces
+    normaliza la ganancia en continua (g = 1-c-d), asi que cada uno de sus tres formantes
+    deja pasar el fundamental entero: por eso esas voces salen oscuras (3% de la energia
+    por encima de 1 kHz). Un grito vive en los formantes; aqui el numerador (1 - z^-2) anula
+    la continua y (1-r) deja el pico en ganancia ~1."""
+    n = x.shape[0]
+    f = np.broadcast_to(np.asarray(f, dtype=float), (n,))
+    bw = np.broadcast_to(np.asarray(bw, dtype=float), (n,))
+    r = np.exp(-np.pi * bw / sr)
+    c = 2.0 * r * np.cos(2.0 * np.pi * f / sr)
+    d = -r * r
+    b = 1.0 - r
+    y = np.zeros(n)
+    x1 = x2 = y1 = y2 = 0.0
+    for i in range(n):
+        v = b[i] * (x[i] - x2) + c[i] * y1 + d[i] * y2
+        x2 = x1
+        x1 = x[i]
+        y2 = y1
+        y1 = v
+        y[i] = v
+    return y
+
+
+def _grito_toma(f0, dur, seed):
+    rg = np.random.default_rng(seed)   # rng propio: regenerar un grito no mueve el resto
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    u = t / dur
+    # Tono: arranca abajo, SUBE con el esfuerzo y cae al soltar el aire
+    f = f0 * np.interp(u, [0.0, 0.10, 0.55, 0.80, 1.0], [0.84, 1.12, 1.22, 1.10, 0.78])
+    f = f * (1.0 + 0.03 * _smooth_noise(rg, n, 25.0))          # jitter: roto, no cantado
+    phase = np.cumsum(f) / SR
+    saw = 2.0 * (phase - np.floor(phase)) - 1.0
+    # Grunido: doblado de periodo (cada segundo pulso mas fuerte) = subarmonico a f0/2
+    # (con 0,6 el pulso fuerte era 4 veces el debil y el tono percibido caia una OCTAVA:
+    # sonaba a monstruo, no a hombre gritando)
+    growl = np.interp(u, [0.0, 0.15, 0.7, 1.0], [0.12, 0.26, 0.30, 0.45])
+    src = saw * (1.0 + growl * np.sign(np.sin(np.pi * phase)))
+    src = lowpass_fast(src, 5200.0)
+    src *= 1.0 + 0.22 * _smooth_noise(rg, n, 55.0)              # aspereza de amplitud
+    # Raspado: aire por encima de 1 kHz, mas cuanto mas se aprieta
+    effort = np.interp(u, [0.0, 0.08, 0.6, 1.0], [0.7, 0.45, 0.55, 0.8])
+    rasp = lowpass_fast(highpass(rg.uniform(-1, 1, n), 1000.0), 6500.0)
+    src += effort * 0.45 * rasp / (np.max(np.abs(rasp)) + 1e-9)
+    # La vocal se mueve: cerrada -> 'a' gritada -> hacia 'o'
+    F1 = np.interp(u, [0.0, 0.14, 0.70, 1.0], [560.0, 860.0, 840.0, 660.0])
+    F2 = np.interp(u, [0.0, 0.14, 0.70, 1.0], [1550.0, 1260.0, 1180.0, 980.0])
+    F3 = np.interp(u, [0.0, 0.14, 0.70, 1.0], [2500.0, 2680.0, 2650.0, 2450.0])
+    y = (1.00 * _formant_bp(src, F1, 130.0)
+       + 0.80 * _formant_bp(src, F2, 160.0)
+       + 0.55 * _formant_bp(src, F3, 220.0)
+       + 0.30 * _formant_bp(src, 3500.0, 300.0))
+    y = y / (np.max(np.abs(y)) + 1e-9)
+    # Pecho: el fundamental y sus primeros armonicos, que los paso-banda se comen. Va al
+    # MISMO tono: una octava por debajo el oido cogia esa y el grito sonaba a monstruo.
+    chest = lowpass_fast(saw, 420.0)
+    y += 0.32 * chest / (np.max(np.abs(chest)) + 1e-9)
+    # Ataque: la 'h' de arranque (aire antes de la voz) y un golpe de glotis seco
+    na = int(0.035 * SR)
+    burst = rg.uniform(-1, 1, na) * np.linspace(1.0, 0.0, na) ** 1.5
+    y[:na] += 0.5 * lowpass_fast(highpass(burst, 1500.0), 5000.0)
+    # Saturacion: el grano de una garganta a tope
+    y = np.tanh(2.0 * y)
+    # Envolvente: entra de golpe, CRECE hasta el 60% y se suelta
+    env = np.interp(u, [0.0, 0.03, 0.60, 0.82, 1.0], [0.0, 0.85, 1.0, 0.62, 0.0])
+    return y * env
+
+
+def grito_guerra(f0, dur, seed, gain=0.8):
+    a = _grito_toma(f0, dur, seed)
+    b = _grito_toma(f0 * 1.0076, dur, seed + 101)    # doble toma: 13 centesimas arriba
+    v = 0.58 * a + 0.48 * b
+    v = np.concatenate([v, np.zeros(int(0.5 * SR))])  # cola para la sala
+    v = reverb(v, SR, mix=0.24, decay=0.66)
+    return norm(soft_clip(norm(v, 0.95), 1.2), 0.9) * gain
+
+
 def voz_milagro(i=0):
-    return _voz('a', 118 + i * 9, 0.62, -0.25, 0.35, 0.10, gain=0.58)
+    # 1 = Elias (grave), 2 = Eliseo (mas alto)
+    return grito_guerra(94.0 if i == 0 else 122.0, 0.92 if i == 0 else 0.86, 71 + i)
 
 
 # Jefe: grave, largo y con mucho esfuerzo. Suena una vez por capitulo.

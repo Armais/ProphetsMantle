@@ -111,6 +111,19 @@ toca. El jefe ya no sale en el mapa: se aprende con pistas (`get_boss_intel`). L
   (detras y delante del profeta en el orden por Y), asi que el sprite del jugador —Elias,
   Eliseo o su skin— va dentro de la caja. Solo es dibujo: dano, embestida y cruce de huecos
   son los de siempre. `place_player` lo apaga (un teletransporte no se lleva el carro).
+- **Fuego del Cielo que CAE** (2026-09-24, "la cinematica deberia ver como cae un fuego del
+  cielo"; 2 Reyes 1:10): `cast_miracle` ya no hace dano en el acto. Apunta `Player::sky_fire_*`
+  (una bola grande sobre el sitio donde se invoco y otra por enemigo del radio) y un aro rojo en
+  el suelo; `Player::update_sky_fire` aplica dano, matorral y grietas cuando tocan suelo
+  (`Config::SKY_FIRE_FALL` = 0,6 s) con hitstop y sacudida. `Engine::render_sky_fire` oscurece
+  el cielo y pinta las bolas POR ENCIMA del mundo (con estela de fantasmas); el Engine hace
+  sonar el golpe con `sky_fire_landed`. `place_player` lo cancela, como el carro.
+- **La Honda dispara una PIEDRA** (`ProjectileKind::Stone`: la celda `Rock` a 0,6 que gira con
+  `ProjectileComponent::spin`). Hasta el 2026-09-24 salia `Arrow` y se veia una flecha.
+- **Los relatos se marcan con un "!"** (`Room::render_event_markers`, despues de
+  `draw_sorted`): bocadillo sobre cada relato pendiente, PNJ o escena, y el titulo al
+  acercarse. Un relato de ESCENA ya no es la antorcha (nadie la leia como interaccion): brilla
+  en el suelo, se abre un aro (`ring_tex`) y suben chispas.
 - **Aceite Inagotable** (2 Reyes 4:6): el consumible tiene cargas (`Player::consumable_charges`). Recoger otra vasija igual suma carga, una distinta reemplaza; `use_consumable` solo suelta el objeto cuando se gasta la ultima. El milagro da +2 cargas, y con las manos vacias regala un consumible con 2. El numero se pinta sobre la celda del HUD cuando es > 1. Va en el guardado (`SaveData::consumable_uses`).
 - **Tres slots de milagro**: `Config::MAX_MIRACLE_SLOTS = 3` (Q / E / F; `Action::Miracle3` = tecla F, D-Pad abajo en mando). Elias sigue con 1 (2 desde el cap. 4); Eliseo con 2, y 3 con la mejora meta 6 de El Santuario. Todo lo que iteraba slots va contra la constante: `Player::miracle_slots`, la tabla `MIRACLE_KEYS` de `player.cpp`, `draw_miracle_slots` (la tercera celda cae en x≈238 de 320 y no pisa ni la caja de mensajes ni la barra de jefe), `open_miracle_choice`, el bot y el comando `learn`.
 - **Miracle gating readability**: a Tier-3 miracle needs faith level *Siervo Fiel* (50), and the run starts at exactly 50, so equipping one in slot Q made it lock on the first hit taken and read as "I need 100% faith". The fix is threefold and must stay together: the Q slot always starts Tier 1; `draw_miracle_slots` splits `lock_tier` (padlock + the faith **required**, via `faith_required_for_tier`) from `lock_cost` (cost in red); and `Player::MiracleEvent` carries the reason (`NeedTier` / `NeedCost` / `OnCooldown`) so the Engine names it ("Fuego del Cielo: necesitas 50 de fe (Siervo Fiel)"). `draw_faith_bar` also ticks the 25/50/75 thresholds. A one-shot `[Q]` hint fires in ch. 1 after 5 castable seconds (`Engine::miracle_hint_*`).

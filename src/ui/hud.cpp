@@ -202,28 +202,96 @@ Rect dialogue_option_rect(int i) {
     return (i >= 0 && i < 2) ? g_dialogue_opt[i] : Rect{0, 0, 0, 0};
 }
 
+// Etiquetas de consecuencia en fila, a partir de `x` (chips_width las mide). `dim` apaga las
+// de la opcion no seleccionada: se leen, pero la que manda es la que vas a tomar.
+static constexpr f32 CHIP_SCALE = 0.7f, CHIP_GAP = 6.0f;
+static f32 chips_width(Renderer& renderer, const EffectChip* chips, int count) {
+    f32 w = 0.0f;
+    for (int i = 0; i < count; i++) w += (i ? CHIP_GAP : 0.0f) + renderer.measure_text(chips[i].text, CHIP_SCALE);
+    return w;
+}
+static void draw_chips(Renderer& renderer, const EffectChip* chips, int count, f32 x, f32 y, bool dim) {
+    for (int i = 0; i < count; i++) {
+        Color c = chips[i].color;
+        if (dim) { c.r = static_cast<u8>(c.r * 0.72f); c.g = static_cast<u8>(c.g * 0.72f);
+                   c.b = static_cast<u8>(c.b * 0.72f); c.a = 215; }
+        renderer.draw_text(chips[i].text, x, y, c, CHIP_SCALE);
+        x += renderer.measure_text(chips[i].text, CHIP_SCALE) + CHIP_GAP;
+    }
+}
+
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
     renderer.draw_rect({0, 0, W, H}, {8, 6, 12, 130});
 
-    // Caja: alta cuando hay opciones que listar, baja cuando solo hay texto
-    const f32 box_h = view.option_count > 0 ? 78.0f : 54.0f;
-    const f32 bx = 12.0f, by = H - box_h - 10.0f, bw = W - 24.0f;
-
-    renderer.draw_rect({bx - 2, by - 2, bw + 4, box_h + 4}, {180, 150, 95, 240});
-    renderer.draw_rect({bx, by, bw, box_h}, {24, 19, 28, 248});
-    renderer.draw_rect({bx, by, bw, 1.0f}, {255, 255, 255, 40});
-
+    const f32 bx = 12.0f, bw = W - 24.0f;
     // Retrato de quien habla, si lo tiene. La celda mide 24 unidades (96 px) y se dibuja a
     // PORTRAIT_W: por encima de ~34 se ve blanda, y el Codice ya la estira a 34.
     // Sin retrato (o sin hoja) TODO lo de abajo cae en las coordenadas de siempre.
     const f32 PORTRAIT_W = 32.0f;
     const bool has_portrait = view.portrait >= 0 && view.portrait < Portrait::COUNT &&
                               portraits != TEXTURE_NONE;
-    f32 text_x = bx + 8.0f;
-    f32 text_w = bw - 16.0f;
+    const f32 text_x = has_portrait ? bx + 5.0f + PORTRAIT_W + 7.0f : bx + 8.0f;
+    const f32 text_w = has_portrait ? bx + bw - 8.0f - text_x : bw - 16.0f;
+
+    // Cuerpo del dialogo. Con retrato la columna es ~35 unidades mas estrecha, asi que se
+    // le concede una CUARTA linea: `wrap_text` trunca en silencio lo que no le cabe.
+    std::string lines[4];
+    const int max_lines = has_portrait ? 4 : 3;
+    const int n = renderer.wrap_text(view.body, text_w, 0.8f, lines, max_lines);
+
+    // Opciones: la etiqueta a la izquierda y lo que CAMBIA a la derecha, en la misma fila si
+    // cabe; si no, en una segunda fila debajo. Se mide ANTES de pintar la caja, porque es lo
+    // que decide su alto.
+    constexpr f32 OPT_H = 11.0f, CHIP_ROW_H = 7.5f;
+    const f32 opt_right = bx + bw - 8.0f;
+    bool chips_below[2] = {false, false};
+    f32 opt_h[2] = {OPT_H, OPT_H};
+    for (int i = 0; i < view.option_count && i < 2; i++) {
+        if (view.chip_count[i] <= 0) continue;
+        char buf[96];
+        snprintf(buf, sizeof(buf), "> %s", view.options[i]);
+        const f32 lw = renderer.measure_text(buf, 0.8f);
+        const f32 cw = chips_width(renderer, view.chips[i], view.chip_count[i]);
+        if (text_x + lw + 10.0f + cw > opt_right) { chips_below[i] = true; opt_h[i] = OPT_H + CHIP_ROW_H; }
+    }
+    // Tras decidir: lo que ha pasado, en una o dos filas bajo el texto
+    int result_rows = 0;
+    int result_split = view.result_chip_count;   // cuantas van en la primera fila
+    if (view.option_count == 0 && view.result_chip_count > 0) {
+        result_rows = 1;
+        if (chips_width(renderer, view.result_chips, view.result_chip_count) > text_w) {
+            result_rows = 2;
+            result_split = 0;
+            f32 w = 0.0f;
+            while (result_split < view.result_chip_count) {
+                w += (result_split ? CHIP_GAP : 0.0f) +
+                     renderer.measure_text(view.result_chips[result_split].text, CHIP_SCALE);
+                if (w > text_w) break;
+                result_split++;
+            }
+        }
+    }
+
+    // Caja: el alto de siempre de la de texto (54) y lo que pidan las opciones y sus
+    // consecuencias por encima (crece hacia arriba: el pie se queda donde estaba). Antes la de
+    // opciones tenia 78 FIJOS, y con una sola linea de contexto le sobraba un tercio vacio.
+    f32 box_h = 54.0f;
+    if (view.option_count > 0) {
+        f32 need = 8.0f + n * 9.0f + 4.0f + 4.0f;
+        for (int i = 0; i < view.option_count && i < 2; i++) need += opt_h[i];
+        box_h = std::max(box_h, need);
+    } else if (result_rows > 0) {
+        box_h = std::max(box_h, 8.0f + n * 9.0f + 3.0f + result_rows * 8.0f + 5.0f);
+    }
+    const f32 by = H - box_h - 10.0f;
+
+    renderer.draw_rect({bx - 2, by - 2, bw + 4, box_h + 4}, {180, 150, 95, 240});
+    renderer.draw_rect({bx, by, bw, box_h}, {24, 19, 28, 248});
+    renderer.draw_rect({bx, by, bw, 1.0f}, {255, 255, 255, 40});
+
     if (has_portrait) {
         const f32 pxx = bx + 5.0f, pyy = by + 5.0f;
         renderer.draw_rect({pxx - 1.0f, pyy - 1.0f, PORTRAIT_W + 2.0f, PORTRAIT_W + 2.0f},
@@ -232,8 +300,6 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
         renderer.draw_sprite_rect(portraits, Portrait::src(view.portrait),
                                   {pxx, pyy, PORTRAIT_W, PORTRAIT_W}, Color::white());
         renderer.draw_rect({pxx, pyy, PORTRAIT_W, 0.7f}, {255, 240, 200, 90});
-        text_x = pxx + PORTRAIT_W + 7.0f;
-        text_w = bx + bw - 8.0f - text_x;
     }
 
     // Nombre de quien habla, sobre una placa que muerde el borde superior. Va alineado con
@@ -245,14 +311,17 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
         renderer.draw_rect({nx + 1.0f, by - 6.0f, nw + 8.0f, 10.0f}, {40, 31, 24, 250});
         renderer.draw_text(view.speaker, nx + 5.0f, by - 5.0f, {245, 218, 160, 255}, 0.85f);
     }
-    // Cuerpo del dialogo. Con retrato la columna es ~35 unidades mas estrecha, asi que se
-    // le concede una CUARTA linea: `wrap_text` trunca en silencio lo que no le cabe, y la
-    // caja tiene hueco de sobra en vertical (4 lineas + 2 opciones = 70 de 78).
-    std::string lines[4];
-    const int max_lines = has_portrait ? 4 : 3;
-    int n = renderer.wrap_text(view.body, text_w, 0.8f, lines, max_lines);
     for (int i = 0; i < n; i++)
         renderer.draw_text(lines[i].c_str(), text_x, by + 8.0f + i * 9.0f, {224, 216, 204, 250}, 0.8f);
+
+    // Resuelto: lo que ha cambiado, bajo el texto del resultado
+    if (result_rows > 0) {
+        const f32 ry = by + 8.0f + n * 9.0f + 3.0f;
+        draw_chips(renderer, view.result_chips, result_split, text_x, ry, false);
+        if (result_rows > 1)
+            draw_chips(renderer, view.result_chips + result_split, view.result_chip_count - result_split,
+                       text_x, ry + 8.0f, false);
+    }
 
     // Opciones
     g_dialogue_opt[0] = g_dialogue_opt[1] = {0, 0, 0, 0};
@@ -260,22 +329,27 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
         f32 oy = by + 8.0f + n * 9.0f + 4.0f;
         for (int i = 0; i < view.option_count && i < 2; i++) {
             bool on = (i == view.selected);
-            g_dialogue_opt[i] = {text_x - 3.0f, oy + i * 11.0f - 2.0f,
-                                 (bx + bw - 5.0f) - (text_x - 3.0f), 12.0f};
+            g_dialogue_opt[i] = {text_x - 3.0f, oy - 2.0f,
+                                 (bx + bw - 5.0f) - (text_x - 3.0f), opt_h[i] + 1.0f};
             Color c = on ? Color{250, 215, 130, 255} : Color{160, 152, 142, 235};
             // El borde derecho es el de siempre (bx+bw-5): sin retrato la banda tiene que
             // quedar exactamente donde estaba antes de que existiera este campo.
-            if (on) renderer.draw_rect({text_x - 3.0f, oy + i * 11.0f - 1.0f,
-                                        (bx + bw - 5.0f) - (text_x - 3.0f), 10.0f}, {70, 56, 34, 200});
+            if (on) renderer.draw_rect({text_x - 3.0f, oy - 1.0f,
+                                        (bx + bw - 5.0f) - (text_x - 3.0f), opt_h[i] - 1.0f}, {70, 56, 34, 200});
             char buf[96];
             snprintf(buf, sizeof(buf), "%s%s", on ? "> " : "  ", view.options[i]);
-            renderer.draw_text(buf, text_x, oy + i * 11.0f, c, 0.8f);
-            // Coste a la derecha, en rojo: la decision tiene que doler antes de tomarla
-            if (view.costs[i] && view.costs[i][0]) {
-                f32 cw = renderer.measure_text(view.costs[i], 0.7f);
-                renderer.draw_text(view.costs[i], bx + bw - cw - 8.0f, oy + i * 11.0f + 1.0f,
-                                   on ? Color{240, 130, 110, 255} : Color{150, 90, 80, 220}, 0.7f);
+            renderer.draw_text(buf, text_x, oy, c, 0.8f);
+            // Lo que cambia: a la derecha en la misma fila, o debajo, sangrado bajo la etiqueta.
+            // Las dos opciones lo ensenan SIEMPRE: la decision se toma sabiendo lo que cuesta
+            // y lo que da cada camino, no descubriendolo despues.
+            if (view.chip_count[i] > 0) {
+                const f32 cw = chips_width(renderer, view.chips[i], view.chip_count[i]);
+                if (chips_below[i]) draw_chips(renderer, view.chips[i], view.chip_count[i],
+                                               text_x + 9.0f, oy + OPT_H - 1.5f, !on);
+                else                draw_chips(renderer, view.chips[i], view.chip_count[i],
+                                               opt_right - cw, oy + 1.0f, !on);
             }
+            oy += opt_h[i];
         }
         renderer.draw_text_centered(view.touch
                                         ? tr("Toca una opción; vuelve a tocarla para decidir",

@@ -149,8 +149,8 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
         case TutorialGoal::CrossExit:
             return {tr("Cruza el arco: ahí acaba cada capítulo",
                        "Cross the arch: that is how a chapter ends"),
-                    tr("Limpia las salas, halla al jefe y cruza su arco.",
-                       "Clear the rooms, find the boss and cross his arch.")};
+                    tr("Explora el camino, halla al jefe y cruza su arco.",
+                       "Explore the road, find the boss and cross his arch.")};
 
         default:
             return {"", ""};

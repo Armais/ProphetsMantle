@@ -677,6 +677,13 @@ void Engine::update(f32 dt) {
                 player.shake_request = 0.0f;
             }
             if (player.flash_request > 0.0f) { world_flash = player.flash_request; player.flash_request = 0.0f; }
+            // El Fuego del Cielo toca suelo: el golpe suena AHI, no al invocarlo
+            if (player.sky_fire_landed) {
+                player.sky_fire_landed = false;
+                audio.play_sfx(SfxID::CriticalHit, 1.0f);
+                audio.play_sfx(SfxID::FireCrackle, 0.85f);
+                input.rumble(Config::Feel::RUMBLE_KILL, 220);
+            }
             if (player.last_event == Player::MiracleEvent::Cast) {
                 show_message(get_miracle_def(player.last_cast).name, 1.5f);
                 save.data.miracles_cast |= (1u << static_cast<u32>(player.last_cast));
@@ -700,7 +707,7 @@ void Engine::update(f32 dt) {
                 }
                 // Solo los milagros GRANDES llevan voz: si el profeta gritara tambien al
                 // curarse con los cuervos, la exclamacion dejaria de significar nada.
-                if (get_miracle_def(player.last_cast).tier >= 3) play_voice(Voice::Milagro, 0.9f);
+                if (get_miracle_def(player.last_cast).tier >= 3) play_voice(Voice::Milagro, 1.0f);
             } else if (player.last_event != Player::MiracleEvent::None) {
                 // Decir exactamente que falta: nivel de fe, fe para pagarlo o recarga
                 MiracleDef md = get_miracle_def(player.last_cast);
@@ -1110,12 +1117,17 @@ void Engine::render() {
 
         draw_list.clear();
         current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
-                                        npc_texture, world.time, view);
+                                        npc_texture, world.time, view, renderer.ring_tex);
         world.collect_draws(draw_list, renderer);
         collect_chariot_draws(draw_list);
         renderer.draw_sorted(draw_list);
 
         current_room_data.render_exit_barriers(renderer, world.time);
+        {
+            const Vec2 pp = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform))
+                            ? world.transforms[player.entity].position : camera.position;
+            current_room_data.render_event_markers(renderer, world.time, view, pp);
+        }
 
         // Floating damage numbers: rise and fade over the enemy that was hit
         for (const auto& p : world.popups) {
@@ -1136,6 +1148,9 @@ void Engine::render() {
                                       {-8, -8, static_cast<f32>(Config::GAME_WIDTH) + 16, static_cast<f32>(Config::GAME_HEIGHT) + 16},
                                       {0, 0, 0, 120});
         }
+
+        // El Fuego del Cielo cayendo: cielo rojo y las bolas POR ENCIMA de todo el mundo
+        render_sky_fire();
 
         // Fogonazo blanco de milagro (Altar Consumido): sobre el mundo, bajo el HUD
         if (world_flash > 0.0f) {
@@ -1260,6 +1275,9 @@ void Engine::render() {
             v.skip_pressed = dialogue_skip_pressed;
             if (dialogue.resolved) {
                 v.body = dialogue.result;
+                // Y debajo, lo que acaba de pasar: las mismas etiquetas que tenia la opcion
+                v.result_chip_count = build_event_chips(dialogue.event_id, dialogue.selected,
+                                                        v.result_chips, DIALOGUE_MAX_CHIPS);
             } else if (dialogue.choosing) {
                 // Ultima linea visible mientras se decide, para no perder el contexto
                 int last = 0;
@@ -1269,7 +1287,8 @@ void Engine::render() {
                 v.selected = dialogue.selected;
                 for (int i = 0; i < v.option_count; i++) {
                     v.options[i] = def.options[i].label;
-                    v.costs[i]   = def.options[i].cost;
+                    v.chip_count[i] = build_event_chips(dialogue.event_id, i, v.chips[i],
+                                                        DIALOGUE_MAX_CHIPS);
                 }
             } else {
                 v.body = (dialogue.line < 3 && def.lines[dialogue.line]) ? def.lines[dialogue.line] : "";
@@ -2867,11 +2886,13 @@ void Engine::render_sanctuary() {
 // =============================================================================
 // Feedback
 // =============================================================================
-// Una voz cada VOICE_GAP segundos como mucho. El grito de jefe se salta la espera: suena
-// una vez por capitulo y es justo el momento en el que tiene que oirse.
+// Una voz cada VOICE_GAP segundos como mucho. El grito de jefe y el grito de guerra del
+// milagro se saltan la espera: el de jefe suena una vez por capitulo, y el del milagro va con
+// un poder de 20+ s de recarga — y con la espera, un dash o un golpe recibido justo antes se
+// lo comian, que es exactamente el momento en el que tiene que oirse.
 void Engine::play_voice(Voice v, f32 volume) {
     constexpr f32 VOICE_GAP = 2.2f;
-    if (v != Voice::Jefe && voice_cooldown > 0.0f) return;
+    if (v != Voice::Jefe && v != Voice::Milagro && voice_cooldown > 0.0f) return;
     voice_cooldown = VOICE_GAP;
 
     const bool elias = (player.character == CharacterType::Elias);
@@ -2880,7 +2901,7 @@ void Engine::play_voice(Voice v, f32 volume) {
     // se habia cargado, no que se hubiera oido.
     static const char* NAMES[] = {"esfuerzo", "dolor", "milagro", "jefe"};
     SDL_Log("Voice: %s (%s)", NAMES[static_cast<int>(v)],
-            (v == Voice::Milagro || v == Voice::Jefe) ? "-" : (elias ? "Elias" : "Eliseo"));
+            (v == Voice::Jefe) ? "-" : (elias ? "Elias" : "Eliseo"));
     switch (v) {
         case Voice::Esfuerzo:
             audio.play_sfx_variant(elias ? SfxID::VozEliasEsfuerzo1 : SfxID::VozEliseoEsfuerzo1,
@@ -2891,7 +2912,9 @@ void Engine::play_voice(Voice v, f32 volume) {
                                    3, volume);
             break;
         case Voice::Milagro:
-            audio.play_sfx_variant(SfxID::VozMilagro1, 2, volume);
+            // Grito de guerra, uno por profeta (tools/audio/gen_audio.py, grito_guerra):
+            // Elias grave, Eliseo mas alto. Ya no se sortea entre los dos.
+            audio.play_sfx(elias ? SfxID::VozMilagro1 : SfxID::VozMilagro2, volume);
             break;
         case Voice::Jefe:
             audio.play_sfx(SfxID::VozJefe, volume);
@@ -3414,6 +3437,7 @@ void Engine::place_player(Vec2 spawn_pos) {
     }
     world.transforms[player.entity].position = spawn_pos;
     player.chariot_fx_t = -1.0f;   // un carro a medio despedirse no viaja con el teletransporte
+    player.sky_fire_t = -1.0f;     // ni un Fuego del Cielo a medio caer (sus VFX ya se barrieron)
     if (world.has(player.entity, Component::Movement)) {
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
@@ -3678,6 +3702,62 @@ void Engine::collect_chariot_draws(std::vector<DrawCmd>& out) {
         c.sort_y = sort + (layer == 0 ? -0.5f : 0.5f);
         out.push_back(c);
     }
+}
+
+// =============================================================================
+// Fuego del Cielo (2 Reyes 1:10): el cielo se cierra y el fuego BAJA
+// =============================================================================
+// Por encima del mundo y de la vinieta, y por debajo del fogonazo y del HUD: el fuego viene
+// del cielo, asi que no lo tapan ni los arboles ni el propio profeta. Solo es dibujo; el
+// tiempo, el dano y la llave del bioma son de Player::update_sky_fire.
+void Engine::render_sky_fire() {
+    const f32 t = player.sky_fire_t;
+    if (t < 0.0f) return;
+    const f32 FALL = Config::SKY_FIRE_FALL;
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH), H = static_cast<f32>(Config::GAME_HEIGHT);
+
+    // El cielo: rojo oscuro mientras baja el fuego; al golpe, un fogonazo naranja que se apaga
+    if (t < FALL) {
+        const f32 k = std::min(1.0f, t / 0.12f);
+        renderer.draw_rect({0, 0, W, H}, {70, 12, 0, static_cast<u8>(100.0f * k)});
+    } else {
+        const f32 k = std::max(0.0f, 1.0f - (t - FALL) / Config::SKY_FIRE_AFTER);
+        renderer.draw_rect({0, 0, W, H}, {255, 150, 60, static_cast<u8>(130.0f * k * k)});
+    }
+    if (t >= FALL || tileset_texture == TEXTURE_NONE) return;
+
+    renderer.begin_world(camera.position);
+    const Rect fire = get_tile_src(TileSprite::Fireball);
+    // Sale justo por encima del borde de arriba (el profeta va centrado: 90 de media pantalla
+    // + media bola) y entra algo ladeada, desde arriba a la izquierda
+    constexpr f32 H0 = 130.0f, DRIFT = -45.0f;
+    const f32 ang = std::atan2(H0, -DRIFT) * 57.2957795f;   // la celda apunta a +x
+    for (int i = 0; i < player.sky_bolt_count; i++) {
+        const Player::SkyBolt& b = player.sky_bolts[i];
+        // Tres fantasmas detras de la cabeza hacen la estela; el ultimo (g = 0) es la bola
+        for (int g = 3; g >= 0; g--) {
+            const f32 tg = t - g * 0.03f;
+            if (tg < b.start) continue;
+            const f32 u = std::min(1.0f, (tg - b.start) / (FALL - b.start));
+            const f32 left = 1.0f - std::pow(u, 1.4f);   // ACELERA: cae, no flota
+            const Vec2 p = {b.target.x + DRIFT * left, b.target.y - H0 * left};
+            const f32 shrink = 1.0f - g * 0.16f;
+            const f32 len = 16.0f * 3.4f * b.size * shrink, wid = 16.0f * 2.3f * b.size * shrink;
+            if (g == 0) {
+                // Resplandor detras: la misma bola mas grande y translucida. Es lo que hace que
+                // se lea "fuego" y no "piedra naranja"
+                const f32 gl = len * 1.35f, gw = wid * 1.6f;
+                renderer.draw_sprite_rect(tileset_texture, fire, {p.x - gl * 0.5f, p.y - gw * 0.5f, gl, gw},
+                                          {255, 110, 30, 120}, false, ang);
+                renderer.draw_sprite_rect(tileset_texture, fire, {p.x - len * 0.5f, p.y - wid * 0.5f, len, wid},
+                                          {255, 238, 200, 255}, false, ang);
+            } else {
+                renderer.draw_sprite_rect(tileset_texture, fire, {p.x - len * 0.5f, p.y - wid * 0.5f, len, wid},
+                                          {255, 130, 50, static_cast<u8>(170 - g * 45)}, false, ang);
+            }
+        }
+    }
+    renderer.end_world();
 }
 
 // =============================================================================
@@ -3996,15 +4076,16 @@ void Engine::update_room_state() {
                 show_banner(tr("JEFE DERROTADO", "BOSS DEFEATED"), tr("Cruza el arco dorado para continuar", "Cross the golden arch to go on"), 4.0f);
                 audio.play_sfx(SfxID::LevelUp);
             } else if (!player.took_damage_this_room) {
+                // Ya no hay salas (zona continua): lo que se vence es un GRUPO de enemigos,
+                // y un "Sala despejada" en mitad del campo abierto no significaba nada. Solo
+                // se avisa cuando hay premio, y el aviso dice el premio.
                 faith.on_room_no_damage();
-                show_message(tr("Sala despejada sin daño  +2 Fe", "Room cleared without a scratch  +2 Faith"), 2.5f);
+                show_message(tr("Sin un rasguño  +2 Fe", "Not a scratch  +2 Faith"), 2.0f);
+                audio.play_sfx(SfxID::FaithGain, 0.6f);
                 award(AchievementID::SinRasguno);
-            } else {
-                show_message(tr("Sala despejada", "Room cleared"), 1.5f);
             }
             // Despejarla con el celo apagado tiene su propio merito
             if (faith.current < Config::FAITH_LEVEL_1) award(AchievementID::BajoLaRetama);
-            if (node.type != RoomType::Boss) audio.play_sfx(SfxID::DoorOpen, 0.8f);
             if (node.type == RoomType::Elite) {
                 // Elite reward: a small offering pile at the cell hub
                 Vec2 c = room.tile_to_world(cs.hub_tx, cs.hub_ty);
@@ -4251,261 +4332,123 @@ void Engine::update_dialogue(f32 dt) {
     change_scene(GameScene::Playing);
 }
 
-// El texto vive en events.h; la mecanica vive aqui, con los sistemas que ya existen.
+// Las etiquetas de consecuencia de una opcion ("+18 Fe", "-12 HP", "Vida llena"...). Salen
+// de la MISMA tabla que aplica apply_event_choice (get_event_effect, game/events.h), asi que
+// lo que se lee antes de decidir es exactamente lo que pasa al decidir. Orden: la fe primero
+// (es el recurso del juego y la pregunta de cada relato), luego el cuerpo, luego lo demas.
+int Engine::build_event_chips(int event_id, int option, EffectChip* out, int max) const {
+    const EventEffect fx = get_event_effect(event_id, option);
+    const Color GOLD = {250, 214, 110, 255}, BAD = {238, 118, 98, 255};
+    const Color GOOD = {146, 226, 132, 255}, ITEM = {150, 200, 250, 255};
+    int n = 0;
+    auto add = [&](Color c, const char* fmt, auto... args) {
+        if (n >= max) return;
+        snprintf(out[n].text, sizeof(out[n].text), fmt, args...);
+        out[n].color = c;
+        n++;
+    };
+    if (fx.faith > 0.0f) add(GOLD, tr("+%.0f Fe", "+%.0f Faith"), fx.faith);
+    if (fx.faith < 0.0f) add(BAD,  tr("%.0f Fe", "%.0f Faith"), fx.faith);
+    if (fx.hurt > 0.0f)  add(BAD,  "-%.0f HP", fx.hurt);
+    if (fx.heal)         add(GOOD, "%s", tr("Vida llena", "Full health"));
+    if (fx.max_hp > 0.0f) add(GOOD, tr("+%.0f vida máx.", "+%.0f max HP"), fx.max_hp);
+    if (fx.max_hp < 0.0f) add(BAD,  tr("%.0f vida máx.", "%.0f max HP"), fx.max_hp);
+    if (fx.damage > 0.0f) add(GOOD, tr("+%.0f daño", "+%.0f damage"), fx.damage);
+    if (fx.damage < 0.0f) add(BAD,  tr("%.0f daño", "%.0f damage"), fx.damage);
+    if (fx.boss_hp < 1.0f)
+        add(GOOD, tr("Jefe -%.0f%% vida", "Boss -%.0f%% HP"), (1.0f - fx.boss_hp) * 100.0f);
+    if (fx.item >= 0) {
+        const ItemDef* d = item_registry.get(static_cast<u32>(fx.item));
+        if (d) add(ITEM, "%s", d->name);
+    }
+    switch (fx.special) {
+        case EventSpecial::SecondSlot:     add(GOOD, "%s", tr("2º milagro", "2nd miracle slot")); break;
+        case EventSpecial::LoseConsumable: add(BAD,  "%s", tr("Pierdes el consumible", "Lose your consumable")); break;
+        case EventSpecial::Revive:         add(GOOD, "%s", tr("Una muerte perdonada", "One death forgiven")); break;
+        case EventSpecial::HeavenlyHost:   add(GOOD, "%s", tr("Ejército Celestial", "Heavenly Host")); break;
+        case EventSpecial::AscentFollow:   add(GOOD, "%s", tr("Herencia entera", "Full inheritance")); break;
+        case EventSpecial::AscentStay:     add(BAD,  "%s", tr("-10% de herencia", "-10% inheritance")); break;
+        case EventSpecial::AscentDouble:   add(GOOD, "%s", tr("Milagro heredado", "Inherited miracle")); break;
+        case EventSpecial::AscentLess:     add(BAD,  "%s", tr("Sin milagro heredado", "No inherited miracle")); break;
+        default: break;   // el arco de Joas cambia el final, no la partida: no se etiqueta
+    }
+    return n;
+}
+
+// El texto vive en events.h, y desde el 2026-09-24 tambien las CIFRAS (get_event_effect):
+// aqui solo se aplican, con los sistemas que ya existen.
 void Engine::apply_event_choice(int event_id, int option) {
-    auto heal_full = [&]() {
-        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
-            world.healths[player.entity].current = world.healths[player.entity].max;
-    };
-    auto hurt = [&](f32 amount) {
-        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
-            auto& h = world.healths[player.entity];
-            h.current = std::max(1.0f, h.current - amount);   // un encuentro nunca mata
+    const EventEffect fx = get_event_effect(event_id, option);
+    HealthComponent* hp = (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
+                 ? &world.healths[player.entity] : nullptr;
+
+    // El cuerpo, en este orden: el golpe, la cura, el techo (una cura seguida de +vida
+    // maxima deja la vida llena con el techo nuevo)
+    if (hp && fx.hurt > 0.0f) hp->current = std::max(1.0f, hp->current - fx.hurt);   // un encuentro nunca mata
+    if (hp && fx.heal) hp->current = hp->max;
+    if (hp && fx.max_hp != 0.0f) {
+        hp->max = std::max(20.0f, hp->max + fx.max_hp);
+        hp->current = std::min(hp->current, hp->max);
+        if (fx.max_hp > 0.0f) hp->current += fx.max_hp;
+    }
+    // Con suelo: hay encuentros (los sirios de Dotan, el rey de Moab) cuyo coste es RESTAR
+    // dano, y un cayado que no hace nada convertiria la eleccion piadosa en una partida rota
+    if (fx.damage != 0.0f && player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat)) {
+        auto& c = world.combats[player.entity];
+        c.damage = std::max(4.0f, c.damage + fx.damage);
+    }
+    if (fx.faith != 0.0f) faith.modify(fx.faith);
+    // Un DECIDIR es actuar: la fe recien ganada no empieza a gotear por inactividad (-0,5/s a
+    // los 10 s sin atacar) nada mas cerrar la caja
+    faith.reset_inactivity();
+    // min, no asignacion: Abdias (0,75) no debe deshacer el altar del Carmelo (0,5)
+    if (fx.boss_hp < 1.0f) boss_hp_scale = std::min(boss_hp_scale, fx.boss_hp);
+    if (fx.item >= 0) {
+        if (const ItemDef* d = item_registry.get(static_cast<u32>(fx.item))) {
+            player.grant_item(world, faith, *d);
+            codex_see_item(save.data, static_cast<u32>(fx.item));
+            show_message(d->name, 2.5f);
         }
-    };
-    auto add_max_hp = [&](f32 amount) {
-        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
-            auto& h = world.healths[player.entity];
-            h.max = std::max(20.0f, h.max + amount);
-            h.current = std::min(h.current, h.max);
-            if (amount > 0.0f) h.current += amount;
-        }
-    };
-    auto add_damage = [&](f32 amount) {
-        // Con suelo: hay un encuentro (los sirios de Dotan) cuyo coste es RESTAR danio, y un
-        // cayado que no hace nada convertiria la eleccion piadosa en una partida rota.
-        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat)) {
-            auto& c = world.combats[player.entity];
-            c.damage = std::max(4.0f, c.damage + amount);
-        }
-    };
-    auto grant = [&](u32 item_id) {
-        const ItemDef* d = item_registry.get(item_id);
-        if (!d) return;
-        player.grant_item(world, faith, *d);
-        codex_see_item(save.data, item_id);
-        show_message(d->name, 2.5f);
-    };
-
-    // Un encuentro por `case`, en el orden del pozo (game/events.h). Los que son MILAGRO
-    // dan efecto de partida; los que son decision MORAL mueven la fe. Ninguno es solo texto,
-    // y ninguna de las dos opciones es gratis: eso es lo que hace que elegir importe.
-    switch (event_id) {
-        // --- Cap. 1: El Arroyo Querit ---------------------------------------
-        case Ev::CUERVOS_QUERIT:
-            if (option == 0) { heal_full(); faith.modify(5.0f); }
-            else             { faith.modify(12.0f); }
+    }
+    switch (fx.special) {
+        case EventSpecial::SecondSlot:
+            player.active_slot_count = std::max(player.active_slot_count, 2);
             break;
-        case Ev::RASTREADOR_DE_ACAB:
-            // Esconderse ES la orden (1 R 17:3); salir a por el rastreador la desobedece,
-            // aunque te quedes su lanza.
-            if (option == 0) { faith.modify(18.0f); }
-            else             { hurt(10.0f); faith.modify(-8.0f); add_damage(5.0f); }
-            break;
-        case Ev::ARROYO_SECO:
-            if (option == 0) { hurt(12.0f); faith.modify(18.0f); }
-            else             { faith.modify(-6.0f); heal_full(); }
-            break;
-
-        // --- Cap. 2: La Viuda de Sarepta ------------------------------------
-        case Ev::VIUDA_SAREPTA:
-            if (option == 0) { hurt(15.0f); faith.on_help_widow(); grant(13); }
-            else             { faith.modify(Config::FAITH_FLEE); }
-            break;
-        case Ev::TINAJA_HARINA:
-            if (option == 0) { faith.modify(25.0f); add_max_hp(10.0f); }
-            else             { faith.modify(-15.0f); heal_full(); add_damage(3.0f); }
-            break;
-        case Ev::HIJO_DE_LA_VIUDA:
-            if (option == 0) { hurt(25.0f); faith.modify(25.0f); add_max_hp(15.0f); }
-            else             { faith.modify(-10.0f); heal_full(); }
-            break;
-
-        // --- Cap. 3: El Monte Carmelo ---------------------------------------
-        case Ev::ALTAR_CARMELO:
-            if (option == 0) { faith.modify(-20.0f); boss_hp_scale = 0.5f; }
-            else             { add_damage(8.0f); }
-            break;
-        case Ev::ABDIAS:
-            if (option == 0) { hurt(12.0f); faith.modify(18.0f); boss_hp_scale = 0.75f; }
-            else             { faith.modify(-6.0f); add_max_hp(10.0f); }
-            break;
-        case Ev::DOS_PENSAMIENTOS:
-            if (option == 0) { hurt(10.0f); faith.modify(20.0f); }
-            else             { faith.modify(-8.0f); add_damage(5.0f); }
-            break;
-        case Ev::NUBECILLA:
-            if (option == 0) { hurt(20.0f); add_damage(6.0f); faith.modify(10.0f); }
-            else             { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
-            break;
-
-        // --- Cap. 4: La Cueva de Horeb --------------------------------------
-        case Ev::BOCA_CUEVA:
-            if (option == 0) { faith.modify(30.0f); player.active_slot_count = std::max(player.active_slot_count, 2); }
-            else             { heal_full(); }
-            break;
-        case Ev::ENEBRO_ANGEL:
-            if (option == 0) { heal_full(); add_max_hp(10.0f); faith.modify(5.0f); }
-            else             { hurt(15.0f); faith.modify(18.0f); }
-            break;
-        case Ev::TRES_UNCIONES:
-            // Ungir a los tres ABRE el segundo slot: la agenda de Horeb es literalmente el
-            // reparto de lo que viene despues, y una parte de eso es el sucesor.
-            if (option == 0) { faith.modify(-20.0f); add_damage(4.0f);
-                               player.active_slot_count = std::max(player.active_slot_count, 2); }
-            else             { faith.modify(10.0f); }
-            break;
-        case Ev::SIETE_MIL:
-            if (option == 0) { hurt(10.0f); faith.modify(22.0f); }
-            else             { faith.modify(-10.0f); heal_full(); }
-            break;
-
-        // --- Cap. 5: El Llamado ---------------------------------------------
-        case Ev::LLAMADO_ELISEO:
-            if (option == 0) { player.consumable_slot = UINT32_MAX; player.consumable_charges = 0;
-                               add_damage(2.0f); faith.modify(10.0f); }
-            else             { faith.modify(20.0f); }
-            break;
-        case Ev::VINA_NABOT:
-            if (option == 0) { hurt(15.0f); faith.modify(20.0f); }
-            else             { faith.modify(-12.0f); add_damage(5.0f); }
-            break;
-        case Ev::TERCER_CAPITAN:
-            if (option == 0) { faith.modify(18.0f); add_max_hp(12.0f); }
-            else             { faith.modify(-25.0f); add_damage(8.0f); }
-            break;
-        // --- Cap. 6: Las Aguas de Jerico ------------------------------------
-        case Ev::AGUAS_JERICO:
-            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
-            else             { hurt(10.0f); faith.modify(15.0f); }
-            break;
-        case Ev::CINCUENTA_BUSCAN:
-            // Ceder a la busqueda es indulgencia con la duda (-Fe), pero son tres dias de
-            // descanso en Jerico; mantener la palabra la afirma.
-            if (option == 0) { faith.modify(-10.0f); heal_full(); }
-            else             { faith.modify(15.0f); }
-            break;
-        case Ev::MUCHACHOS_BETEL:
-            if (option == 0) { faith.modify(15.0f); }
-            else             { faith.modify(-20.0f); add_damage(8.0f); }
-            break;
-        case Ev::HIEL_DE_JERICO:
-            if (option == 0) { faith.modify(-10.0f); add_max_hp(8.0f); }
-            else             { hurt(8.0f); faith.modify(6.0f); }
-            break;
-
-        // --- Cap. 7: El Aceite de la Viuda ----------------------------------
-        case Ev::ACEITE_VIUDA:
-            if (option == 0) { hurt(20.0f); faith.on_help_widow(); grant(14); }
-            else             { faith.modify(10.0f); }
-            break;
-        case Ev::ZANJAS_MOAB:
-            if (option == 0) { hurt(15.0f); faith.modify(20.0f); add_max_hp(10.0f); }
-            else             { faith.modify(-10.0f); add_damage(4.0f); }
-            break;
-        case Ev::MUERTE_EN_LA_OLLA:
-            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(12.0f); }
-            else             { hurt(8.0f); faith.modify(6.0f); }
-            break;
-        case Ev::PANES_CEBADA:
-            // El objeto 21 ES este pasaje (2 Reyes 4:43). Repartir los panes te los da.
-            if (option == 0) { faith.modify(-12.0f); grant(21); }
-            else             { faith.modify(-8.0f); add_max_hp(10.0f); }
-            break;
-        case Ev::REY_DE_MOAB:
-            // Como los sirios de Dotan: la eleccion piadosa cobra en el ARMA, no en la fe
-            // — levantas un sitio que tenias ganado (2 Reyes 3:27).
-            if (option == 0) { add_damage(-3.0f); faith.modify(15.0f); }
-            else             { faith.modify(-20.0f); add_damage(4.0f); }
-            break;
-
-        // --- Cap. 8: El Hijo Sunamita ---------------------------------------
-        case Ev::APOSENTO_SUNAMITA:
-            if (option == 0) { add_max_hp(-15.0f); has_revive = true; }
-            else             { faith.modify(12.0f); }
-            break;
-        case Ev::NINO_SUNAMITA:
-            if (option == 0) { hurt(25.0f); faith.modify(25.0f); add_max_hp(20.0f); }
-            else             { faith.modify(-15.0f); add_damage(5.0f); }
-            break;
-        case Ev::HACHA_QUE_FLOTA:
-            if (option == 0) { faith.modify(-8.0f); add_damage(6.0f); }
-            else             { add_max_hp(-15.0f); faith.modify(18.0f); }
-            break;
-        case Ev::TIERRAS_SUNAMITA:
-            if (option == 0) { faith.modify(-10.0f); heal_full(); add_max_hp(15.0f); }
-            else             { faith.modify(8.0f); add_damage(3.0f); }
-            break;
-
-        // --- Cap. 9: Naaman el Sirio ----------------------------------------
-        case Ev::NAAMAN_PUERTA:
-            if (option == 0) { faith.modify(-25.0f); heal_full(); add_max_hp(20.0f); }
-            else             { add_damage(4.0f); faith.modify(Config::FAITH_FLEE); }
-            break;
-        case Ev::MUCHACHA_CAUTIVA:
-            if (option == 0) { add_max_hp(-15.0f); faith.modify(22.0f); }
-            else             { faith.modify(-15.0f); boss_hp_scale = 0.7f; }
-            break;
-        case Ev::TIERRA_DE_ISRAEL:
-            // Aceptar el presente es la tentacion de Guiezi — el jefe del capitulo —
-            // puesta en tu mano: pagas en fe lo que ganas en plata.
-            if (option == 0) { faith.modify(20.0f); }
-            else             { faith.modify(-20.0f); heal_full(); add_damage(4.0f); }
-            break;
-
-        // --- Cap. 10: El Ejercito Celestial ---------------------------------
-        case Ev::CRIADO_ELISEO:
-            if (option == 0) {
-                faith.modify(-20.0f);
-                boss_hp_scale = 0.6f;
-                player.miracle_slots[player.active_slot_count - 1].equip(MiracleID::EjercitoCelestial);
-            } else {
-                add_damage(6.0f);
+        case EventSpecial::LoseConsumable:
+            // Sale tambien de la fila de objetos, como cuando se gasta la ultima carga
+            if (player.consumable_slot != UINT32_MAX) {
+                auto it = std::find(player.items.begin(), player.items.end(), player.consumable_slot);
+                if (it != player.items.end()) player.items.erase(it);
             }
+            player.consumable_slot = UINT32_MAX;
+            player.consumable_charges = 0;
             break;
-        case Ev::SIRIOS_DOTAN:
-            // El acto mas contraintuitivo del profeta, y por eso el coste es el ARMA y no la
-            // fe: dejas ir a un ejercito que tenias contado.
-            if (option == 0) { add_damage(-4.0f); faith.modify(25.0f); }
-            else             { faith.modify(-25.0f); add_damage(10.0f); }
+        case EventSpecial::Revive:
+            has_revive = true;
             break;
-        case Ev::CUATRO_LEPROSOS:
-            if (option == 0) { add_max_hp(-15.0f); faith.modify(25.0f); }
-            else             { faith.modify(-20.0f); add_damage(8.0f); heal_full(); }
+        case EventSpecial::HeavenlyHost:
+            player.miracle_slots[player.active_slot_count - 1].equip(MiracleID::EjercitoCelestial);
             break;
-        case Ev::PRINCIPE_SAMARIA:
-            if (option == 0) { hurt(10.0f); faith.modify(18.0f); }
-            else             { faith.modify(-8.0f); add_damage(4.0f); }
-            break;
-        case Ev::HAZAEL_BENADAD:
-            if (option == 0) { hurt(18.0f); faith.modify(20.0f); }
-            else             { faith.modify(-10.0f); add_damage(6.0f); }
-            break;
-        case Ev::UNCION_JEHU:
-            // La ultima uncion de Horeb en marcha: Jehu "conduce con furia" (2 Reyes 9:20).
-            if (option == 0) { faith.modify(-15.0f); add_damage(4.0f); }
-            else             { hurt(15.0f); faith.modify(10.0f); }
-            break;
-
-        // --- El Ascenso: las decisiones no se aplican aqui, se APUNTAN ------
-        // Lo que cambian es la HERENCIA, y esa se reparte al final del viaje en
-        // `finish_ascension`. Aplicar aqui la fe que se pierde por quedarse seria repartirla
-        // dos veces, porque la fe heredada se calcula sobre la que tengas al llegar.
-        case Ev::ASC_GILGAL:
-        case Ev::ASC_BETEL:
-        case Ev::ASC_JERICO:
-            if (option == 0) ascent_follows++;
-            break;
-        case Ev::ASC_JORDAN:
-            ascent_double = (option == 0);
-            break;
-        case Ev::EPI_ARCO_JOAS:
-            joash_full = (option == 0);
-            break;
-
+        // El Ascenso: no se aplica, se APUNTA. Lo que cambia es la HERENCIA, y se reparte al
+        // final del viaje en `finish_ascension`
+        case EventSpecial::AscentFollow: ascent_follows++;      break;
+        case EventSpecial::AscentDouble: ascent_double = true;  break;
+        case EventSpecial::AscentLess:   ascent_double = false; break;
+        case EventSpecial::JoashFull:    joash_full = true;     break;
+        case EventSpecial::JoashThrice:  joash_full = false;    break;
         default: break;
     }
-    audio.play_sfx(option == 0 ? SfxID::FaithGain : SfxID::MenuConfirm, 0.9f);
+
+    // El log dice lo que cambio con las mismas palabras que la caja (gate de encuentros)
+    EffectChip chips[8];
+    const int nc = build_event_chips(event_id, option, chips, 8);
+    std::string summary;
+    for (int i = 0; i < nc; i++) { summary += i ? " | " : ""; summary += chips[i].text; }
+    SDL_Log("Event choice %d opcion %d: %s", event_id, option,
+            nc ? summary.c_str() : "(sin efecto en la partida)");
+
+    audio.play_sfx(fx.faith > 0.0f ? SfxID::FaithGain
+                 : fx.faith < 0.0f ? SfxID::FaithLoss : SfxID::MenuConfirm, 0.9f);
     populate_save_data();
     save.save();
 }

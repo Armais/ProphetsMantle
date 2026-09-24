@@ -204,6 +204,15 @@ Se separan por **tono y vocal, no por efectos**: eso un jugador lo distingue a l
 dos reverbs distintos, no. Tres variantes por exclamacion, por la misma razon que los
 disparos.
 
+- **El grito de guerra del milagro** (`grito_guerra`, 2026-09-24): la toma vieja era una 'a'
+  sostenida y casi cantada, y se oia como una queja. Lo que la hace rugido: el tono SUBE con el
+  esfuerzo y solo cae al final, doblado de periodo SUAVE (grunido a f0/2: si es fuerte, el
+  oido coge la octava de abajo y suena a monstruo), raspado de aire, vocal que se mueve
+  (cerrada -> 'a' gritada -> 'o'), saturacion y doble toma. Sus formantes son **paso-banda de
+  verdad** (`_formant_bp`): el `_resonator` de las otras voces normaliza la ganancia en
+  continua y deja pasar el fundamental por cada formante, por eso esas voces salen oscuras
+  (3% de energia por encima de 1 kHz). Medido con autocorrelacion: Elias 98 -> 113 -> 90 Hz.
+  Usa un rng PROPIO, asi que regenerarlo no mueve ningun otro fichero.
 - **`gen_audio.py` acepta ahora un PREFIJO** (`python tools/audio/gen_audio.py voz_`) para
   regenerar un grupo sin reescribir los 47 ficheros que ya estan bien.
 

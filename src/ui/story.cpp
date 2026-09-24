@@ -270,8 +270,8 @@ void story_tutorial_outro(StorySystem& s) {
     StoryPage q;
     q.title    = tr("TU CAMINO", "YOUR ROAD");
     q.subtitle = tr("Israel te espera", "Israel is waiting");
-    q.body[0]  = tr("Limpia las salas, halla al jefe y cruza su arco.",
-                    "Clear the rooms, find the boss and cross his arch.");
+    q.body[0]  = tr("Explora el camino, halla al jefe y cruza su arco.",
+                    "Explore the road, find the boss and cross his arch.");
     q.body[1]  = tr("Lo elegido en un cofre te acompaña hasta el final de la partida, no más allá.",
                     "What a chest gives you walks with you to the end of the run, no further.");
     q.body[2]  = tr("En la pausa vive el Códice, donde se anota todo lo que ves.",

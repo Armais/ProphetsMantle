@@ -450,9 +450,15 @@ Entity spawn_projectile(ECSWorld& world, Vec2 position, Vec2 direction,
             case ProjectileKind::Lightbolt: s = TileSprite::Lightbolt; break;
             case ProjectileKind::Arrow:     s = TileSprite::Arrow;     break;
             case ProjectileKind::Darkbolt:  s = TileSprite::Darkbolt;  break;
+            case ProjectileKind::Stone:     s = TileSprite::Rock;      break;
         }
         world.sprites[e].texture_id = world.tileset;
         world.sprites[e].src_rect = get_tile_src(s);
+        if (kind == ProjectileKind::Stone) {
+            // La roca del tileset es un peñasco de un tile: a 0,6 queda una piedra lisa de
+            // ~10 unidades. A 0,45 (7 unidades) se veia como un borron gris en movimiento.
+            world.transforms[e].scale = {0.6f, 0.6f};
+        }
     } else {
         world.sprites[e].texture_id = TEXTURE_NONE;
         world.sprites[e].src_rect = {0, 0, 6, 6};
@@ -466,6 +472,7 @@ Entity spawn_projectile(ECSWorld& world, Vec2 position, Vec2 direction,
     world.projectiles[e].damage = damage;
     world.projectiles[e].max_range = range > 0.0f ? range : Config::PROJECTILE_RANGE;
     world.projectiles[e].friendly = friendly;
+    world.projectiles[e].spin = (kind == ProjectileKind::Stone) ? 540.0f : 0.0f;
 
     world.add(e, Component::Collider);
     world.colliders[e].shape = ColliderComponent::Shape::Circle;

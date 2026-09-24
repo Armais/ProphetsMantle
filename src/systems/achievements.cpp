@@ -32,13 +32,13 @@ AchievementDef get_achievement_def(AchievementID id) {
         case AchievementID::FuegoDelCielo:
             return {tr("Celo del Señor", "Zeal of the Lord"),        tr("Alcanza 100 de fe", "Reach 100 faith")};
         case AchievementID::BajoLaRetama:
-            return {tr("Bajo la Retama", "Under the Juniper"),        tr("Limpia una sala con menos de 10 de fe", "Clear a room with less than 10 faith")};
+            return {tr("Bajo la Retama", "Under the Juniper"),        tr("Vence a un grupo con menos de 10 de fe", "Beat a band of foes under 10 faith")};
 
         // --- Combate ----------------------------------------------------------
         case AchievementID::CienCaidos:
             return {tr("Cien Caídos", "A Hundred Fallen"),           tr("Abate 100 enemigos en total", "Bring down 100 enemies in total")};
         case AchievementID::SinRasguno:
-            return {tr("Sin un Rasguño", "Without a Scratch"),        tr("Limpia una sala sin recibir un golpe", "Clear a room without taking a hit")};
+            return {tr("Sin un Rasguño", "Without a Scratch"),        tr("Vence a un grupo sin recibir un golpe", "Beat a band of foes without a hit")};
         case AchievementID::LeonDelDesierto:
             return {tr("El León del Camino", "The Lion on the Road"),    tr("Abate un león del desierto", "Bring down a desert lion")};
 

@@ -67,8 +67,12 @@ Opciones. El Engine solo tiene que llamar a `audio.update(dt)`.
 
 - **`Engine::play_voice` con `voice_cooldown` de 2,2 s** es lo unico que separa "el profeta
   se queja" de "el profeta no calla": con i-frames de 1 s se oiria un gemido por segundo.
-  El grito de **jefe se salta la espera** — suena una vez por capitulo y es justo el
-  momento en el que tiene que oirse.
+  El grito de **jefe** y el **grito de guerra del milagro** se saltan la espera: el de jefe
+  suena una vez por capitulo, y el del milagro va con 20+ s de recarga — con la espera, un
+  dash o un golpe justo antes se lo comian.
+- **La voz del milagro es un GRITO DE GUERRA por profeta** (2026-09-24, "mas epico, como
+  Kratos; un sonido de lucha, no de queja"): `VozMilagro1` = Elias, `VozMilagro2` = Eliseo,
+  elegidos por profeta (ya no se sortea). Como se sintetiza: `tools/audio/CLAUDE.md`.
 - **Solo los milagros de tier 3+ llevan voz.** Si el profeta gritara tambien al curarse con
   los cuervos, la exclamacion dejaria de significar nada.
 - `SDL_Log("Voice: ...")` por exclamacion: sin el, `audio_check` solo podia decir que el

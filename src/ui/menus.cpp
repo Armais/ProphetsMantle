@@ -658,7 +658,7 @@ void MenuSystem::render_controls(Renderer& renderer) {
         renderer.draw_text_centered(tr("Toca su celda para lanzarlo; mantén para ver su ficha", "Tap its cell to cast; hold to read its card"), 114, value, 0.75f);
 
         renderer.draw_text_centered(tr("Mapa: toca el minimapa     Pausa: II o el botón atrás", "Map: tap the minimap     Pause: II or the back button"), 128, value, 0.75f);
-        renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 140, label, 0.72f);
+        renderer.draw_text_centered(tr("Objetivo: explora, halla al JEFE y cruza su arco", "Goal: explore, find the BOSS, cross its arch"), 140, label, 0.72f);
 
         draw_menu_button(renderer, btn, play, down, false, 0.9f);
         mark_row_rect(0, {16.0f, btn_y - 4.0f, static_cast<f32>(Config::GAME_WIDTH) - 32.0f, btn_h + 8.0f});
@@ -677,7 +677,7 @@ void MenuSystem::render_controls(Renderer& renderer) {
 
     renderer.draw_text_centered(tr("Dash: ESPACIO / J     Consumible: R     Orar: P", "Dash: SPACE / J     Consumable: R     Pray: P"), 122, value, 0.8f);
     renderer.draw_text_centered(tr("Milagros: Q / E / F     Mapa: TAB     Pausa: ESC", "Miracles: Q / E / F     Map: TAB     Pause: ESC"), 132, value, 0.8f);
-    renderer.draw_text_centered(tr("Objetivo: limpia salas, llega al JEFE y cruza el arco", "Goal: clear rooms, reach the BOSS, cross the arch"), 138, label, 0.75f);
+    renderer.draw_text_centered(tr("Objetivo: explora, halla al JEFE y cruza su arco", "Goal: explore, find the BOSS, cross its arch"), 138, label, 0.75f);
 
     draw_menu_button(renderer, btn, play, true, false, 0.9f);
     mark_row_rect(0, menu_hit_rect(0, btn_y, btn_h + 6.0f, btn_h, btn_w));

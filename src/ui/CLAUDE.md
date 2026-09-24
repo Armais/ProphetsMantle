@@ -4,7 +4,9 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 
 > **Antes de tocar `ui/cinematic.h/cpp`, lee `docs/cinematicas.md`**: el prologo, las 10
 > intros de capitulo y la cinematica del Ascenso.
-> La caja de dialogo con retrato y sus limites de ancho: `docs/encuentros-y-lore.md`.
+> La caja de dialogo con retrato y sus limites de ancho: `docs/encuentros-y-lore.md`. Las
+> etiquetas de consecuencia de cada opcion (`EffectChip`, `DialogueView::chips`) salen de
+> `get_event_effect` via `Engine::build_event_chips`: nunca se escriben a mano en la vista.
 
 ## Codice
 

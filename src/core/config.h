@@ -81,6 +81,11 @@ constexpr float DASH_COOLDOWN     = 0.8f;
 constexpr float CHARIOT_FX_SPEED  = 330.0f;   // unidades/s
 constexpr float CHARIOT_FX_RISE   = 90.0f;    // unidades/s de subida (acelera con el tiempo)
 constexpr float CHARIOT_FX_DEPART = 0.85f;    // s
+// El Fuego del Cielo CAE (Player::sky_fire_*): tanto tarda la bola grande desde fuera de
+// pantalla hasta el suelo, que es cuando llega el dano; y tanto dura despues el cielo rojo.
+constexpr float SKY_FIRE_FALL     = 0.60f;    // s: ~0,35 s de ellos se ven en pantalla
+constexpr float SKY_FIRE_AFTER    = 0.35f;    // s
+constexpr float SKY_FIRE_RADIUS   = 80.0f;    // unidades: dano, matorral y grietas
 constexpr float IFRAMES_DURATION  = 0.3f;    // invulnerability after dash
 
 constexpr float PROJECTILE_SPEED  = 280.0f;

@@ -50,8 +50,10 @@ struct CombatEvents {
     void reset() { *this = CombatEvents{}; }
 };
 
-// Projectile visuals (cells of the shared tileset)
-enum class ProjectileKind : u8 { Fireball, Lightbolt, Arrow, Darkbolt };
+// Projectile visuals (cells of the shared tileset). `Stone` es la piedra de la Honda de David:
+// la celda de roca del tileset a media escala, que gira en vuelo en vez de apuntar (una piedra
+// no tiene punta). Antes la Honda disparaba `Arrow` y se veia salir una flecha.
+enum class ProjectileKind : u8 { Fireball, Lightbolt, Arrow, Darkbolt, Stone };
 
 // Efectos de la hoja propia `assets/sprites/vfx.png` (8 fotogramas x 7 filas, celda de
 // 128 px = 32 unidades). El orden DEBE coincidir con `LAYOUT` en
