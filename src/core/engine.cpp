@@ -258,6 +258,12 @@ void Engine::load_sprites() {
     if (icons_texture == TEXTURE_NONE)
         SDL_Log("Iconos ausentes (assets/sprites/icons.png) - HUD con los iconos del tileset");
 
+    // El Carro de Fuego del milagro (tools/blender/mantle_sprites/chariot.py). Sin la hoja,
+    // el milagro se ve como antes: la embestida y su estela de fuego.
+    chariot_texture = renderer.load_texture("sprites/chariot.png", /*smooth=*/true);
+    if (chariot_texture == TEXTURE_NONE)
+        SDL_Log("Carro ausente (assets/sprites/chariot.png) - el Carro de Fuego ira sin carro");
+
     // Retratos del Bestiario. Su ausencia NO es un fallo: el Códice se dibuja igual.
     portrait_texture = renderer.load_texture("sprites/portraits.png", /*smooth=*/true);
     if (portrait_texture == TEXTURE_NONE)
@@ -1106,6 +1112,7 @@ void Engine::render() {
         current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
                                         npc_texture, world.time, view);
         world.collect_draws(draw_list, renderer);
+        collect_chariot_draws(draw_list);
         renderer.draw_sorted(draw_list);
 
         current_room_data.render_exit_barriers(renderer, world.time);
@@ -3380,6 +3387,7 @@ void Engine::place_player(Vec2 spawn_pos) {
         spawn_pos = free_feet - foot;
     }
     world.transforms[player.entity].position = spawn_pos;
+    player.chariot_fx_t = -1.0f;   // un carro a medio despedirse no viaja con el teletransporte
     if (world.has(player.entity, Component::Movement)) {
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
@@ -3597,6 +3605,53 @@ void Engine::update_cells() {
         camera.set_room(zone.arena_bounds_world(), false);
     else
         camera.set_room({0, 0, zone.world_w(), zone.world_h()}, false);
+}
+
+// =============================================================================
+// El Carro de Fuego visible (2026-09-24)
+// =============================================================================
+// assets/sprites/chariot.png: 8x3 celdas de 256 px (64 unidades). Fila = direccion (este,
+// sur, norte; el oeste es el este en espejo), columnas 0-3 = capa `back` de los cuatro
+// fotogramas del galope y 4-7 = capa `front`. `back` va justo DETRAS del profeta en el orden
+// por Y y `front` justo DELANTE: su propio sprite queda dentro de la caja. El ancla (el suelo
+// de la caja) cae en CHARIOT_ANCHOR — la tabla ANCHOR de chariot.py: si cambia alli, aqui.
+void Engine::collect_chariot_draws(std::vector<DrawCmd>& out) {
+    if (chariot_texture == TEXTURE_NONE || player.chariot_fx_t < 0.0f) return;
+    static const f32 CHARIOT_ANCHOR[3][2] = {{52.0f, 158.0f}, {128.0f, 92.0f}, {128.0f, 200.0f}};
+    constexpr f32 CELL = 256.0f;
+    const Vec2 d = player.chariot_fx_dir;
+    int row = 0;               // este
+    bool flip = false;
+    if (std::fabs(d.y) > std::fabs(d.x) * 1.15f) row = d.y > 0.0f ? 1 : 2;   // sur (hacia camara) / norte
+    else flip = d.x < 0.0f;                                                  // oeste = este en espejo
+    const int frame = static_cast<int>(player.chariot_fx_t * 14.0f) % 4;
+    f32 ax = CHARIOT_ANCHOR[row][0], ay = CHARIOT_ANCHOR[row][1];
+    if (flip) ax = CELL - ax;
+    // Un 20% mayor que la escala de las hojas: a escala real (caballos tan altos como el
+    // profeta) el carro se perdia en una pantalla de 320x180; asi el profeta cabe en la caja
+    // y el tiro se lee de lejos. Se escala sobre el ancla, que es lo que tiene que casar.
+    const f32 inv = 1.2f / static_cast<f32>(Config::ASSET_SCALE);
+    const Vec2 a = player.chariot_fx_pos - Vec2{0, player.chariot_fx_lift};
+    const Rect dst = {a.x - ax * inv, a.y - ay * inv, CELL * inv, CELL * inv};
+    // Aparece en 0,08 s y se apaga en la segunda mitad de la despedida
+    f32 alpha = std::min(1.0f, player.chariot_fx_t / 0.08f);
+    const f32 fade0 = Config::CHARIOT_FX_DEPART * 0.45f;
+    if (player.chariot_fx_free > fade0)
+        alpha *= std::max(0.0f, 1.0f - (player.chariot_fx_free - fade0) / (Config::CHARIOT_FX_DEPART - fade0));
+    const u8 a8 = static_cast<u8>(255.0f * alpha);
+    // El orden por Y: pegado al del profeta (sus pies = el ancla) mientras lo lleva; al
+    // soltarlo, el del propio carro, sin la subida (la sombra de lo que vuela no cambia).
+    const f32 sort = player.chariot_fx_pos.y;
+    for (int layer = 0; layer < 2; layer++) {
+        DrawCmd c;
+        c.texture_id = chariot_texture;
+        c.src = {(layer * 4 + frame) * CELL, row * CELL, CELL, CELL};
+        c.dst = dst;
+        c.flip_x = flip;
+        c.tint = {255, 255, 255, a8};
+        c.sort_y = sort + (layer == 0 ? -0.5f : 0.5f);
+        out.push_back(c);
+    }
 }
 
 // =============================================================================

@@ -239,6 +239,26 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
             }
         }
     }
+    // El carro visible: mientras dura la embestida va pegado a los pies del profeta (lo
+    // lleva dentro); despues sigue adelante, sube y se apaga (2 Reyes 2:11: "subio al cielo").
+    if (chariot_fx_t >= 0.0f) {
+        chariot_fx_t += dt;
+        if (chariot_timer > 0.0f) {
+            chariot_fx_pos = transform.position + Vec2{0, 12.0f};
+        } else {
+            chariot_fx_free += dt;
+            const f32 k = chariot_fx_free;
+            chariot_fx_pos = chariot_fx_pos + chariot_fx_dir * (Config::CHARIOT_FX_SPEED * dt);
+            chariot_fx_lift += (Config::CHARIOT_FX_RISE * (0.4f + 1.6f * k)) * dt;
+            trail_timer -= dt;
+            if (trail_timer <= 0.0f) {
+                trail_timer = 0.05f;
+                spawn_vfx(world, chariot_fx_pos - chariot_fx_dir * 18.0f - Vec2{0, chariot_fx_lift + 6.0f},
+                          TileSprite::Fireball, {255, 175, 80, 220}, 13.0f, 0.35f, -0.8f, 180.0f, {0, -20.0f}, 7);
+            }
+            if (chariot_fx_free >= Config::CHARIOT_FX_DEPART) chariot_fx_t = -1.0f;
+        }
+    }
     // Estela de fuego del Carro: se deja durante toda la embestida, no solo al lanzarla
     if (chariot_timer > 0.0f) {
         chariot_timer -= dt;
@@ -615,6 +635,13 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             chariot_timer = Config::DASH_DURATION * 2.5f;
             trail_timer = 0.0f;
             shake_request = 3.0f;
+            // El carro de verdad: aparece bajo sus pies con un fogonazo y lo lleva
+            chariot_fx_t    = 0.0f;
+            chariot_fx_free = 0.0f;
+            chariot_fx_lift = 0.0f;
+            chariot_fx_dir  = dir.length_sq() > 0.0f ? dir.normalized() : Vec2{1, 0};
+            chariot_fx_pos  = pos + Vec2{0, 12.0f};
+            spawn_fx(world, pos + Vec2{0, 4.0f}, FxID::Explosion, {255, 190, 90, 220}, 40.0f, 0.35f);
             // Y CRUZA los huecos mientras dura (2 Reyes 2:11). Se apaga solo en
             // Player::update cuando `chariot_timer` llega a cero.
             world.gap_crosser = entity;

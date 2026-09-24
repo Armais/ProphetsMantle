@@ -223,6 +223,7 @@ struct Engine {
     u32 tileset_texture = TEXTURE_NONE;
     u32 vfx_texture     = TEXTURE_NONE;   // assets/sprites/vfx.png (ver spawn_fx)
     u32 icons_texture   = TEXTURE_NONE;   // assets/sprites/icons.png (render/sprites.h, namespace Icon)
+    u32 chariot_texture = TEXTURE_NONE;   // assets/sprites/chariot.png (Carro de Fuego visible)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
     u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
     // Hojas de Acab y Jezabel (896x1920, como las de los profetas): solo las usan las escenas
@@ -455,6 +456,7 @@ struct Engine {
     void build_pristine_zone(Room& out);              // todas las celdas, cosidas (generacion pura)
     void check_zone(const Room& zone);                // log `Zone check:` (vano, cerco, nudos, puntos, puerta)
     void update_boss_intel();                         // aviso "PISTA" al subir de nivel el rastro del jefe
+    void collect_chariot_draws(std::vector<DrawCmd>& out);   // las dos capas del Carro de Fuego
     void generate_pristine_cell(int node, Room& out); // UNA celda (o el interior), en coordenadas locales
     const Room& pristine_zone();                      // copia pristina cacheada por (semilla, capitulo)
     Room* zone_ptr();                                 // la zona: current_room_data, o su cache dentro de un interior

@@ -76,6 +76,11 @@ constexpr float FAITH_INACTIVITY_RATE = -0.5f;   // per 10 seconds
 constexpr float DASH_DURATION     = 0.15f;   // seconds
 constexpr float DASH_SPEED        = 500.0f;
 constexpr float DASH_COOLDOWN     = 0.8f;
+// El Carro de Fuego VISIBLE (Player::chariot_fx_*): al soltar al profeta sigue adelante a
+// esta velocidad, sube cada vez mas deprisa y se desvanece en CHARIOT_FX_DEPART segundos.
+constexpr float CHARIOT_FX_SPEED  = 330.0f;   // unidades/s
+constexpr float CHARIOT_FX_RISE   = 90.0f;    // unidades/s de subida (acelera con el tiempo)
+constexpr float CHARIOT_FX_DEPART = 0.85f;    // s
 constexpr float IFRAMES_DURATION  = 0.3f;    // invulnerability after dash
 
 constexpr float PROJECTILE_SPEED  = 280.0f;
