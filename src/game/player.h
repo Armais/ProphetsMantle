@@ -77,6 +77,17 @@ struct Player {
     // Son acumuladores, no estado de juego: nada de esto afecta al combate.
     f32  aura_timer    = 0.0f;   // Pulso del aura de Doble Porcion / burbujas de Sanar Aguas
     f32  chariot_timer = 0.0f;   // Estela de fuego del Carro mientras dura la embestida
+    // El CARRO que se ve (2026-09-24, "tiene que aparecer un carro de fuego de verdad, como
+    // en el ascenso de Elias"): aparece al lanzarlo, lleva al profeta DENTRO mientras dura la
+    // embestida (su propio sprite va entre las dos capas del carro) y al soltarlo sigue
+    // adelante subiendo al cielo hasta desvanecerse. Solo es dibujo: la embestida, el dano y
+    // el cruce de huecos siguen siendo los de siempre. Lo pinta Engine::collect_chariot_draws
+    // con assets/sprites/chariot.png (tools/blender/mantle_sprites/chariot.py).
+    f32  chariot_fx_t    = -1.0f;      // segundos desde que aparecio; < 0 = no hay carro
+    f32  chariot_fx_free = 0.0f;       // segundos desde que solto al profeta (0 = aun lo lleva)
+    Vec2 chariot_fx_pos  = {0, 0};     // el ANCLA (suelo de la caja) en el mundo
+    Vec2 chariot_fx_dir  = {1, 0};
+    f32  chariot_fx_lift = 0.0f;       // cuanto ha subido tras soltarlo (unidades)
     f32  trail_timer   = 0.0f;   // Cadencia de la estela
     bool crossed_gap   = false;  // ya se ha logueado el cruce de hueco de esta embestida
     f32  reveal_pulse  = 0.0f;   // Cadencia de las marcas de Ojos Abiertos

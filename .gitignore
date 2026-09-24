@@ -65,3 +65,6 @@ __pycache__/
 # Sonic Pi: estado del daemon y grabaciones intermedias (723 MB de WAV)
 tools/audio/sonicpi/ports.json
 tools/audio/sonicpi/tmp/
+
+# Binario de Linux (build/linux, SDL sin ventana: guiones en contenedores)
+/MANTLE

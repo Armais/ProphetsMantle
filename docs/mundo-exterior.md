@@ -87,6 +87,60 @@ por que las cosas se cuentan como se cuentan, pero el motor ya no hace nada de e
    sealed`, `Cell N cleared/despawned`. Los gates `Loaded room N [gx,gy] (Cap) - Tipo [n
    enemies]` y el volcado ASCII de 40x22 se conservan por celda.
 
+## Mapa grande, el jefe en otro borde y sus pistas (2026-09-24)
+
+Tres decisiones del usuario: *"el mapa es muy pequeno, tiene que ser mas grande"*, *"la
+ubicacion del jefe debe cambiar en cada capitulo y no debe ser visible desde el inicio, sino
+que lo aprendes a medida que vas avanzando"* y *"en el minimapa deben aparecer tambien los
+puntos que se deben explorar"*.
+
+1. **Rejillas 6x4, y 6x5 en los caps. 5 y 10** (`ChapterDef::grid_w/h`): el doble de celdas.
+   `Config::ZONE_CELLS_X/Y` = 6x5 (zona de hasta 240x110 tiles, 26 KB por `Room`, los tres
+   estaticos), `FloorMap::MAX_ROOMS` = 36 (30 + el interior, con holgura) y guardado v11. El
+   mapa del minimapa y la textura del mapa grande no cambiaron de forma: dividen por el
+   tamano real.
+2. **`CHAPTER_LAYOUT` nuevo**: el jefe en un BORDE distinto por capitulo (1 NE, 2 O, 3 N,
+   4 E, 5 S, 6 NO, 7 E, 8 S, 9 O, 10 N) y el inicio a 6-7 celdas de el. Por capitulo: 2
+   tesoros, 2 altares, 3 elites (arrimadas al jefe: son su guardia y dan pistas), 4 pasos
+   tranquilos (`.` = `RoomType::Rest`: sin enemigos, se decora como cualquier otra) y el
+   resto combate; 3/3/4/5 en las 6x5. Todos los relatos del pozo, como siempre.
+3. **La arena, pegada al lado que da al borde** (`ArenaSide`, `stamp_arena(r, side)`): la
+   celda B sabe de que lado toca por sus `door_*` (sin vecino arriba = North, si no oeste,
+   este, abajo). North es la de siempre (vano abajo); en West/East el recinto va pegado al
+   borde lateral y el vano en el cerco que mira al resto de la celda; en South, pegado abajo
+   y con el vano al este. **El jefe (el ancla) sigue en la fila de arriba del suelo** en los
+   cuatro casos: las diez escenas de jefe y la entrada no notan de que lado se entra. El vano
+   es un rectangulo (`arena_gap_x0..x1, y0..y1`) y la banda roja del sellado sale vertical u
+   horizontal segun el.
+4. **Nada talla el recinto**: `carve_tile` se niega a tocar `in_arena_box`, y la senda de
+   reparacion de la celda B es un BFS que lo rodea (`carve_around`) en vez de la L de antes,
+   que con la arena en un lateral cruzaba el recinto y le abria un boquete al cerco. El nudo
+   de la celda B va seis tiles enfrente del vano (`boss_hub`).
+5. **`Engine::check_zone`** inunda la zona recien construida desde el nudo de inicio y loguea
+   `Zone check: vano ok, cerco entero, nudos N/N, puntos M/M, puerta ok -> OK`: vano
+   alcanzable, cerco sin agujeros, todos los nudos, todos los puntos de interes y la puerta.
+   Es el gate de `mapas_check` y salta al construir la zona que se juega (no la pristina).
+6. **Pistas del jefe** (`get_boss_intel`, `game/rooms.h`): nivel 0 = nada; 1 pista = el
+   RUMOR (un circulo que contiene la arena, desplazado hacia el centro del mapa entre media y
+   una celda: si estuviera centrado seria el sitio exacto con otro dibujo); 2 pistas = el
+   sitio. Pistas = relatos resueltos + elites despejadas + altares rezados. Se ve SIN pistas
+   al pisar una celda vecina de la del jefe (desde ahi se ve la arena), al entrar en ella o
+   con Ojos Abiertos. Es una funcion PURA del estado de celdas que ya viaja en el guardado,
+   asi que un Continuar sabe lo mismo sin campos nuevos. `Engine::update_boss_intel` solo
+   AVISA al subir de nivel (banner "PISTA" con el rumbo, log `Boss intel A -> B`), y con
+   `boss_intel_shown = -1` (lo pone `start_chapter`) toma el nivel sin avisar al cargar.
+7. **Puntos de interes en los dos mapas** (`src/ui/CLAUDE.md`): "?" en lo no descubierto,
+   chincheta por tipo en lo visto, apagada en lo hecho.
+
+Guiones: `goto rest`; `walks x y` (relativo al origen de la celda de INICIO) y `walkarena d`
+(a `d` unidades del centro del vano, positivo hacia dentro, valga el lado que valga) para
+que un cambio de `CHAPTER_LAYOUT` no pudra las coordenadas; `intel` loguea `INTEL nivel=N
+pistas=M visto=V celda_jefe=C`. Re-pinneados ese dia: `mapas_check` (reescrito: los diez
+Zone check, las cuatro arenas, el rumor), `logros_check` (18/18; la Retama pasa a la celda
+18), `secretos_check`, `entrada_jefe_check` (el cap. 6 para el paseo saltado: el `hold up`
+necesita un vano que mire al sur), `guardado_check`, `interiores_check` (interior 24),
+`mira_check`, `feel_check`, `feel_baseline`, `audio_check`, `carmelo_check`.
+
 Riesgos conocidos, para no redescubrirlos: `took_damage_this_room` y el "+2 Fe sin dano"
 pierden exactitud con celdas activas solapadas (se resetea al activar cada celda: aproximacion
 aceptada); Ojos Abiertos marca solo enemigos de celdas activas; guardar en mitad de la pelea
@@ -107,10 +161,12 @@ Each chapter defines its own grid dimensions and room distribution:
 
 | Cap | Grid | Total Rooms | Layout Notes |
 |-----|------|-------------|--------------|
-| 1-4 | 4x3 | 12 | Start=bottom-center, Boss=top-center |
-| 5 | 4x4 | 16 | Cierra el Acto I |
-| 6-9 | 4x3 | 12 | |
-| 10 | 4x4 | 16 | Cierra el Acto II |
+| 1-4 | 6x4 | 24 | Jefe en un borde distinto por capitulo (ver "Mapa grande") |
+| 5 | 6x5 | 30 | Cierra el Acto I |
+| 6-9 | 6x4 | 24 | |
+| 10 | 6x5 | 30 | Cierra el Acto II |
+
+(Hasta el 2026-09-24: 4x3 y 4x4, con el jefe siempre arriba en el centro.)
 
 Y **cada sala mide 2x2 pantallas** (40x22 tiles, 640x352 unidades), asi que un capitulo son
 ~48 pantallas contra las 9 de antes. La excepcion es la **arena del jefe: una pantalla**.

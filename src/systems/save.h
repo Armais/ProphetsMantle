@@ -38,11 +38,16 @@
 //      aplicado tal cual abriria tiles que no eran secretos: la migracion lo pone a cero y
 //      deja `current_room = -1` (celda de inicio). La partida no se tira: rebobina el mapa
 //      del capitulo, como una derrota.
-constexpr u32 SAVE_VERSION = 10;
+// v11: mapa grande (2026-09-24). Las rejillas pasan de 4x3/4x4 a 6x4/6x5 y el jefe cambia
+//      de celda en cada capitulo, asi que el resumen por celda crece a 36 entradas (la
+//      rejilla de 30 + el interior, con holgura) y el de una v9/v10 describe OTRA rejilla:
+//      la migracion (SaveDataV10 + migrate_v10) lo descarta y el capitulo rebobina a su
+//      celda de inicio, igual que al pasar a v10. Equipo, meta y capitulo se conservan.
+constexpr u32 SAVE_VERSION = 11;
 
-// v9: dimensiones del resumen por sala. 25 = FloorMap::MAX_ROOMS (engine.cpp lo vigila con
-// un static_assert); 110 bytes = los 40x22 tiles de una sala exterior, a bit por celda.
-constexpr int SAVE_MAX_ROOMS  = 25;
+// Dimensiones del resumen por celda. 36 = FloorMap::MAX_ROOMS (engine.cpp lo vigila con
+// un static_assert); 110 bytes = los 40x22 tiles de una celda exterior, a bit por tile.
+constexpr int SAVE_MAX_ROOMS  = 36;
 constexpr int SAVE_ROOM_BYTES = (Config::ROOM_TILES_X * Config::ROOM_TILES_Y + 7) / 8;
 
 // Bits de SaveData::unlocks (contenido que se gana y NO se pierde al morir)

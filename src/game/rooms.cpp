@@ -10,7 +10,7 @@
 #include <queue>
 
 // Tope de `Room::tiles`, NO el tamano del mapa: eso es `Room::tiles_w` / `tiles_h`, que
-// cambia por Room (zona = hasta 4x4 celdas, celda = 2x2 pantallas, interior = 1). Todo bucle
+// cambia por Room (zona = hasta 6x5 celdas, celda = 2x2 pantallas, interior = 1). Todo bucle
 // sobre el mapa va contra los campos del Room; estos dos solo dimensionan arrays.
 static constexpr int MAXW = Config::ZONE_TILES_X;
 static constexpr int MAXH = Config::ZONE_TILES_Y;
@@ -64,6 +64,11 @@ static void scatter(Room& room, TileType t, int count, int margin) {
 // Convert a tile into a walkable one while carving a trail (river -> bridge, obstacle -> path)
 static void carve_tile(Room& room, int tx, int ty, bool mark_path) {
     if (!in_bounds(tx, ty, room.tiles_w, room.tiles_h)) return;
+    // Nada que se talle DESPUES de estampar la arena puede tocar su recinto: ni el cerco
+    // ni el suelo. Con la arena siempre en la fila de arriba nunca hizo falta; desde que
+    // puede ir en cualquier lado del mapa, una senda de reparacion en L le abria un boquete
+    // al cerco (el vano sellado dejaba de sellar nada).
+    if (room.in_arena_box(tx, ty)) return;
     TileType& t = room.tiles[ty][tx];
     switch (t) {
         case TileType::River:
@@ -383,51 +388,114 @@ static void build_interior(Room& room, int chapter) {
 }
 
 // La arena del jefe DENTRO de la celda B (zona continua, 2026-09-10): un recinto de una
-// pantalla de suelo (20x11) con un cerco de piedras y un vano de 4 tiles abajo, pegado al
-// borde de arriba de la celda. Se ve desde fuera antes de entrar y no hay sala aparte. El
-// cerco es ROCA en todos los biomas: un muro de un tile de grueso no se dibuja (collect_props
-// solo pinta la cara de abajo de un bloque), y un cerco de piedras se lee igual de bien en
-// el Carmelo que en Jerico.
-static void stamp_arena(Room& r) {
-    const int x0 = (r.tiles_w - Config::ARENA_TILES_X) / 2 - 1;   // columna del cerco izquierdo (9)
-    const int y0 = 0;                                              // fila del cerco de arriba (= borde de la celda)
-    const int x1 = x0 + Config::ARENA_TILES_X + 1;                 // cerco derecho (30)
-    const int y1 = y0 + Config::ARENA_TILES_Y + 1;                 // cerco de abajo (12)
+// pantalla de suelo (20x11) con un cerco de piedras y un vano de 4 tiles. Se ve desde fuera
+// antes de entrar y no hay sala aparte. El cerco es ROCA en todos los biomas: un muro de un
+// tile de grueso no se dibuja (collect_props solo pinta la cara de abajo de un bloque), y un
+// cerco de piedras se lee igual de bien en el Carmelo que en Jerico.
+//
+// Desde el 2026-09-24 el jefe cambia de sitio en cada capitulo (CHAPTER_LAYOUT), y la arena
+// va pegada al lado de la celda que da al BORDE del mapa (`side`): el cerco de atras cae
+// sobre el perimetro, que ya es solido, y el vano mira hacia dentro. En North el vano va en
+// el cerco de abajo (lo de siempre); en West/East/South, en el cerco lateral que da al resto
+// de la celda. El jefe no se mueve de la fila de arriba del suelo (arena_anchor), asi que
+// las escenas de jefe no notan de que lado se entra.
+static void stamp_arena(Room& r, ArenaSide side) {
+    constexpr int AW = Config::ARENA_TILES_X + 2, AH = Config::ARENA_TILES_Y + 2;   // con el cerco: 22x13
+    int x0 = (r.tiles_w - AW) / 2, y0 = 0;                                         // North (9, 0)
+    if (side == ArenaSide::South) y0 = r.tiles_h - AH;
+    if (side == ArenaSide::West)  { x0 = 0;              y0 = (r.tiles_h - AH) / 2; }
+    if (side == ArenaSide::East)  { x0 = r.tiles_w - AW; y0 = (r.tiles_h - AH) / 2; }
+    const int x1 = x0 + AW - 1, y1 = y0 + AH - 1;
     for (int y = y0; y <= y1; y++) {
         for (int x = x0; x <= x1; x++) {
             const bool ring = (x == x0 || x == x1 || y == y0 || y == y1);
             if (!ring) { r.tiles[y][x] = TileType::Floor; continue; }
-            // El cerco de arriba coincide con el borde de la celda cuando esta va en la
-            // primera fila de la rejilla (todos los jefes hoy): ese ya es solido y se deja.
-            if (y == y0 && !r.door_north) continue;
+            // El cerco que coincide con el borde de la celda SIN vecino ya es solido (el
+            // borde del bioma) y se deja: es el perimetro del mapa.
+            if ((y == 0 && !r.door_north) || (y == r.tiles_h - 1 && !r.door_south) ||
+                (x == 0 && !r.door_west)  || (x == r.tiles_w - 1 && !r.door_east)) continue;
             r.tiles[y][x] = TileType::Rock;
         }
     }
-    // El vano, en el cerco de abajo y centrado: 4 tiles de senda
-    const int gx0 = r.tiles_w / 2 - Config::ARENA_GAP / 2;
-    for (int x = gx0; x < gx0 + Config::ARENA_GAP; x++) r.tiles[y1][x] = TileType::Path;
+    // El vano: 4 tiles de senda, centrados en su cerco
+    int gx0, gx1, gy0, gy1;
+    if (side == ArenaSide::North) {
+        gx0 = r.tiles_w / 2 - Config::ARENA_GAP / 2; gx1 = gx0 + Config::ARENA_GAP - 1;
+        gy0 = gy1 = y1;
+    } else {
+        gy0 = y0 + 1 + (Config::ARENA_TILES_Y - Config::ARENA_GAP) / 2; gy1 = gy0 + Config::ARENA_GAP - 1;
+        gx0 = gx1 = (side == ArenaSide::East) ? x0 : x1;
+    }
+    for (int y = gy0; y <= gy1; y++)
+        for (int x = gx0; x <= gx1; x++) r.tiles[y][x] = TileType::Path;
     r.has_arena    = true;
+    r.arena_side   = side;
     r.arena_x0     = x0;
     r.arena_y0     = y0;
     r.arena_gap_x0 = gx0;
-    r.arena_gap_x1 = gx0 + Config::ARENA_GAP - 1;
-    r.arena_gap_y  = y1;
+    r.arena_gap_x1 = gx1;
+    r.arena_gap_y0 = gy0;
+    r.arena_gap_y1 = gy1;
 }
 
-// Senda en L SIN sorteo, por fuera del recinto: por la fila del nudo hasta la columna del
-// vano y de ahi al borde. Solo para la celda del jefe cuando el estampado de la arena corto
-// una senda; una recta determinista no consume rand() y no puede pisar el cerco.
-static void carve_straight(Room& r, int hx, int hy, int gx, int gy) {
-    const int cx = (gx <= 0) ? 1 : (gx >= r.tiles_w - 1) ? r.tiles_w - 2 : gx;
-    const int cy = (gy <= 0) ? 1 : (gy >= r.tiles_h - 1) ? r.tiles_h - 2 : gy;
-    for (int x = hx; x != cx; x += (cx > hx) ? 1 : -1) {
-        carve_tile(r, x, hy, true); carve_tile(r, x, hy - 1, false); carve_tile(r, x, hy + 1, false);
+// El nudo de la celda B: FUERA del recinto y enfrente del vano, a seis tiles. Se decide
+// antes de estampar (las sendas salen de el), asi que repite la geometria de stamp_arena.
+static void boss_hub(const Room& r, ArenaSide side, int& hx, int& hy) {
+    constexpr int AW = Config::ARENA_TILES_X + 2, AH = Config::ARENA_TILES_Y + 2;
+    const int gap_row = (r.tiles_h - AH) / 2 + 1 + (Config::ARENA_TILES_Y - Config::ARENA_GAP) / 2
+                        + Config::ARENA_GAP / 2;                    // fila central del vano lateral
+    switch (side) {
+        case ArenaSide::North: hx = r.tiles_w / 2;  hy = r.tiles_h - 4; break;           // (20, 18), lo de siempre
+        case ArenaSide::West:  hx = AW + 5;         hy = gap_row; break;                 // (27, 10)
+        case ArenaSide::East:  hx = r.tiles_w - AW - 6; hy = gap_row; break;             // (12, 10)
+        case ArenaSide::South: {
+            const int y0 = r.tiles_h - AH;
+            hx = (r.tiles_w - AW) / 2 + AW + 4;                                          // (35, ..)
+            hy = y0 + 1 + (Config::ARENA_TILES_Y - Config::ARENA_GAP) / 2 + Config::ARENA_GAP / 2;
+            break;
+        }
     }
-    for (int y = hy; y != cy; y += (cy > hy) ? 1 : -1) {
-        carve_tile(r, cx, y, true); carve_tile(r, cx - 1, y, false); carve_tile(r, cx + 1, y, false);
+}
+
+// Senda de REPARACION de la celda del jefe: el camino mas corto (BFS) del nudo a la
+// abertura que no pisa el recinto de la arena ni el anillo del borde (salvo la propia
+// abertura), y se talla entero. Sustituye a la L de antes, que con la arena en un lateral
+// cruzaba el recinto de parte a parte. Determinista: el orden de vecinos es fijo y no
+// consume rand().
+static void carve_around(Room& r, int sx, int sy, int gx, int gy) {
+    static int parent[MAXH][MAXW];   // fuera de la pila
+    const int W = r.tiles_w, H = r.tiles_h;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) parent[y][x] = -2;
+    auto blocked = [&](int x, int y) {
+        if (x == gx && y == gy) return false;
+        if (x <= 0 || y <= 0 || x >= W - 1 || y >= H - 1) return true;
+        return r.in_arena_box(x, y);
+    };
+    std::queue<std::pair<int, int>> q;
+    parent[sy][sx] = -1;
+    q.push({sx, sy});
+    bool found = false;
+    while (!q.empty() && !found) {
+        auto [x, y] = q.front(); q.pop();
+        const int dx[4] = {1, -1, 0, 0};
+        const int dy[4] = {0, 0, 1, -1};
+        for (int i = 0; i < 4; i++) {
+            const int nx = x + dx[i], ny = y + dy[i];
+            if (!in_bounds(nx, ny, W, H) || parent[ny][nx] != -2 || blocked(nx, ny)) continue;
+            parent[ny][nx] = y * W + x;
+            if (nx == gx && ny == gy) { found = true; break; }
+            q.push({nx, ny});
+        }
     }
-    carve_tile(r, cx, cy, true);
-    carve_tile(r, gx, gy, true);
+    if (!found) return;
+    int x = gx, y = gy;
+    while (parent[y][x] >= 0) {
+        carve_tile(r, x, y, true);
+        carve_tile(r, x - 1, y, false); carve_tile(r, x + 1, y, false);
+        carve_tile(r, x, y - 1, false); carve_tile(r, x, y + 1, false);
+        const int p = parent[y][x];
+        x = p % W; y = p / W;
+    }
 }
 
 void Room::generate(RoomType room_type, int chap, int difficulty, int event, bool with_doorway) {
@@ -518,8 +586,18 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     if (room_type == RoomType::Normal || room_type == RoomType::Elite ||
         room_type == RoomType::Start  || room_type == RoomType::Treasure ||
         room_type == RoomType::Altar  || room_type == RoomType::Event ||
-        room_type == RoomType::Boss) {
+        room_type == RoomType::Boss   || room_type == RoomType::Rest) {
         decorate(*this, biome);
+    }
+
+    // De que lado va la arena: el que da al borde del mapa (sin vecino). Prioridad arriba,
+    // oeste, este, abajo — una esquina de arriba sigue siendo North, como siempre.
+    ArenaSide side = ArenaSide::North;
+    if (room_type == RoomType::Boss) {
+        if      (!door_north) side = ArenaSide::North;
+        else if (!door_west)  side = ArenaSide::West;
+        else if (!door_east)  side = ArenaSide::East;
+        else if (!door_south) side = ArenaSide::South;
     }
 
     // Trails from a hub near the centre to every opening: guarantees the exits are
@@ -527,14 +605,14 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     // combat rooms so the cross of paths is not identical every room.
     // El nudo de las sendas se descentra en TODAS las celdas menos la del jefe. Con el
     // clavado en el centro, las cuatro sendas formaban una cruz perfecta — y en una sala de
-    // 2x2 una cruz perfecta se ve entera de un vistazo. En la celda del jefe el nudo baja
-    // a cuatro filas del borde de abajo: fuera del recinto, bajo su vano.
+    // 2x2 una cruz perfecta se ve entera de un vistazo. En la celda del jefe el nudo va
+    // fuera del recinto, enfrente de su vano (boss_hub).
     int hx = (tiles_w / 2), hy = (tiles_h / 2);
     if (room_type != RoomType::Boss) {
         hx += randi_range(-tiles_w / 8, tiles_w / 8);
         hy += randi_range(-tiles_h / 8, tiles_h / 8);
     } else {
-        hy = tiles_h - 4;
+        boss_hub(*this, side, hx, hy);
     }
     if (door_north) carve_trail(*this, hx, hy, (tiles_w / 2), 0);
     if (door_south) carve_trail(*this, hx, hy, (tiles_w / 2), tiles_h - 1);
@@ -544,10 +622,12 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     carve_tile(*this, (tiles_w / 2), (tiles_h / 2), false);
 
     // La arena, DESPUES de las sendas (lo que cruzara el recinto queda limpio) y una senda
-    // recta del vano al nudo; la reachability de mas abajo repara lo que el estampado corte.
+    // del nudo al vano; la reachability de mas abajo repara lo que el estampado corte.
     if (room_type == RoomType::Boss) {
-        stamp_arena(*this);
-        carve_trail(*this, hx, hy, hx, arena_gap_y + 1);
+        stamp_arena(*this, side);
+        int ox, oy;
+        arena_gap_outside(ox, oy);
+        carve_around(*this, hx, hy, ox, oy);
     }
 
     // Torches flanking the openings on "built" biomes (nunca en campo abierto: alli el
@@ -564,7 +644,7 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     // el cofre se abria sin haberlo buscado. Ahora esta a unos tiles del nudo, sobre suelo
     // pisable y con al menos dos vecinos libres (que no caiga en un bolsillo cerrado por
     // arboles); la marca flotante del PNJ lo delata de lejos, que es medio motivo para ir.
-    auto place_special = [&](TileType t) {
+    auto place_special = [&](TileType t) -> void {
         int sx = (tiles_w / 2), sy = (tiles_h / 2);
         if (tiles_w > Config::SCREEN_TILES_X) {
             for (int attempt = 0; attempt < 40; attempt++) {
@@ -584,6 +664,8 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
             }
         }
         tiles[sy][sx] = t;
+        cells[0].poi_tx = sx;
+        cells[0].poi_ty = sy;
     };
     if (room_type == RoomType::Altar)    place_special(TileType::AltarGod);
     if (room_type == RoomType::Treasure) place_special(TileType::Chest);
@@ -620,10 +702,10 @@ void Room::generate(RoomType room_type, int chap, int difficulty, int event, boo
     flood_fill(*this, rx, ry, reach);
 
     // Fallback: if any opening is unreachable, carve straight to it (should not happen). En
-    // la celda del jefe la senda de reparacion es una L determinista por fuera del recinto.
+    // la celda del jefe la senda de reparacion rodea el recinto (carve_around, BFS).
     auto ensure = [&](bool door, int gx, int gy) {
         if (!door || reach[gy][gx]) return;
-        if (boss) carve_straight(*this, rx, ry, gx, gy);
+        if (boss) carve_around(*this, rx, ry, gx, gy);
         else      carve_trail(*this, rx, ry, gx, gy);
         flood_fill(*this, rx, ry, reach);
     };
@@ -790,7 +872,27 @@ void Room::arena_anchor(int& tx, int& ty) const {
 }
 
 bool Room::is_arena_gap(int tx, int ty) const {
-    return has_arena && ty == arena_gap_y && tx >= arena_gap_x0 && tx <= arena_gap_x1;
+    return has_arena && tx >= arena_gap_x0 && tx <= arena_gap_x1 && ty >= arena_gap_y0 && ty <= arena_gap_y1;
+}
+
+bool Room::in_arena_box(int tx, int ty) const {
+    if (!has_arena) return false;
+    return tx >= arena_x0 && tx <= arena_x0 + Config::ARENA_TILES_X + 1 &&
+           ty >= arena_y0 && ty <= arena_y0 + Config::ARENA_TILES_Y + 1;
+}
+
+void Room::arena_gap_outside(int& tx, int& ty) const {
+    tx = (arena_gap_x0 + arena_gap_x1) / 2;
+    ty = (arena_gap_y0 + arena_gap_y1) / 2;
+    switch (arena_side) {
+        case ArenaSide::North: ty = arena_gap_y1 + 1; break;   // el vano esta abajo
+        case ArenaSide::East:  tx = arena_gap_x0 - 1; break;   // el vano esta a la izquierda
+        default:               tx = arena_gap_x1 + 1; break;   // West y South: a la derecha
+    }
+}
+
+Vec2 Room::arena_gap_center_world() const {
+    return {(arena_gap_x0 + arena_gap_x1 + 1) * 0.5f * TS, (arena_gap_y0 + arena_gap_y1 + 1) * 0.5f * TS};
 }
 
 bool Room::in_arena_ring(int tx, int ty) const {
@@ -811,6 +913,10 @@ void Room::blit_cell(const Room& c, int gx, int gy, int index) {
     cs.event_id = c.cells[0].event_id;
     cs.hub_tx = ox + c.cells[0].hub_tx;
     cs.hub_ty = oy + c.cells[0].hub_ty;
+    if (c.cells[0].poi_tx >= 0) {
+        cs.poi_tx = ox + c.cells[0].poi_tx;
+        cs.poi_ty = oy + c.cells[0].poi_ty;
+    }
     cs.spawns = c.enemy_spawns;
     const Vec2 off = {static_cast<f32>(ox * TS), static_cast<f32>(oy * TS)};
     for (auto& sp : cs.spawns) sp.position = sp.position + off;
@@ -824,9 +930,11 @@ void Room::blit_cell(const Room& c, int gx, int gy, int index) {
         boss_cell    = index;
         arena_x0     = ox + c.arena_x0;
         arena_y0     = oy + c.arena_y0;
+        arena_side   = c.arena_side;
         arena_gap_x0 = ox + c.arena_gap_x0;
         arena_gap_x1 = ox + c.arena_gap_x1;
-        arena_gap_y  = oy + c.arena_gap_y;
+        arena_gap_y0 = oy + c.arena_gap_y0;
+        arena_gap_y1 = oy + c.arena_gap_y1;
     }
 }
 
@@ -1345,9 +1453,15 @@ void Room::render_exit_barriers(Renderer& renderer, f32 time) const {
     f32 pulse = 0.55f + 0.45f * std::sin(time * 6.0f);
     Color glow = {220, 60, 40, static_cast<u8>(90 + 90 * pulse)};
     Color core = {255, 170, 90, static_cast<u8>(140 + 100 * pulse)};
-    const f32 gx0 = arena_gap_x0 * ts, gw = (arena_gap_x1 - arena_gap_x0 + 1) * ts, gy = arena_gap_y * ts;
-    renderer.draw_rect({gx0, gy + ts * 0.5f - 3.0f, gw, 6}, glow);
-    renderer.draw_rect({gx0, gy + ts * 0.5f - 1.0f, gw, 2}, core);
+    const f32 gx0 = arena_gap_x0 * ts, gy0 = arena_gap_y0 * ts;
+    const f32 gw = (arena_gap_x1 - arena_gap_x0 + 1) * ts, gh = (arena_gap_y1 - arena_gap_y0 + 1) * ts;
+    if (arena_gap_y0 == arena_gap_y1) {      // vano en el cerco de abajo: banda horizontal
+        renderer.draw_rect({gx0, gy0 + ts * 0.5f - 3.0f, gw, 6}, glow);
+        renderer.draw_rect({gx0, gy0 + ts * 0.5f - 1.0f, gw, 2}, core);
+    } else {                                 // vano lateral: banda vertical
+        renderer.draw_rect({gx0 + ts * 0.5f - 3.0f, gy0, 6, gh}, glow);
+        renderer.draw_rect({gx0 + ts * 0.5f - 1.0f, gy0, 2, gh}, core);
+    }
 }
 
 // =============================================================================
@@ -1355,66 +1469,89 @@ void Room::render_exit_barriers(Renderer& renderer, f32 time) const {
 // =============================================================================
 // El reparto de salas es CONFIGURACION, no sorteo (mandato del usuario, 2026-08-27):
 // "ya no valen valores aleatorios para la historia y esos aspectos del gameplay".
-// Una cadena por capitulo, un caracter por celda de la rejilla, fila de ARRIBA primero
-// (la fila 0 es la del jefe; la ultima, la de inicio). Leyenda:
+// Una cadena por capitulo, un caracter por celda de la rejilla, fila de ARRIBA primero.
+// Leyenda:
 //   S inicio   B jefe   N combate   T tesoro   A altar   L elite
+//   . paso tranquilo (RoomType::Rest: sin enemigos, solo terreno y secretos)
 //   1..6 = sala Event con el relato k-esimo del pozo del capitulo (orden de `namespace Ev`)
 // TODOS los relatos del pozo estan colocados: en una partida se ven los 3-6 del capitulo,
-// no un subconjunto sorteado. El precio es una sala de Tesoro y una de Altar menos en las
-// rejillas 4x3 (no caben 12 tipos en 12 celdas) y alguna de combate menos donde el pozo
-// llega a 5-6 (caps 7 y 10); las 4x4 conservan 2+2.
+// no un subconjunto sorteado.
+//
+// Mapa grande (2026-09-24, "el mapa es muy pequeno, tiene que ser mas grande" y "la
+// ubicacion del jefe debe cambiar en cada capitulo"): rejillas 6x4 (6x5 en los caps. 5 y
+// 10, que cierran acto), el doble que antes. El JEFE ya no esta siempre arriba en el
+// centro: cada capitulo lo pone en otro BORDE del mapa (la arena se pega a ese lado, ver
+// stamp_arena) y el inicio lejos de el. Reparto por capitulo: 2 tesoros, 2 altares,
+// 3 elites y 4 pasos tranquilos (3/3/4/5 en las 6x5); el resto, combate. Las elites se
+// arriman al jefe a proposito: es la guardia, y son una de las fuentes de PISTAS de donde
+// esta (Engine::boss_intel).
+//   Cap  1  jefe NE (arena North)    Cap  6  jefe NO (North)
+//   Cap  2  jefe O  (West)           Cap  7  jefe E  (East)
+//   Cap  3  jefe N  (North)          Cap  8  jefe S  (South)
+//   Cap  4  jefe E  (East)           Cap  9  jefe O  (West)
+//   Cap  5  jefe S  (South)          Cap 10  jefe N  (North)
 static const char* const CHAPTER_LAYOUT[10] = {
-    // Cap 1 — El Arroyo Querit (4x3, 3 relatos)
-    "TNB1"
-    "2LNA"
-    "N3SL",
-    // Cap 2 — La Viuda de Sarepta (4x3, 3 relatos)
-    "N1BT"
-    "LAN2"
-    "3NSL",
-    // Cap 3 — El Monte Carmelo (4x3, 4 relatos)
-    "1NB2"
-    "LATL"
-    "3NS4",
-    // Cap 4 — La Cueva de Horeb (4x3, 4 relatos)
-    "2LBN"
-    "1TA3"
-    "N4SL",
-    // Cap 5 — El Llamado (4x4, 3 relatos)
-    "NTB1"
-    "LNAN"
-    "2NLT"
-    "NAS3",
-    // Cap 6 — Las Aguas de Jerico (4x3, 4 relatos)
-    "1NBL"
-    "TA42"
-    "N3SL",
-    // Cap 7 — El Aceite de la Viuda (4x3, 5 relatos)
-    "N2B1"
-    "LAT3"
-    "45SL",
-    // Cap 8 — El Hijo Sunamita (4x3, 4 relatos)
-    "1LB2"
-    "TNAN"
-    "L3S4",
-    // Cap 9 — Naaman el Sirio (4x3, 3 relatos: Hazael y Jehu se mudaron al cap. 10,
-    // que es donde el libro los pone; la celda liberada recupera el Tesoro perdido)
-    "N1BT"
-    "2LTA"
-    "LNS3",
-    // Cap 10 — El Ejercito Celestial (4x4, 6 relatos: el sitio entero mas Hazael y
+    // Cap 1 — El Arroyo Querit (6x4, 3 relatos)
+    "T.N2LB"
+    "N3NA.L"
+    "AN.LN."
+    "NS1NTN",
+    // Cap 2 — La Viuda de Sarepta (6x4, 3 relatos)
+    "LN.T2N"
+    "BLN.AN"
+    "N3AN1S"
+    "TN.LN.",
+    // Cap 3 — El Monte Carmelo (6x4, 4 relatos)
+    "4LBL.T"
+    "N.N3NA"
+    "TN2.LN"
+    "AN.N1S",
+    // Cap 4 — La Cueva de Horeb (6x4, 4 relatos)
+    "N1.NTA"
+    "SN2L.N"
+    "A.N3LB"
+    "TNL.4N",
+    // Cap 5 — El Llamado (6x5, 3 relatos)
+    "T.S1NA"
+    "NLN.2N"
+    "AN.TNL"
+    "N3NL.N"
+    ".TLBAN",
+    // Cap 6 — Las Aguas de Jerico (6x4, 4 relatos)
+    "BL.N2T"
+    "LN3A.N"
+    "4.NLN1"
+    "TAN.SN",
+    // Cap 7 — El Aceite de la Viuda (6x4, 5 relatos)
+    "N4.TNA"
+    "3NL5LB"
+    "A.2N.L"
+    "S1NT.N",
+    // Cap 8 — El Hijo Sunamita (6x4, 4 relatos)
+    "A.NT1S"
+    "N2.NLN"
+    "TNL3.A"
+    "4.BLNN",
+    // Cap 9 — Naaman el Sirio (6x4, 3 relatos: Hazael y Jehu se mudaron al cap. 10,
+    // que es donde el libro los pone)
+    "TN.A1N"
+    "LN3N.S"
+    "BLN.2N"
+    "NL.TAN",
+    // Cap 10 — El Ejercito Celestial (6x5, 6 relatos: el sitio entero mas Hazael y
     // la uncion de Jehu, que desembocan en el epilogo)
-    "LNB1"
-    "5AT2"
-    "3L6A"
-    "T4SN",
+    "T5NLBA"
+    "N.4NL6"
+    "A3.TN."
+    "L2NA.N"
+    "NS1LT.",
 };
 
 void FloorMap::generate(int chapter) {
     auto def = get_chapter_def(chapter);
     int gw = def.grid_w;
     int gh = def.grid_h;
-    // La zona continua cose hasta 4x4 celdas (Config::ZONE_CELLS_*): una rejilla mayor
+    // La zona continua cose hasta 6x5 celdas (Config::ZONE_CELLS_*): una rejilla mayor
     // no cabe en `Room::tiles` y se recorta con aviso.
     if (gw > Config::ZONE_CELLS_X || gh > Config::ZONE_CELLS_Y) {
         SDL_Log("FloorMap: rejilla %dx%d del capitulo %d supera la zona (%dx%d) — se recorta",
@@ -1473,6 +1610,7 @@ void FloorMap::generate(int chapter) {
                 case 'T': rooms[i].type = RoomType::Treasure; break;
                 case 'A': rooms[i].type = RoomType::Altar;    break;
                 case 'L': rooms[i].type = RoomType::Elite;    break;
+                case '.': rooms[i].type = RoomType::Rest;     break;
                 case '1': case '2': case '3': case '4': case '5': case '6': {
                     int k = layout[i] - '1';
                     if (k < pool.count) {

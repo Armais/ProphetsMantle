@@ -74,6 +74,8 @@ La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compil
 | 8 estampas del prólogo + 10 intros de capítulo + 4 estampas del Ascenso (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
 | 22 retratos y viñetas | `assets/sprites/portraits.png` | `tools/blender/mantle_sprites/portraits.py` |
 | Hoja de efectos | `assets/sprites/vfx.png` | `tools/blender/mantle_sprites/vfx.py` |
+| 32 iconos de objeto y milagro (8x4, celda 128 px) | `assets/sprites/icons.png` | `tools/blender/mantle_sprites/icons.py` (Blender 4.2, 2026-09-24) |
+| Carro de Fuego del milagro (3 direcciones x 4 fotogramas x 2 capas, celda 256 px) | `assets/sprites/chariot.png` | `tools/blender/mantle_sprites/chariot.py` (Blender 4.2, 2026-09-24) |
 | Fondo del menú principal | `assets/sprites/menu_bg.png` | `tools/blender/mantle_sprites/menu.py` |
 | Logo, marca e icono | `assets/branding/` | `tools/blender/mantle_sprites/logo.py` + `tools/branding/make_icon.py` |
 

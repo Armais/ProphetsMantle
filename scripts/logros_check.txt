@@ -14,8 +14,9 @@
 #  - La sala del jefe se alcanza con `goto boss` (el indice fijo dejo de valer cuando
 #    la rejilla paso de 3x3 a 4x3).
 #  - Desde los mapas fijos (2026-08-27) el reparto de salas es CONFIGURACION
-#    (CHAPTER_LAYOUT, rooms.cpp) y NO depende de la semilla. Cap 1: 0 Tesoro, 1/6/8
-#    Normal, 2 Boss, 3/4/9 Encuentro, 5/11 Elite, 7 Altar, 10 Inicio. "Sin un Rasguno"
+#    (CHAPTER_LAYOUT, rooms.cpp) y NO depende de la semilla. Cap 1 (6x4 desde el
+#    2026-09-24): 2/6/8/13/16/18/21/23 Normal, 5 Boss, 3/7/20 Encuentro, 4/11/15 Elite,
+#    9/12 Altar, 0/22 Tesoro, 19 Inicio. "Sin un Rasguno"
 #    y "Bajo la Retama" necesitan salas de COMBATE virgenes. La semilla del guion solo
 #    decide el TERRENO y cuantos enemigos trae cada sala; el bloque de Retama regenera el
 #    capitulo con SU propia semilla (404, elegida sondeando composiciones) y la devuelve
@@ -48,8 +49,8 @@ god
 # "El Fuego Responde": derribar el altar de Baal de la sala inicial
 # =========================================================================
 say ---- altar de Baal ----
-# coordenadas de ZONA: celda de inicio (2,2) = +(1280,704)
-walk 1672 892
+# `walks`: relativo al origen de la celda de inicio (cambia de sitio por capitulo)
+walks 392 188
 wait 0.5
 hold up 0.4
 hold attack 2.5
@@ -150,16 +151,17 @@ wait 2.0
 # el mismo instante).
 # =========================================================================
 say ---- sala limpia con la fe apagada ----
-# Zona continua (2026-09-10): con semilla 404 la celda 8 [0,2] trae 5 soldados + 1 profeta
-# (= 8 de fe por bajas). Para quedar < 10 hay que ANULAR el +2 de "sin dano": se apaga
-# `god` (es un toggle, viene encendido desde el arranque), se siembra un soldado que pegue,
-# y se vuelve a encender antes de vaciar la fe y limpiar (8 + 1 del sembrado = 9).
+# Mapa grande (2026-09-24): con semilla 404 la celda 18 [0,3] trae 6 soldados + 2 arqueros
+# y NINGUN profeta (= 8 de fe por bajas; la 8 de antes paso a [2,1] y trae un profeta: 9).
+# Para quedar < 10 hay que ANULAR el +2 de "sin dano": se apaga `god` (es un toggle, viene
+# encendido desde el arranque), se siembra un soldado que pegue, y se vuelve a encender
+# antes de vaciar la fe y limpiar (8 + 1 del sembrado = 9).
 seed 404
 chapter 1
 wait 3.0
 press confirm
 wait 2.5
-goto 8
+goto 18
 wait 0.4
 god
 spawn 0 1
@@ -192,7 +194,7 @@ wait 1.0
 # reinicia al principio del frame, antes del autoplay).
 # =========================================================================
 say ---- cien caidos ----
-goto 5
+goto 2
 wait 1.2
 spawn 0 12
 wait 0.4
@@ -242,7 +244,7 @@ say ---- jefe de capitulo ----
 # zona continua: se entra ANDANDO en la arena (goto boss deja en el nudo)
 goto boss
 wait 0.5
-walk 1600 150
+walkarena 50
 wait 1.5
 wait 2.5
 killall

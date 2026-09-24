@@ -19,6 +19,15 @@ static const Color PANEL_BG    = {18, 14, 24, 150};
 static const Color TEXT_LIGHT  = {245, 238, 220, 255};
 
 // Dark soft disc (reuses the shadow blob) + a tileset icon on top: a "badge"
+static u32 g_icon_sheet = TEXTURE_NONE;
+void set_icon_sheet(u32 tex) { g_icon_sheet = tex; }
+
+bool draw_icon(Renderer& renderer, int idx, Rect dst, Color tint) {
+    if (g_icon_sheet == TEXTURE_NONE || idx < 0) return false;
+    renderer.draw_sprite_rect(g_icon_sheet, Icon::src(idx), dst, tint);
+    return true;
+}
+
 static void draw_badge(Renderer& renderer, u32 tileset, TileSprite icon, f32 cx, f32 cy, f32 size) {
     if (renderer.shadow_tex != TEXTURE_NONE)
         renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {cx - size * 0.75f, cy - size * 0.75f, size * 1.5f, size * 1.5f}, {0, 0, 0, 170});
@@ -138,9 +147,17 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
         // Rarity strip along the top of the card
         renderer.draw_rect({x, y + 1.0f, CARD_W, 1.5f}, rc);
 
-        // Icon on a soft disc
+        // Icon on a soft disc. El propio del objeto / milagro si hay hoja (un poco mayor: es
+        // un dibujo, no un simbolo), y si no el generico del tileset.
         f32 cx = x + CARD_W * 0.5f;
-        draw_badge(renderer, tileset, card.icon, cx, y + 17.0f, 22.0f);
+        if (card.icon_idx >= 0 && g_icon_sheet != TEXTURE_NONE) {
+            const f32 is = 25.0f, cy = y + 17.0f;
+            if (renderer.shadow_tex != TEXTURE_NONE)
+                renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {cx - is * 0.7f, cy - is * 0.6f, is * 1.4f, is * 1.2f}, {0, 0, 0, 170});
+            draw_icon(renderer, card.icon_idx, {cx - is * 0.5f, cy - is * 0.5f, is, is});
+        } else {
+            draw_badge(renderer, tileset, card.icon, cx, y + 17.0f, 22.0f);
+        }
 
         // Se mide todo antes de pintar y el bloque se centra bajo el icono: al quitar la
         // referencia biblica del pie, la carta se quedaba con un tercio vacio abajo.
@@ -340,6 +357,7 @@ void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* cons
         cards[i].desc   = defs[i]->description;
         cards[i].accent = rarity_color(defs[i]->rarity);
         cards[i].icon   = category_icon(defs[i]->category);
+        cards[i].icon_idx = Icon::item(defs[i]->id);
     }
     draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
@@ -360,6 +378,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
         cards[i].desc   = d.description;
         cards[i].accent = TIER_COLORS[d.tier < 0 ? 0 : (d.tier > 4 ? 4 : d.tier)];
         cards[i].icon   = miracle_icon(ids[i]);
+        cards[i].icon_idx = Icon::miracle(static_cast<u32>(ids[i]));
     }
     draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
@@ -470,8 +489,10 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         TileSprite wicon = weapon_icon(player.weapon_slot);
         renderer.draw_rect({2.0f, WY - 1.0f, WS + 2, WS + 2}, ready ? Color{245, 205, 90, 235} : Color{90, 80, 70, 220});
         renderer.draw_rect({3.0f, WY, WS, WS}, {22, 16, 26, 230});
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
-                                  ready ? Color::white() : Color{120, 115, 110, 200});
+        if (!draw_icon(renderer, Icon::item(player.weapon_slot), {3.0f, WY, WS, WS},
+                       ready ? Color::white() : Color{120, 115, 110, 200}))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
+                                      ready ? Color::white() : Color{120, 115, 110, 200});
         if (!ready) {
             f32 k = std::min(1.0f, player.secondary_cd / 0.9f);
             renderer.draw_rect({3.0f, WY, WS, WS * k}, {10, 8, 14, 170});
@@ -509,7 +530,8 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         // Frame carries the rarity colour; the icon stays untinted so it reads at 9 units
         renderer.draw_rect({x - 1, Y - 1, S + 2, S + 2}, held ? Color{245, 205, 90, 230} : rarity_color(def->rarity));
         renderer.draw_rect({x, Y, S, S}, {22, 16, 26, 220});
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
+        if (!draw_icon(renderer, Icon::item(id), {x - 0.5f, Y - 0.5f, S + 1.0f, S + 1.0f}))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
         // Cargas del consumible (Aceite Inagotable): sin el numero, "+2 cargas" es invisible
         if (held && player.consumable_charges > 1) {
             char n[4];
@@ -595,17 +617,21 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 145)});
 
         TileSprite icon = TileSprite::Arrow;
+        int own = Icon::NONE;   // icono propio del objeto (icons.png), si lo hay
         if (cons && ctx.registry) {
             const ItemDef* d = ctx.registry->get(player.consumable_slot);
             if (d) icon = category_icon(d->category);
+            own = Icon::item(player.consumable_slot);
         } else if (weap) {
             icon = weapon_icon(player.weapon_slot);
+            own = Icon::item(player.weapon_slot);
         } else if (pray) {
             icon = TileSprite::AltarGod;
         }
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon),
-                                  {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6},
-                                  b.down ? Color::white() : Color{230, 225, 215, 200});
+        const Rect ir = {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6};
+        const Color it = b.down ? Color::white() : Color{230, 225, 215, 200};
+        if (!draw_icon(renderer, own, ir, it))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon), ir, it);
         if (cons && player.consumable_charges > 1) {
             char n[4];
             snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
@@ -750,7 +776,8 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
             if (renderer.shadow_tex != TEXTURE_NONE)
                 renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {x + 1, y + 1, S - 2, S - 2}, {0, 0, 0, 120});
             Color tint = locked ? Color{130, 120, 120, 255} : Color::white();
-            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(miracle_icon(slot.miracle)), {x + 3, y + 3, S - 6, S - 6}, tint);
+            if (!draw_icon(renderer, Icon::miracle(static_cast<u32>(slot.miracle)), {x + 2, y + 2, S - 4, S - 4}, tint))
+                renderer.draw_sprite_rect(ctx.tileset, get_tile_src(miracle_icon(slot.miracle)), {x + 3, y + 3, S - 6, S - 6}, tint);
         }
 
         // Candado: solo cuando falta NIVEL de fe. Un cuerpo con arco encima, en 3 rects.
@@ -832,11 +859,15 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
 // -----------------------------------------------------------------------------
 // El marco del minimapa pequeno, tal cual se dibuja mas abajo (el `else` de `big`).
 // Existe para que Input pueda saber donde esta sin copiar la formula.
+// Con el mapa grande (6x4 / 6x5 celdas, 2026-09-24) crece a 12x7 unidades por celda: con
+// las 9x6 de antes cada celda se quedaba en diez unidades y las chinchetas de los puntos
+// de interes se pisaban. 6 celdas = 72 de ancho: empieza en x = 239 y la fila de objetos
+// (hasta x = 223) sigue sin llegar.
 Rect HUD::minimap_rect(const FloorMap& fm) {
     if (fm.room_count <= 0) return {0, 0, 0, 0};
-    const f32 cw = 9.0f, ch = 6.0f, gap = 2.0f;
-    f32 total_w = fm.grid_w * (cw + gap) - gap;
-    f32 total_h = fm.grid_h * (ch + gap) - gap;
+    const f32 cw = 12.0f, ch = 7.0f;
+    f32 total_w = fm.grid_w * cw;
+    f32 total_h = fm.grid_h * ch;
     f32 ox = Config::GAME_WIDTH - total_w - 5.0f;
     return {ox - 2.0f, 2.0f, total_w + 4.0f, total_h + 4.0f};
 }
@@ -1208,9 +1239,11 @@ static void map_pin(Renderer& renderer, f32 cx, f32 cy, f32 r, Color fill) {
     renderer.draw_panel({cx - r, cy - r, r * 2.0f, r * 2.0f}, fill, r);
 }
 
-// Rellena `vis`: 2 = celda pisada, 1 = entrevista (adyacente, Ojos Abiertos, jefe, inicio).
-// Lo usan el mapa grande y el minimapa pequeno, que desde ahora pintan lo MISMO.
-static void zone_visibility(const HUDContext& ctx, const Room& z, int* vis, int& cur_out) {
+// Rellena `vis`: 2 = celda pisada, 1 = entrevista (adyacente, Ojos Abiertos, inicio y, cuando
+// ya se sabe donde esta, la del jefe). Lo usan el mapa grande y el minimapa pequeno, que
+// pintan lo MISMO. Desde el 2026-09-24 la celda del jefe NO sale de serie: se aprende
+// (rooms.h, get_boss_intel).
+static void zone_visibility(const HUDContext& ctx, const Room& z, int intel, int* vis, int& cur_out) {
     const FloorMap* fm = ctx.floor_map;
     int cur = fm->current_room;
     if (cur >= 0 && cur < fm->room_count && fm->rooms[cur].interior_of >= 0)
@@ -1222,9 +1255,158 @@ static void zone_visibility(const HUDContext& ctx, const Room& z, int* vis, int&
         bool adjacent = ctx.map_revealed;
         if (cur >= 0 && cur < fm->room_count)
             for (int c = 0; c < 4; c++) if (fm->rooms[cur].connections[c] == i) adjacent = true;
+        const bool boss_known = node.type == RoomType::Boss && intel >= 2;
         if (z.cells[i].visited || i == cur)       vis[i] = 2;
-        else if (adjacent || node.type == RoomType::Boss || node.type == RoomType::Start) vis[i] = 1;
+        else if (adjacent || boss_known || node.type == RoomType::Start) vis[i] = 1;
     }
+}
+
+// =============================================================================
+// Puntos de interes (2026-09-24): "en el minimapa deben aparecer los puntos que se deben
+// explorar"
+// =============================================================================
+// Cada celda especial tiene UNA cosa que buscar, y el mapa la marca donde esta de verdad
+// (`CellState::poi_tx/ty`, no el centro de cuatro pantallas). Tres estados:
+//   - celda sin descubrir: una "?" en el centro de la celda. Dice QUE hay algo, no QUE es:
+//     es lo que convierte la niebla en una razon para ir;
+//   - celda vista: la chincheta de su color (y en el mapa grande, su icono);
+//   - hecho (cofre abierto, relato resuelto, elite despejada...): la chincheta apagada.
+// La celda del jefe no lleva "?": su sitio se gana con pistas (get_boss_intel).
+enum MapPoiKind : int { POI_CHEST = 0, POI_ALTAR, POI_STORY, POI_ELITE, POI_DOOR, POI_KINDS };
+struct MapPoi { int kind; int cell; f32 tx, ty; bool done; };
+
+static const Color POI_COLOR[POI_KINDS] = {
+    {255, 210,  60, 255},   // cofre
+    {120, 200, 255, 255},   // altar
+    {255, 226, 150, 255},   // relato
+    {200, 120, 255, 255},   // elite
+    {206, 150,  96, 255},   // puerta de un interior
+};
+
+static int zone_pois(const HUDContext& ctx, const Room& z, MapPoi* out, int cap) {
+    const FloorMap* fm = ctx.floor_map;
+    int n = 0;
+    auto add = [&](int kind, int cell, int tx, int ty, bool done) {
+        if (n < cap) out[n++] = {kind, cell, tx + 0.5f, ty + 0.5f, done};
+    };
+    for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
+        const auto& node = fm->rooms[i];
+        if (node.interior_of >= 0) continue;
+        const CellState& cs = z.cells[i];
+        switch (node.type) {
+            case RoomType::Treasure: if (cs.poi_tx >= 0) add(POI_CHEST, i, cs.poi_tx, cs.poi_ty, cs.chest_opened); break;
+            case RoomType::Altar:    if (cs.poi_tx >= 0) add(POI_ALTAR, i, cs.poi_tx, cs.poi_ty, cs.altar_used);   break;
+            case RoomType::Event:    if (cs.poi_tx >= 0) add(POI_STORY, i, cs.poi_tx, cs.poi_ty, cs.event_used);   break;
+            case RoomType::Elite:    add(POI_ELITE, i, cs.hub_tx, cs.hub_ty, cs.cleared); break;
+            default: break;
+        }
+        // La puerta del interior: "hecha" cuando su premio (altar o cofre) ya se ha usado.
+        // Dentro del interior el estado vivo es la sala activa, no la copia de la ranura 1.
+        if (node.interior_room >= 0 && z.has_doorway) {
+            const int ir = node.interior_room;
+            bool done = false;
+            const Room* in = (ctx.room && ctx.room->type == RoomType::Interior) ? ctx.room
+                           : (ir < FloorMap::MAX_ROOMS && fm->room_generated[ir]) ? &fm->room_cache[1] : nullptr;
+            if (in) done = in->cells[0].altar_used || in->cells[0].chest_opened;
+            add(POI_DOOR, i, z.door_tx, z.door_ty, done);
+        }
+    }
+    return n;
+}
+
+// Los "?" de lo que queda por descubrir: uno por celda NO vista que guarda algo sin hacer.
+static void draw_unknown_marks(Renderer& renderer, const Room& z, const FloorMap& fm, const MapPoi* pois, int n,
+                               const int* vis, f32 mx, f32 my, f32 s, f32 r, f32 text_scale) {
+    bool marked[Config::ZONE_CELLS_MAX] = {};
+    for (int k = 0; k < n; k++) {
+        const MapPoi& p = pois[k];
+        if (p.done || p.cell < 0 || p.cell >= Config::ZONE_CELLS_MAX || vis[p.cell] || marked[p.cell]) continue;
+        marked[p.cell] = true;
+        const auto& node = fm.rooms[p.cell];
+        const f32 cx = mx + (node.grid_x + 0.5f) * z.cell_w * s;
+        const f32 cy = my + (node.grid_y + 0.5f) * z.cell_h * s;
+        map_pin(renderer, cx, cy, r, {58, 48, 40, 235});
+        const f32 tw = renderer.measure_text("?", text_scale);
+        renderer.draw_text("?", cx - tw * 0.5f, cy - r * 0.95f, {250, 230, 180, 255}, text_scale);
+    }
+}
+
+// Las chinchetas de lo ya visto. `icons`: el mapa grande pinta el icono dentro (cofre,
+// altar, calavera...); el minimapa, a 1,4 unidades de radio, solo el color.
+static void draw_known_pois(Renderer& renderer, const HUDContext& ctx, const MapPoi* pois, int n,
+                            const int* vis, f32 mx, f32 my, f32 s, f32 r, bool icons) {
+    for (int k = 0; k < n; k++) {
+        const MapPoi& p = pois[k];
+        if (p.cell < 0 || p.cell >= Config::ZONE_CELLS_MAX || !vis[p.cell]) continue;
+        const f32 cx = mx + p.tx * s, cy = my + p.ty * s;
+        const Color c = POI_COLOR[p.kind];
+        if (p.done) {   // hecho: apagada y mas pequena, para que lo pendiente destaque
+            map_pin(renderer, cx, cy, r * 0.62f, {static_cast<u8>(c.r / 2 + 40), static_cast<u8>(c.g / 2 + 40),
+                                                  static_cast<u8>(c.b / 2 + 40), 200});
+            continue;
+        }
+        map_pin(renderer, cx, cy, r, c);
+        if (!icons || ctx.tileset == TEXTURE_NONE) continue;
+        const f32 is = r * 1.5f;
+        switch (p.kind) {
+            case POI_CHEST: renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::Chest), {cx - is * 0.5f, cy - is * 0.5f, is, is}); break;
+            case POI_ELITE: renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::Skull), {cx - is * 0.5f, cy - is * 0.5f, is, is}); break;
+            case POI_ALTAR: {   // sprite de 1x2: solo la mitad de arriba (la llama y el ara)
+                Rect src = get_tile_src(TileSprite::AltarGod); src.h *= 0.62f;
+                renderer.draw_sprite_rect(ctx.tileset, src, {cx - is * 0.5f, cy - is * 0.55f, is, is * 1.24f});
+                break;
+            }
+            case POI_DOOR: {
+                Rect src = get_tile_src(TileSprite::Door); src.y += src.h * 0.25f; src.h *= 0.75f;
+                renderer.draw_sprite_rect(ctx.tileset, src, {cx - is * 0.4f, cy - is * 0.6f, is * 0.8f, is * 1.2f});
+                break;
+            }
+            case POI_STORY: {   // "!" de quien tiene algo que contar
+                const f32 tw = renderer.measure_text("!", 0.62f);
+                renderer.draw_text("!", cx - tw * 0.5f, cy - r * 0.95f, {70, 44, 16, 255}, 0.62f);
+                break;
+            }
+            default: break;
+        }
+    }
+}
+
+// El jefe segun lo que se sabe. Nivel 2: la chincheta roja con su cruz. Nivel 1: el RUMOR,
+// un anillo discontinuo rojo con una "?" — dice "por aqui", no "aqui".
+static void draw_boss_intel(Renderer& renderer, const HUDContext& ctx, const Room& z, int intel,
+                            f32 mx, f32 my, f32 s, f32 pin_r, bool big) {
+    if (!z.has_arena || intel <= 0) return;
+    if (intel >= 2) {
+        int ax, ay;
+        z.arena_anchor(ax, ay);
+        const f32 bx = mx + (ax + 0.5f) * s, by = my + (ay + 0.5f) * s;
+        map_pin(renderer, bx, by, pin_r, {214, 62, 52, 255});
+        if (big) {
+            renderer.draw_rect({bx - 2.0f, by - 0.5f, 4.0f, 1.0f}, {255, 232, 226, 255});
+            renderer.draw_rect({bx - 0.5f, by - 2.0f, 1.0f, 4.0f}, {255, 232, 226, 255});
+        }
+        return;
+    }
+    f32 cx = 0.0f, cy = 0.0f, r = 0.0f;
+    boss_rumor_circle(z, cx, cy, r);
+    const f32 px = mx + cx * s, py = my + cy * s, pr = r * s;
+    const f32 mw = z.tiles_w * s, mh = z.tiles_h * s;
+    const int dots = big ? 44 : 22;
+    const f32 pulse = 0.75f + 0.25f * std::sin(ctx.time * 3.0f);
+    const u8 a = static_cast<u8>(230 * pulse);
+    for (int i = 0; i < dots; i++) {
+        const f32 t = (i + (big ? 0.0f : 0.5f)) / dots * 6.2831853f;
+        const f32 dx = px + std::cos(t) * pr, dy = py + std::sin(t) * pr;
+        if (dx < mx || dy < my || dx > mx + mw || dy > my + mh) continue;   // fuera del mapa, nada
+        const f32 d = big ? 1.6f : 0.9f;
+        renderer.draw_rect({dx - d * 0.5f, dy - d * 0.5f, d, d}, {224, 70, 56, a});
+    }
+    const f32 qx = std::min(std::max(px, mx + pin_r * 2.0f), mx + mw - pin_r * 2.0f);
+    const f32 qy = std::min(std::max(py, my + pin_r * 2.0f), my + mh - pin_r * 2.0f);
+    map_pin(renderer, qx, qy, pin_r, {150, 40, 34, 235});
+    const f32 ts = big ? 0.62f : 0.42f;
+    const f32 tw = renderer.measure_text("?", ts);
+    renderer.draw_text("?", qx - tw * 0.5f, qy - pin_r * 0.95f, {255, 226, 214, 255}, ts);
 }
 
 // El terreno con su marco, dentro del rect dado. Lo comparten el mapa grande y el minimapa:
@@ -1282,18 +1464,24 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
     renderer.draw_text_centered(tr("MAPA DEL CAPÍTULO", "CHAPTER MAP"), 3.0f, {240, 220, 160, 255});
 
     // Area util: debajo del titulo y el objetivo, encima de las dos lineas de pie. La
-    // escala sale de DIVIDIR, no de una constante: el capitulo 5 y el 10 tienen una fila
-    // de celdas mas (4x4) y con un valor fijo se saldrian por abajo.
+    // escala sale de DIVIDIR, no de una constante: los capitulos 5 y 10 tienen una fila
+    // de celdas mas (6x5) y con un valor fijo se saldrian por abajo.
     // AREA_Y = 31 y no 24: justo debajo del panel de vitales, que llega a 30,75. Con 24 el
     // mapa le cortaba por la mitad el nombre del nivel de fe y parecia un fallo de dibujo.
+    const BossIntel intel = ctx.tutorial ? BossIntel{} : get_boss_intel(z, *fm, ctx.map_revealed);
     int vis[Config::ZONE_CELLS_MAX] = {};
     int cur = -1;
-    zone_visibility(ctx, z, vis, cur);
+    zone_visibility(ctx, z, intel.level, vis, cur);
 
     f32 mx = 0.0f, my = 0.0f, s = 0.0f;
     draw_zone_canvas(renderer, z, *fm, vis, {13.0f, 31.0f, 294.0f, 118.0f}, mx, my, s);
 
-    // --- Rotulos de celda: es lo que contesta "¿que hago aqui?" ----------------
+    MapPoi pois[Config::ZONE_CELLS_MAX * 2];
+    const int npois = zone_pois(ctx, z, pois, Config::ZONE_CELLS_MAX * 2);
+
+    // --- Rotulos: es lo que contesta "¿que hago aqui?" -----------------------------
+    // Van ENCIMA de la chincheta de su punto (no en el centro de la celda: con celdas de
+    // cuatro pantallas el centro puede caer lejos de la cosa). Solo los de celdas vistas.
     for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
         if (!vis[i]) continue;
         const auto& node = fm->rooms[i];
@@ -1302,7 +1490,7 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         Color plate = {28, 23, 20, 228};
         switch (node.type) {
             case RoomType::Start:    label = tr("INICIO", "START"); break;
-            case RoomType::Boss:     label = tr("JEFE", "BOSS");       plate = {122, 36, 30, 238}; break;
+            case RoomType::Boss:     if (intel.level >= 2) { label = tr("JEFE", "BOSS"); plate = {122, 36, 30, 238}; } break;
             case RoomType::Treasure: label = tr("TESORO", "TREASURE"); plate = {104, 76, 18, 235}; break;
             case RoomType::Altar:    label = "ALTAR";                  plate = { 26, 60, 96, 235}; break;
             case RoomType::Elite:    label = tr("ELITE", "ELITE");     plate = { 68, 34, 96, 235}; break;
@@ -1310,36 +1498,33 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
             default: break;
         }
         if (!label) continue;
-        // El rotulo va por ENCIMA del centro de la celda, no en el: en la celda de inicio la
-        // placa caia justo sobre el punto del profeta y se tapaban entre ellos. El del JEFE
-        // es la excepcion y cuelga BAJO su chincheta: su celda no tiene el centro donde
-        // esta la arena, y con el desplazamiento de las demas la placa acababa detras del
-        // pin (se vio en el capitulo 5, que tiene una fila de celdas mas y por tanto celdas
-        // mas bajas).
-        f32 cx = mx + (node.grid_x + 0.5f) * z.cell_w * s;
-        f32 cy = my + (node.grid_y + 0.5f) * z.cell_h * s - 6.5f;
+        const CellState& cs = z.cells[i];
+        f32 cx = mx + (cs.hub_tx + 0.5f) * s;
+        f32 cy = my + (cs.hub_ty + 0.5f) * s - 7.5f;
+        if (cs.poi_tx >= 0) { cx = mx + (cs.poi_tx + 0.5f) * s; cy = my + (cs.poi_ty + 0.5f) * s - 7.5f; }
+        // El del JEFE cuelga BAJO su chincheta: su celda no tiene el centro donde esta la
+        // arena, y encima del pin choca con el borde del mapa (la arena va pegada al borde).
         if (node.type == RoomType::Boss && z.has_arena) {
             int bx, by;
             z.arena_anchor(bx, by);
             cx = mx + (bx + 0.5f) * s;
             cy = my + (by + 0.5f) * s + 8.0f;
+            // Con la arena en la fila de abajo (arena South) colgaria fuera del mapa: encima
+            if (cy + 4.0f > my + z.tiles_h * s) cy -= 16.0f;
         }
-        const f32 lw = renderer.measure_text(label, 0.6f);
-        renderer.draw_panel({cx - lw * 0.5f - 3.0f, cy - 4.2f, lw + 6.0f, 8.4f}, plate, 3.2f);
-        renderer.draw_text(label, cx - lw * 0.5f, cy - 3.0f,
+        const f32 lw = renderer.measure_text(label, 0.55f);
+        cx = std::min(std::max(cx, mx + lw * 0.5f + 3.0f), mx + z.tiles_w * s - lw * 0.5f - 3.0f);
+        cy = std::min(std::max(cy, my + 4.2f), my + z.tiles_h * s - 4.2f);
+        renderer.draw_panel({cx - lw * 0.5f - 3.0f, cy - 4.0f, lw + 6.0f, 8.0f}, plate, 3.0f);
+        renderer.draw_text(label, cx - lw * 0.5f, cy - 2.8f,
                            node.type == RoomType::Boss ? Color{255, 226, 220, 255}
-                                                       : Color{240, 230, 210, 245}, 0.6f);
+                                                       : Color{240, 230, 210, 245}, 0.55f);
     }
 
-    // --- El jefe y la salida ----------------------------------------------------
-    if (z.has_arena) {
-        int ax, ay;
-        z.arena_anchor(ax, ay);
-        const f32 bx = mx + (ax + 0.5f) * s, by = my + (ay + 0.5f) * s;
-        map_pin(renderer, bx, by, 3.2f, {214, 62, 52, 255});
-        renderer.draw_rect({bx - 2.0f, by - 0.5f, 4.0f, 1.0f}, {255, 232, 226, 255});
-        renderer.draw_rect({bx - 0.5f, by - 2.0f, 1.0f, 4.0f}, {255, 232, 226, 255});
-    }
+    // --- Lo que queda por explorar, lo visto, el jefe y la salida ---------------------
+    draw_unknown_marks(renderer, z, *fm, pois, npois, vis, mx, my, s, 3.4f, 0.62f);
+    draw_known_pois(renderer, ctx, pois, npois, vis, mx, my, s, 3.2f, true);
+    draw_boss_intel(renderer, ctx, z, intel.level, mx, my, s, 3.4f, true);
     if (z.exit_open) {
         const f32 ex = mx + (z.exit_tx + 0.5f) * s, ey = my + (z.exit_ty + 0.5f) * s;
         map_pin(renderer, ex, ey, 2.6f + 0.6f * std::sin(ctx.time * 4.0f), {104, 226, 142, 255});
@@ -1357,6 +1542,24 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         map_pin(renderer, px, py, 2.4f, {255, 246, 214, 255});
     }
 
+    // --- Cuanto se ha explorado: celdas pisadas, puntos hechos y pistas del jefe -----
+    // Arriba a la derecha, fuera del panel de vitales (que acaba en x = 126).
+    if (!ctx.tutorial) {
+        int cells = 0, seen = 0, done = 0;
+        for (int i = 0; i < z.cell_count && i < fm->room_count; i++) {
+            if (fm->rooms[i].interior_of >= 0) continue;
+            cells++;
+            if (z.cells[i].visited) seen++;
+        }
+        for (int k = 0; k < npois; k++) if (pois[k].done) done++;
+        char stats[96];
+        snprintf(stats, sizeof(stats), tr("Explorado %d/%d   Hallazgos %d/%d   Pistas %d/%d",
+                                          "Explored %d/%d   Finds %d/%d   Clues %d/%d"),
+                 seen, cells, done, npois, std::min(intel.clues, BOSS_CLUES_FOR_EXACT), BOSS_CLUES_FOR_EXACT);
+        const f32 sw = renderer.measure_text(stats, 0.6f);
+        renderer.draw_text(stats, GW - sw - 6.0f, 18.0f, {214, 200, 170, 235}, 0.6f);
+    }
+
     // EL OBJETIVO DEL CAPITULO (`ChapterLore::objective`) va aqui abajo y no bajo el titulo:
     // arriba es donde esta el panel de vitales y un objetivo largo se le montaba encima del
     // porcentaje de fe. Es lo que convierte el mapa en una respuesta a "¿que hago aqui?".
@@ -1364,44 +1567,52 @@ static void draw_zone_map(Renderer& renderer, const HUDContext& ctx, const Room&
         const char* obj = get_chapter_lore(ctx.room->chapter).objective;
         if (obj && obj[0]) renderer.draw_text_centered(obj, 152.0f, {248, 216, 130, 255}, 0.85f);
     }
-    renderer.draw_text_centered(tr("Llega al JEFE (la chincheta roja) y derrótalo para abrir la salida",
-                                   "Reach the BOSS (red pin) and beat it to open the exit"),
-                                162.0f, {200, 200, 200, 255}, 0.75f);
+    // La linea de ayuda sigue a lo que se sabe del jefe: con el jefe oculto, "llega a la
+    // chincheta roja" seria pedir algo que el mapa todavia no ensena.
+    const char* help =
+        intel.level >= 2 ? tr("Llega al JEFE (la chincheta roja) y derrótalo para abrir la salida",
+                               "Reach the BOSS (red pin) and beat it to open the exit")
+      : intel.level == 1 ? tr("El jefe anda por la zona roja: acércate o busca otra pista",
+                              "The boss is somewhere in the red ring: go closer or find another clue")
+                         : tr("¿Dónde está el jefe? Relatos, élites y altares dan pistas. ? = por explorar",
+                              "Where is the boss? Stories, elites and altars give clues. ? = unexplored");
+    renderer.draw_text_centered(help, 162.0f, {200, 200, 200, 255}, 0.7f);
     renderer.draw_text_centered(ctx.input && ctx.input->touch_ui
                                 ? tr("Toca el mapa para volver", "Tap the map to go back")
                                 : tr("Suelta TAB para volver", "Release TAB to go back"),
-                                170.0f, {160, 160, 160, 255}, 0.75f);
+                                171.0f, {160, 160, 160, 255}, 0.7f);
 }
 
 // El minimapa pequeno: el MISMO terreno que el mapa grande, en pequeno. Antes era una
 // rejilla de cajas con borde -una caja por celda- y eso es lo que el usuario seguia leyendo
-// como "cuadriculado" aunque el grande ya pintara terreno. Su rect exterior no se mueve ni
-// una unidad a proposito: lo comparte `Input::touch_minimap` (`HUD::minimap_rect`), asi que
-// dibujo y hit-test siguen saliendo de la MISMA formula.
+// como "cuadriculado" aunque el grande ya pintara terreno. Su rect exterior sale de
+// `HUD::minimap_rect`, que comparte `Input::touch_minimap`: dibujo y hit-test siguen
+// saliendo de la MISMA formula.
 static void draw_zone_minimap(Renderer& renderer, const HUDContext& ctx, const Room& z) {
     const FloorMap* fm = ctx.floor_map;
     const Rect frame = HUD::minimap_rect(*fm);
     if (frame.w <= 0.0f) return;
 
+    const BossIntel intel = ctx.tutorial ? BossIntel{} : get_boss_intel(z, *fm, ctx.map_revealed);
     int vis[Config::ZONE_CELLS_MAX] = {};
     int cur = -1;
-    zone_visibility(ctx, z, vis, cur);
+    zone_visibility(ctx, z, intel.level, vis, cur);
 
     f32 mx = 0.0f, my = 0.0f, s = 0.0f;
     draw_zone_canvas(renderer, z, *fm, vis,
                      {frame.x + 2.2f, frame.y + 2.2f, frame.w - 4.4f, frame.h - 4.4f}, mx, my, s);
 
-    if (z.has_arena) {
-        int ax, ay;
-        z.arena_anchor(ax, ay);
-        map_pin(renderer, mx + (ax + 0.5f) * s, my + (ay + 0.5f) * s, 1.5f, {214, 62, 52, 255});
-    }
+    MapPoi pois[Config::ZONE_CELLS_MAX * 2];
+    const int npois = zone_pois(ctx, z, pois, Config::ZONE_CELLS_MAX * 2);
+    draw_unknown_marks(renderer, z, *fm, pois, npois, vis, mx, my, s, 1.7f, 0.36f);
+    draw_known_pois(renderer, ctx, pois, npois, vis, mx, my, s, 1.25f, false);
+    draw_boss_intel(renderer, ctx, z, intel.level, mx, my, s, 1.6f, false);
     if (z.exit_open)
         map_pin(renderer, mx + (z.exit_tx + 0.5f) * s, my + (z.exit_ty + 0.5f) * s, 1.4f, {104, 226, 142, 255});
 
     f32 px = 0.0f, py = 0.0f;
     if (prophet_marker(ctx, z, cur, mx, my, s, px, py))
-        map_pin(renderer, px, py, 1.3f, {255, 246, 214, 255});
+        map_pin(renderer, px, py, 1.4f, {255, 246, 214, 255});
 }
 
 void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
@@ -1428,7 +1639,8 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
     // como "cuadriculado". El rect de fuera no cambia ni un pixel a proposito —lo comparte
     // `Input::touch_minimap` para que tocarlo abra el mapa grande— asi que las celdas se
     // ensanchan hasta llenarlo en vez de moverlo.
-    if (!big) { gap = 0.0f; cw = total_w / fm->grid_w; ch = total_h / fm->grid_h; }
+    // Mismas medidas que `minimap_rect` (12x7 por celda desde el mapa grande).
+    if (!big) { gap = 0.0f; cw = 12.0f; ch = 7.0f; total_w = fm->grid_w * cw; total_h = fm->grid_h * ch; }
     f32 ox = big ? (Config::GAME_WIDTH - total_w) * 0.5f : Config::GAME_WIDTH - total_w - 5.0f;
     f32 oy = big ? (Config::GAME_HEIGHT - total_h) * 0.5f : 4.0f;
 
@@ -1457,7 +1669,8 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
         // "Y vio el monte lleno": Ojos Abiertos vale por haber estado en la sala de al lado
         bool adjacent = ctx.map_revealed;
         for (int c = 0; c < 4; c++) if (fm->rooms[cur].connections[c] == i) adjacent = true;
-        bool known = visited || adjacent || i == cur || node.type == RoomType::Boss || node.type == RoomType::Start;
+        // El jefe ya no sale de serie (pistas del jefe, 2026-09-24): sin zona no hay pistas.
+        bool known = visited || adjacent || i == cur || node.type == RoomType::Start;
         if (!known && !big) continue;
 
         f32 x = ox + node.grid_x * (cw + gap);
@@ -1479,7 +1692,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
         if (node.type == RoomType::Elite    && (visited || adjacent)) mark = {200, 120, 255, 255};
         if (node.type == RoomType::Event    && (visited || adjacent)) mark = {255, 226, 150, 255};
         if (mark.a) renderer.draw_rect({x + cw * 0.5f - 1.5f, y + ch * 0.5f - 1.5f, 3, 3}, mark);
-        if (node.type == RoomType::Boss) {
+        if (node.type == RoomType::Boss && known) {
             // small skull-ish cross
             renderer.draw_rect({x + cw * 0.5f - 0.5f, y + 1, 1, ch - 2}, {255, 240, 240, 255});
             renderer.draw_rect({x + 1, y + ch * 0.5f - 0.5f, cw - 2, 1}, {255, 240, 240, 255});
@@ -1491,7 +1704,7 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
             const char* label = nullptr;
             switch (node.type) {
                 case RoomType::Start:    label = tr("INICIO", "START"); break;
-                case RoomType::Boss:     label = tr("JEFE", "BOSS"); break;
+                case RoomType::Boss:     label = known ? tr("JEFE", "BOSS") : nullptr; break;
                 case RoomType::Treasure: label = (visited || adjacent) ? tr("TESORO", "TREASURE") : nullptr; break;
                 case RoomType::Altar:    label = (visited || adjacent) ? "ALTAR" : nullptr; break;
                 case RoomType::Elite:    label = (visited || adjacent) ? tr("ELITE", "ELITE") : nullptr; break;
@@ -1517,6 +1730,9 @@ void HUD::draw_minimap(Renderer& renderer, const HUDContext& ctx, bool big) {
 }
 
 // Objective hint under the minimap: direction to the boss room
+// La linea bajo el minimapa: hacia donde queda el jefe, SEGUN LO QUE SE SABE (rooms.h,
+// get_boss_intel). Sin pistas no hay direccion; con el rumor, el rumbo aproximado a la zona
+// roja ("~NE"); con el sitio, las celdas que faltan como siempre ("2N 1E").
 void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     const FloorMap* fm = ctx.floor_map;
     if (!fm || fm->room_count <= 0) return;
@@ -1524,12 +1740,25 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     const auto& boss = fm->rooms[fm->boss_room];
     int dx = boss.grid_x - cur.grid_x;
     int dy = boss.grid_y - cur.grid_y;
+    const int intel = (ctx.zone && !ctx.tutorial) ? get_boss_intel(*ctx.zone, *fm, ctx.map_revealed).level : 0;
 
     char buf[48];
     // En el tutorial el mapa es el del capitulo 1 —el que se va a jugar al salir— y no la
     // sala de tres piezas que se esta pisando: una direccion de jefe aqui seria mentira.
     if (ctx.tutorial) {
         snprintf(buf, sizeof(buf), "%s", tr("Mapa del cap. 1", "Chapter 1 map"));
+    } else if (intel <= 0) {
+        snprintf(buf, sizeof(buf), "%s", tr("Jefe: ???", "Boss: ???"));
+    } else if (intel == 1) {
+        f32 cx = 0.0f, cy = 0.0f, r = 0.0f;
+        boss_rumor_circle(*ctx.zone, cx, cy, r);
+        Vec2 from = ctx.player_in_zone ? ctx.player_pos
+                  : Vec2{(cur.grid_x + 0.5f) * Config::ROOM_W_UNITS, (cur.grid_y + 0.5f) * Config::ROOM_H_UNITS};
+        const f32 ddx = cx * Config::TILE_SIZE - from.x, ddy = cy * Config::TILE_SIZE - from.y;
+        if (ddx * ddx + ddy * ddy < (r * Config::TILE_SIZE) * (r * Config::TILE_SIZE) * 0.25f)
+            snprintf(buf, sizeof(buf), "%s", tr("Jefe: cerca", "Boss: near"));
+        else
+            snprintf(buf, sizeof(buf), tr("Jefe: ~%s", "Boss: ~%s"), compass_name(ddx, ddy, true));
     } else if (dx == 0 && dy == 0) {
         bool cleared = ctx.zone && ctx.zone->boss_cell >= 0 && ctx.zone->cells[ctx.zone->boss_cell].cleared;
         // "%s" y no el texto como formato: clang de Android compila con -Wformat-security
@@ -1545,7 +1774,8 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
         snprintf(buf, sizeof(buf), tr("Jefe: %s%s", "Boss: %s%s"), part1, part2);
     }
     f32 tw = renderer.measure_text(buf, 0.75f);
-    f32 y = 4.0f + fm->grid_h * 8.0f + 3.0f;
+    const Rect mm = minimap_rect(*fm);
+    f32 y = mm.y + mm.h + 3.0f;
     renderer.draw_text(buf, Config::GAME_WIDTH - tw - 5.0f, y, {230, 215, 170, 255}, 0.75f);
     // En tactil el minimapa se TOCA para abrir el mapa grande: anunciar una tecla que el
     // telefono no tiene es la misma clase de error que las chapas Q/E/F.

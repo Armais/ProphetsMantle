@@ -76,6 +76,11 @@ constexpr float FAITH_INACTIVITY_RATE = -0.5f;   // per 10 seconds
 constexpr float DASH_DURATION     = 0.15f;   // seconds
 constexpr float DASH_SPEED        = 500.0f;
 constexpr float DASH_COOLDOWN     = 0.8f;
+// El Carro de Fuego VISIBLE (Player::chariot_fx_*): al soltar al profeta sigue adelante a
+// esta velocidad, sube cada vez mas deprisa y se desvanece en CHARIOT_FX_DEPART segundos.
+constexpr float CHARIOT_FX_SPEED  = 330.0f;   // unidades/s
+constexpr float CHARIOT_FX_RISE   = 90.0f;    // unidades/s de subida (acelera con el tiempo)
+constexpr float CHARIOT_FX_DEPART = 0.85f;    // s
 constexpr float IFRAMES_DURATION  = 0.3f;    // invulnerability after dash
 
 constexpr float PROJECTILE_SPEED  = 280.0f;
@@ -236,14 +241,18 @@ constexpr int ROOM_H_UNITS        = ROOM_TILES_Y * TILE_SIZE; // 352
 // por cuadrados"). Un capitulo es UN solo mapa. La celda (40x22) sigue siendo la unidad de
 // generacion pura (mapas fijos: (capitulo, celda) -> mismo terreno); la zona es lo que se
 // juega — las celdas se cosen sin anillos entre ellas, sin fundidos, con la camara siguiendo
-// al profeta de punta a punta. Tope: rejilla 4x4 = 160x88 tiles (14 KB por Room).
-constexpr int ZONE_CELLS_X        = 4;
-constexpr int ZONE_CELLS_Y        = 4;
-constexpr int ZONE_CELLS_MAX      = ZONE_CELLS_X * ZONE_CELLS_Y;   // 16
-constexpr int ZONE_TILES_X        = ROOM_TILES_X * ZONE_CELLS_X;   // 160
-constexpr int ZONE_TILES_Y        = ROOM_TILES_Y * ZONE_CELLS_Y;   // 88
+// al profeta de punta a punta.
+// Tope: rejilla 6x5 = 240x110 tiles (26 KB por Room). Desde el 2026-09-24 ("el mapa es muy
+// pequeno, tiene que ser mas grande") los capitulos son 6x4 y los dos que cierran acto
+// (5 y 10) 6x5: el doble de mundo que las 4x3 / 4x4 de antes.
+constexpr int ZONE_CELLS_X        = 6;
+constexpr int ZONE_CELLS_Y        = 5;
+constexpr int ZONE_CELLS_MAX      = ZONE_CELLS_X * ZONE_CELLS_Y;   // 30
+constexpr int ZONE_TILES_X        = ROOM_TILES_X * ZONE_CELLS_X;   // 240
+constexpr int ZONE_TILES_Y        = ROOM_TILES_Y * ZONE_CELLS_Y;   // 110
 // La arena del jefe vive DENTRO de la celda B: un recinto de una pantalla de suelo (20x11)
-// con un cerco de piedras y un vano de 4 tiles abajo, sellado mientras el jefe vive.
+// con un cerco de piedras y un vano de 4 tiles, sellado mientras el jefe vive. Va pegada al
+// lado de la celda que da al BORDE del mapa (ArenaSide), y el vano mira hacia dentro.
 constexpr int ARENA_TILES_X       = SCREEN_TILES_X;                // 20
 constexpr int ARENA_TILES_Y       = SCREEN_TILES_Y;                // 11
 constexpr int ARENA_GAP           = 4;

@@ -85,7 +85,8 @@ continua** de hasta 160x88 tiles. El mapa describia una estructura que ya no exi
   serian 14.080 rects por frame con el mapa abierto. El terreno viene en manchas, asi que
   el dibujo sale identico con unos pocos cientos.
 - **La escala se DIVIDE, no se clava**: `min(AREA_W/tiles_w, AREA_H/tiles_h)`. Los capitulos
-  5 y 10 tienen una fila de celdas mas (4x4) y con una constante se salian por abajo.
+  5 y 10 tienen una fila de celdas mas (6x5 desde el 2026-09-24) y con una constante se
+  salian por abajo.
 - **Niebla por celda** (`cells[i].visited`): lo pisado a todo color, lo entrevisto —
   adyacente, jefe, inicio, u **Ojos Abiertos** — al 42%, lo demas negro. Es lo que hace que
   el mapa cuente una exploracion en vez de ensenarlo todo.
@@ -102,6 +103,35 @@ continua** de hasta 160x88 tiles. El mapa describia una estructura que ya no exi
   esquina. Ahora los dos mapas salen de `draw_zone_canvas`, asi que no hay forma de que uno
   vuelva a contar algo distinto del otro. Su rect exterior no se mueve ni una unidad a
   proposito, porque lo comparte `Input::touch_minimap` (`HUD::minimap_rect`).
+
+### Puntos por explorar, jefe oculto e iconos propios (2026-09-24)
+
+Tres peticiones del usuario de una tacada: *"en el minimapa deben aparecer tambien los puntos
+que se deben explorar"*, *"la ubicacion del jefe ... no debe ser visible desde el inicio"* y
+*"cada objeto y milagro debe tener su propio icono"*.
+
+- **Puntos de interes** (`zone_pois` en `hud.cpp`): cofre, altar, relato, elite y la puerta
+  del interior, cada uno EN SU TILE (`CellState::poi_tx/ty`, que apunta `place_special` al
+  generar; la elite va en el nudo). Tres estados, los mismos en los dos mapas: celda sin
+  descubrir = **"?"** en el centro de la celda (dice QUE hay algo, no QUE); celda vista =
+  chincheta de su color (en el mapa grande, con su icono del tileset dentro); hecho = la
+  chincheta apagada y pequena. La celda del jefe no lleva "?".
+- **El jefe segun lo que se sabe** (`get_boss_intel`, `game/rooms.h`): nivel 0 sin nada y
+  "Jefe: ???"; nivel 1 el RUMOR (`boss_rumor_circle`: anillo rojo discontinuo con su "?", NO
+  centrado en la arena) y "Jefe: ~NO" hacia el centro del anillo; nivel 2 la chincheta roja
+  de siempre y "Jefe: 2N 1E". `zone_visibility` ya no entrevee la celda del jefe de serie.
+  La linea de ayuda del mapa grande cambia con el nivel.
+- **Contadores** arriba a la derecha del mapa grande: "Explorado N/M · Hallazgos N/M ·
+  Pistas N/2" (fuera del panel de vitales, que acaba en x = 126).
+- **El minimapa crece a 12x7 unidades por celda** (`HUD::minimap_rect`, sin separacion):
+  6 celdas son 72 de ancho y la fila de objetos (hasta x = 223) no llega. `draw_objective`
+  se cuelga del rect, no de `grid_h * 8`.
+- **Iconos propios** (`render/sprites.h`, `namespace Icon`; hoja `assets/sprites/icons.png`,
+  `tools/blender/mantle_sprites/icons.py`): `set_icon_sheet` la fija el Engine al cargar y
+  `draw_icon(renderer, idx, dst)` devuelve false sin hoja, para que cada sitio caiga a su
+  icono generico del tileset. La usan la fila de objetos, la celda del arma, las celdas de
+  milagro, los botones tactiles USAR / ARMA, las cartas de eleccion (`ChoiceCard::icon_idx`,
+  a 25 unidades) y la ficha del Codice (Objetos y Milagros, en el hueco del retrato).
 
 ### El mapa se PINTA en una textura (2026-09-12)
 

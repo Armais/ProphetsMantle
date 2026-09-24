@@ -64,6 +64,13 @@ dentro de la celda B (`stamp_arena`, `Engine::enter_arena`). Referencia completa
 seccion "Zona continua" de `docs/mundo-exterior.md`. El guardado sube a v10 (misma forma
 que v9, resumen de salas descartado al migrar).
 
+**Mapa grande, jefe en otro borde y pistas (2026-09-24):** rejillas 6x4 (6x5 en 5 y 10),
+`CHAPTER_LAYOUT` rehecho con el jefe en un BORDE distinto por capitulo (N, O, E o S) y la
+arena pegada a ese lado (`ArenaSide`); la celda B se entera por sus `door_*` de que lado
+toca. El jefe ya no sale en el mapa: se aprende con pistas (`get_boss_intel`). Letra nueva
+`.` = `RoomType::Rest` (paso tranquilo, sin enemigos). Referencia completa: la seccion
+"Mapa grande" de `docs/mundo-exterior.md`. Guardado v11.
+
 **Flecos que importan:**
 
 - `pending_seed` (Continuar, guarda la semilla de su partida) y `forced_seed` (comando
@@ -96,6 +103,14 @@ que v9, resumen de salas descartado al migrar).
 - **Working**: progression — room clear detection, boss per chapter (`spawn_boss`: volleys, ring, charge, HP bar), exit arch after the boss (`Room::place_exit`), `advance_chapter()`, Ascension screen → Eliseo (faith halved, 2 slots), Victory after chapter 10, Game Over with `[R]` retry chapter.
 - **Working**: miracles with effects (`Player::cast_miracle`) — all 10 are reachable **y cada uno hace lo suyo** (ya no queda ningun placeholder): praying at an `AltarGod` opens a 3-card miracle choice (tier + faith cost + which slot it replaces). Eliseo can learn Elias' miracles and casts them at 70% (`inherit`). Starting sets: Elias = **Cuervos de Querit (Q, Tier 1)** + Fuego del Cielo (E, ch4+); Eliseo = Sanar Aguas + Ejercito Celestial.
 - **Ojos Abiertos** (2 Reyes 6:17): pone `Player::map_revealed` (todo el capitulo visible en el minimapa y en TAB, con sus etiquetas TESORO/ALTAR/ELITE/RELATO — lo lee `HUDContext::map_revealed` en `draw_minimap`) y `reveal_timer`, que durante la duracion suelta una marca dorada sobre cada enemigo y azul sobre cada drop desde `Player::update`. `Engine::start_chapter` apaga los dos: revela ESTE capitulo, no los siguientes.
+- **Carro de Fuego VISIBLE** (2026-09-24, "tiene que aparecer un carro de fuego de verdad"):
+  `Player::chariot_fx_*` lleva un carro con dos caballos de fuego (`assets/sprites/chariot.png`,
+  `tools/blender/mantle_sprites/chariot.py`) pegado a los pies del profeta mientras dura la
+  embestida y, al soltarlo, lo manda adelante (`CHARIOT_FX_SPEED`), lo sube (`CHARIOT_FX_RISE`)
+  y lo apaga en `CHARIOT_FX_DEPART`. Lo pinta `Engine::collect_chariot_draws` en DOS capas
+  (detras y delante del profeta en el orden por Y), asi que el sprite del jugador —Elias,
+  Eliseo o su skin— va dentro de la caja. Solo es dibujo: dano, embestida y cruce de huecos
+  son los de siempre. `place_player` lo apaga (un teletransporte no se lleva el carro).
 - **Aceite Inagotable** (2 Reyes 4:6): el consumible tiene cargas (`Player::consumable_charges`). Recoger otra vasija igual suma carga, una distinta reemplaza; `use_consumable` solo suelta el objeto cuando se gasta la ultima. El milagro da +2 cargas, y con las manos vacias regala un consumible con 2. El numero se pinta sobre la celda del HUD cuando es > 1. Va en el guardado (`SaveData::consumable_uses`).
 - **Tres slots de milagro**: `Config::MAX_MIRACLE_SLOTS = 3` (Q / E / F; `Action::Miracle3` = tecla F, D-Pad abajo en mando). Elias sigue con 1 (2 desde el cap. 4); Eliseo con 2, y 3 con la mejora meta 6 de El Santuario. Todo lo que iteraba slots va contra la constante: `Player::miracle_slots`, la tabla `MIRACLE_KEYS` de `player.cpp`, `draw_miracle_slots` (la tercera celda cae en x≈238 de 320 y no pisa ni la caja de mensajes ni la barra de jefe), `open_miracle_choice`, el bot y el comando `learn`.
 - **Miracle gating readability**: a Tier-3 miracle needs faith level *Siervo Fiel* (50), and the run starts at exactly 50, so equipping one in slot Q made it lock on the first hit taken and read as "I need 100% faith". The fix is threefold and must stay together: the Q slot always starts Tier 1; `draw_miracle_slots` splits `lock_tier` (padlock + the faith **required**, via `faith_required_for_tier`) from `lock_cost` (cost in red); and `Player::MiracleEvent` carries the reason (`NeedTier` / `NeedCost` / `OnCooldown`) so the Engine names it ("Fuego del Cielo: necesitas 50 de fe (Siervo Fiel)"). `draw_faith_bar` also ticks the 25/50/75 thresholds. A one-shot `[Q]` hint fires in ch. 1 after 5 castable seconds (`Engine::miracle_hint_*`).

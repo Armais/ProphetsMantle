@@ -37,7 +37,7 @@ wait 1.2
 # zona continua: `goto boss` deja en el nudo bajo el recinto; se entra andando por el vano
 goto boss
 wait 0.5
-walk 1600 150
+walkarena 50
 wait 1.5
 shot 01_corro_en_pie
 wait 0.1
