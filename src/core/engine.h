@@ -222,6 +222,7 @@ struct Engine {
     u32 enemy_textures[static_cast<u32>(EnemyType::COUNT)] = {};         // by EnemyType
     u32 tileset_texture = TEXTURE_NONE;
     u32 vfx_texture     = TEXTURE_NONE;   // assets/sprites/vfx.png (ver spawn_fx)
+    u32 icons_texture   = TEXTURE_NONE;   // assets/sprites/icons.png (render/sprites.h, namespace Icon)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
     u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
     // Hojas de Acab y Jezabel (896x1920, como las de los profetas): solo las usan las escenas

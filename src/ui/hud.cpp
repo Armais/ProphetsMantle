@@ -19,6 +19,15 @@ static const Color PANEL_BG    = {18, 14, 24, 150};
 static const Color TEXT_LIGHT  = {245, 238, 220, 255};
 
 // Dark soft disc (reuses the shadow blob) + a tileset icon on top: a "badge"
+static u32 g_icon_sheet = TEXTURE_NONE;
+void set_icon_sheet(u32 tex) { g_icon_sheet = tex; }
+
+bool draw_icon(Renderer& renderer, int idx, Rect dst, Color tint) {
+    if (g_icon_sheet == TEXTURE_NONE || idx < 0) return false;
+    renderer.draw_sprite_rect(g_icon_sheet, Icon::src(idx), dst, tint);
+    return true;
+}
+
 static void draw_badge(Renderer& renderer, u32 tileset, TileSprite icon, f32 cx, f32 cy, f32 size) {
     if (renderer.shadow_tex != TEXTURE_NONE)
         renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {cx - size * 0.75f, cy - size * 0.75f, size * 1.5f, size * 1.5f}, {0, 0, 0, 170});
@@ -138,9 +147,17 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
         // Rarity strip along the top of the card
         renderer.draw_rect({x, y + 1.0f, CARD_W, 1.5f}, rc);
 
-        // Icon on a soft disc
+        // Icon on a soft disc. El propio del objeto / milagro si hay hoja (un poco mayor: es
+        // un dibujo, no un simbolo), y si no el generico del tileset.
         f32 cx = x + CARD_W * 0.5f;
-        draw_badge(renderer, tileset, card.icon, cx, y + 17.0f, 22.0f);
+        if (card.icon_idx >= 0 && g_icon_sheet != TEXTURE_NONE) {
+            const f32 is = 25.0f, cy = y + 17.0f;
+            if (renderer.shadow_tex != TEXTURE_NONE)
+                renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {cx - is * 0.7f, cy - is * 0.6f, is * 1.4f, is * 1.2f}, {0, 0, 0, 170});
+            draw_icon(renderer, card.icon_idx, {cx - is * 0.5f, cy - is * 0.5f, is, is});
+        } else {
+            draw_badge(renderer, tileset, card.icon, cx, y + 17.0f, 22.0f);
+        }
 
         // Se mide todo antes de pintar y el bloque se centra bajo el icono: al quitar la
         // referencia biblica del pie, la carta se quedaba con un tercio vacio abajo.
@@ -340,6 +357,7 @@ void draw_item_choice(Renderer& renderer, const char* title, const ItemDef* cons
         cards[i].desc   = defs[i]->description;
         cards[i].accent = rarity_color(defs[i]->rarity);
         cards[i].icon   = category_icon(defs[i]->category);
+        cards[i].icon_idx = Icon::item(defs[i]->id);
     }
     draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
@@ -360,6 +378,7 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
         cards[i].desc   = d.description;
         cards[i].accent = TIER_COLORS[d.tier < 0 ? 0 : (d.tier > 4 ? 4 : d.tier)];
         cards[i].icon   = miracle_icon(ids[i]);
+        cards[i].icon_idx = Icon::miracle(static_cast<u32>(ids[i]));
     }
     draw_choice_cards(renderer, title, cards, count, selected, tileset, touch);
 }
@@ -470,8 +489,10 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         TileSprite wicon = weapon_icon(player.weapon_slot);
         renderer.draw_rect({2.0f, WY - 1.0f, WS + 2, WS + 2}, ready ? Color{245, 205, 90, 235} : Color{90, 80, 70, 220});
         renderer.draw_rect({3.0f, WY, WS, WS}, {22, 16, 26, 230});
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
-                                  ready ? Color::white() : Color{120, 115, 110, 200});
+        if (!draw_icon(renderer, Icon::item(player.weapon_slot), {3.0f, WY, WS, WS},
+                       ready ? Color::white() : Color{120, 115, 110, 200}))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(wicon), {3.0f, WY, WS, WS},
+                                      ready ? Color::white() : Color{120, 115, 110, 200});
         if (!ready) {
             f32 k = std::min(1.0f, player.secondary_cd / 0.9f);
             renderer.draw_rect({3.0f, WY, WS, WS * k}, {10, 8, 14, 170});
@@ -509,7 +530,8 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         // Frame carries the rarity colour; the icon stays untinted so it reads at 9 units
         renderer.draw_rect({x - 1, Y - 1, S + 2, S + 2}, held ? Color{245, 205, 90, 230} : rarity_color(def->rarity));
         renderer.draw_rect({x, Y, S, S}, {22, 16, 26, 220});
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
+        if (!draw_icon(renderer, Icon::item(id), {x - 0.5f, Y - 0.5f, S + 1.0f, S + 1.0f}))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
         // Cargas del consumible (Aceite Inagotable): sin el numero, "+2 cargas" es invisible
         if (held && player.consumable_charges > 1) {
             char n[4];
@@ -594,17 +616,21 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 145)});
 
         TileSprite icon = TileSprite::Arrow;
+        int own = Icon::NONE;   // icono propio del objeto (icons.png), si lo hay
         if (cons && ctx.registry) {
             const ItemDef* d = ctx.registry->get(player.consumable_slot);
             if (d) icon = category_icon(d->category);
+            own = Icon::item(player.consumable_slot);
         } else if (weap) {
             icon = weapon_icon(player.weapon_slot);
+            own = Icon::item(player.weapon_slot);
         } else if (pray) {
             icon = TileSprite::AltarGod;
         }
-        renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon),
-                                  {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6},
-                                  b.down ? Color::white() : Color{230, 225, 215, 200});
+        const Rect ir = {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6};
+        const Color it = b.down ? Color::white() : Color{230, 225, 215, 200};
+        if (!draw_icon(renderer, own, ir, it))
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon), ir, it);
         if (cons && player.consumable_charges > 1) {
             char n[4];
             snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
@@ -741,7 +767,8 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
             if (renderer.shadow_tex != TEXTURE_NONE)
                 renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {x + 1, y + 1, S - 2, S - 2}, {0, 0, 0, 120});
             Color tint = locked ? Color{130, 120, 120, 255} : Color::white();
-            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(miracle_icon(slot.miracle)), {x + 3, y + 3, S - 6, S - 6}, tint);
+            if (!draw_icon(renderer, Icon::miracle(static_cast<u32>(slot.miracle)), {x + 2, y + 2, S - 4, S - 4}, tint))
+                renderer.draw_sprite_rect(ctx.tileset, get_tile_src(miracle_icon(slot.miracle)), {x + 3, y + 3, S - 6, S - 6}, tint);
         }
 
         // Candado: solo cuando falta NIVEL de fe. Un cuerpo con arco encima, en 3 rects.

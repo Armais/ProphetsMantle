@@ -249,6 +249,15 @@ void Engine::load_sprites() {
     if (vfx_texture == TEXTURE_NONE)
         SDL_Log("WARNING: hoja de efectos ausente (assets/sprites/vfx.png) - spawn_fx no dibujara");
 
+    // Iconos propios de cada objeto y milagro (namespace Icon). Filtrado SUAVE: se pintan de
+    // 9 a 34 unidades y el vecino mas proximo los escalonaria; las celdas llevan margen
+    // transparente, asi que el sangrado entre celdas no se ve. Sin la hoja, el HUD vuelve a
+    // los iconos genericos del tileset.
+    icons_texture = renderer.load_texture("sprites/icons.png", /*smooth=*/true);
+    set_icon_sheet(icons_texture);
+    if (icons_texture == TEXTURE_NONE)
+        SDL_Log("Iconos ausentes (assets/sprites/icons.png) - HUD con los iconos del tileset");
+
     // Retratos del Bestiario. Su ausencia NO es un fallo: el Códice se dibuja igual.
     portrait_texture = renderer.load_texture("sprites/portraits.png", /*smooth=*/true);
     if (portrait_texture == TEXTURE_NONE)
