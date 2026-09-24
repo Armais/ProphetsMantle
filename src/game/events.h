@@ -418,7 +418,7 @@ inline EventDef get_event_def(int id) {
         {{tr("Seguir camino sin volverte", "Walk on without turning"), nullptr,
           tr("Subes al monte Carmelo con la burla a la espalda. Que la lleve quien la ha dicho.", "You go up to mount Carmel with the mockery behind you. Let it stay with those who said it.")},
          {tr("Volverte y maldecirlos", "Turn back and curse them"), tr("-20 Fe", "-20 Faith"),
-          tr("Los maldijiste en el nombre de Jehová. Salieron dos osas del monte. Nadie volvió a burlarse.", "You cursed them in the name of the Lord. Two she-bears came out of the wood. No one mocked again.")}},
+          tr("Los maldijiste en el nombre de Jehová. Y salieron dos osos del monte, y despedazaron de ellos a cuarenta y dos muchachos.", "You cursed them in the name of the Lord. And there came forth two she bears out of the wood, and tare forty and two children of them.")}},
         Portrait::NONE
     };
     case Ev::HIEL_DE_JERICO: return {
