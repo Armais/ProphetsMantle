@@ -8,6 +8,15 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 - **Render target**: `GAME_WIDTH*RENDER_SCALE x GAME_HEIGHT*RENDER_SCALE` = **1280x720** (`Config::RENDER_SCALE = 4`); `Renderer::begin_frame` calls `SDL_SetRenderScale(4,4)` (per-target view state in SDL3) so every draw call stays in units; the target is then letterboxed (linear) into the window (default 1280x720).
 - **Assets**: `Config::ASSET_SCALE = 4` texels per unit — character frames 128x128 px (32 units), tileset cells 64x64 (16 units). `SpriteComponent::src_rect` is in TEXELS; drawn size = `src.w / ASSET_SCALE * scale` (`ECSWorld::collect_draws`). Sheets use linear filtering; the tileset uses nearest (atlas cells abut, CLAMP is texture-wide).
 - **Look**: smooth alpha + dark outline (Blender `post_soft`), Workbench cavity+specular shading, soft elliptical shadows (`Renderer::shadow_tex`) under characters/props, screen vignette (`vignette_tex`), TTF text with outline (`draw_text`, 8 units line height at scale 1, `measure_text` for layout). Text passes `scale > 1.25` use the large atlas.
+- **Texturas de ayuda procedurales**, creadas en `init` y tenidas con `draw_sprite_rect`:
+  `shadow_tex` (mancha eliptica), `vignette_tex`, `panel_tex` (el boton redondeado en 9
+  trozos de `draw_panel`) y, desde el 2026-09-15, `disc_tex` / `ring_tex` —
+  `create_disc_texture(name, size, inner_frac)`, disco blanco con el borde antialiaseado, y
+  con `inner_frac > 0` un aro. Las usan `draw_disc` y `draw_ring`. **Hasta entonces el
+  Renderer no tenia NINGUNA primitiva de circulo**: lo unico redondo era el panel en 9
+  trozos, y por eso los dos joysticks tactiles se dibujaban como cajas — que es como el
+  tester los vio en el movil. La regla de `assets/` manda: se generan en `init`, no entran
+  como PNG.
 - Color palette: Elias=naranjas,rojos,dorados / Eliseo=azules,verdes,blancos / Baal=morados,negros,rojos oscuros / Entornos=ocres,beiges,piedra
 - **NO es pixel art, y el `nearest` que queda NO es estetica.** El GDD v1.0 decia "Pixel Art
   16-bit" y "nearest-neighbor scaling"; eso esta **superado** (decision del usuario,

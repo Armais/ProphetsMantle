@@ -1,0 +1,107 @@
+# ============================================================================
+# tutorial_gastado_check.txt - El caso del tester: gastar ANTES de que te lo pidan.
+# Correr: MANTLE.exe --script scripts/tutorial_gastado_check.txt
+#
+# QUE SE COMPRUEBA. Dos pasos del tutorial miden un FLANCO de algo que el jugador pudo
+# gastarse antes de que el cartel se lo pidiera, y como ningun paso se cierra solo (no hay
+# relojes; es una decision de diseno, ver tutorial.h) el tutorial se quedaba colgado PARA
+# SIEMPRE:
+#   - paso 2 (Atacar): pide romper DOS tinajas y en la sala 1 solo hay CINCO. Quien se
+#     entretiene a tiros durante el paso de moverse llega con cuatro o cinco rotas.
+#   - paso 5 (Consumible): pide beber la pocion y solo hay UNA carga, dada al arrancar.
+#     Quien se la bebe antes, se queda sin nada que usar (y sin boton USAR en tactil).
+# Lo arregla `Engine::tutorial_setup_step`: replanta las tinajas (y REHACE `prev_props`, que
+# el bucle de `update_tutorial` fija ANTES de llamarlo) y repone la pocion si el slot esta
+# vacio.
+#
+# EL GUION HACE EL DESTROZO PRIMERO: bebe la pocion y rompe las CINCO tinajas con el paso 1
+# todavia abierto. Es a proposito: en cuanto el paso 1 se cierra, el arreglo replanta y ya no
+# se estaria probando nada. Las tinajas estan en la fila y=5 (x = 4, 7, 10, 13, 16) y el
+# profeta nace en (10,8) = (168,136).
+# Las tres del centro se rompen SIN MOVERSE (48 y 68 unidades, en diagonal exacta). Las dos
+# de los extremos caen a 107 y desde el sitio NO se alcanzan (medido: el tiro no llega), asi
+# que hay que arrimarse — pero el paso 1 se cierra a las 220 unidades andadas y estos dos
+# arrimones suman 144, que caben con margen.
+#
+# GATES DEL LOG, en orden:
+#   - `Tutorial: empieza (15 pasos, ...)` y `Tutorial: sala 1 de 3`.
+#   - `Tutorial: paso 1/15 cumplido` (mover), y DESPUES `paso 2/15 cumplido`: el paso de
+#     atacar se cierra aunque las cinco tinajas estuvieran rotas antes de abrirse. Sin el
+#     arreglo esta linea NO SALE y el guion se queda dando vueltas hasta el `quit`.
+#   - `Tutorial: paso 5/15 cumplido` (consumible) con la pocion bebida de antemano.
+#   - Cero `Game Over` (en el tutorial la vida se sujeta en 1).
+# Las capturas 95_* ensenan la sala replantada y el HUD con el consumible de vuelta.
+
+wait 1.0
+tutorial
+wait 1.6
+shot 95_gastado_00_inicio
+
+# --- El destrozo, sin moverse del sitio -------------------------------------------
+# La pocion (Agua del Jordan, la unica carga de la partida) antes de que nadie la pida.
+press use
+wait 0.6
+shot 95_gastado_01_sin_pocion
+
+# Las tres del centro, desde donde nace. `aim` no consume el paso de mover.
+aim 0 -1
+hold attack 1.2
+wait 0.4
+aim -1 -1
+hold attack 1.2
+wait 0.4
+aim 1 -1
+hold attack 1.2
+wait 0.4
+
+# Las dos de los extremos, arrimandose lo justo (48 + 96 = 144 de las 220 del paso 1).
+walk 120 136
+wait 0.8
+aim -1 -1
+hold attack 1.4
+wait 0.4
+walk 216 136
+wait 0.8
+aim 1 -1
+hold attack 1.4
+wait 0.8
+shot 95_gastado_02_sin_tinajas
+
+# --- Y ahora si, el paso 1: andar los 220 unidades que pide la sonda ---------------
+aim 0 0
+hold left 1.2
+hold right 1.2
+wait 1.6
+shot 95_gastado_03_paso2_abierto
+
+# --- Paso 2 (atacar): con el arreglo hay tinajas otra vez. Se rompen dos ------------
+walk 120 136
+wait 1.8
+aim 0 -1
+hold attack 1.8
+wait 0.5
+walk 216 136
+wait 1.8
+aim 0 -1
+hold attack 1.8
+wait 1.4
+shot 95_gastado_04_paso2_cumplido
+
+# --- Pasos 3 y 4, para llegar al del consumible ------------------------------------
+aim 0 0
+press weapon
+wait 1.8
+press dash
+wait 1.8
+shot 95_gastado_05_paso5_abierto
+
+# --- Paso 5 (consumible): la pocion tiene que estar repuesta -----------------------
+press use
+wait 1.0
+press use
+wait 1.6
+shot 95_gastado_06_paso5_cumplido
+stats
+
+wait 0.5
+quit

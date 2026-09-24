@@ -1,8 +1,16 @@
-"""Verifica los nombres de sample de las partituras contra etc/samples/.
+"""Verifica las partituras ANTES de grabar: sintaxis Ruby y nombres.
 
-Un sample mal escrito NO da error al evaluar en Sonic Pi: la capa entera se
-pierde en silencio y solo se nota al medir la pista, 3,5 minutos de captura
-despues. Esto lo caza antes de grabar.
+Dos cosas que no se notan hasta que ya has perdido la captura:
+
+1. Un sample mal escrito NO da error al evaluar en Sonic Pi: la capa entera se
+   pierde en silencio y solo se ve al medir la pista, minutos despues.
+2. Un error de sintaxis hace que la partitura entera no arranque, y el harness
+   graba dos periodos de silencio. Se caza con el ruby que trae Sonic Pi
+   (`ruby -c`), que no necesita Sonic Pi corriendo.
+
+No comprueba los OPTS de cada synth: Sonic Pi acepta sin rechistar los que el
+synthdef no tiene y los ignora. `:dsaw`, `:saw`, `:tri`, `:pluck` y `:recorder`
+tragan `vibrato_rate` y no vibran; el UNICO synth con vibrato es `:blade`.
 
 Uso:  python check_names.py [fichero.rb ...]   (sin argumentos, todos)
 """
@@ -16,6 +24,22 @@ SAMPLES = os.path.expandvars(
 # Sintetizadores: los .scsyndef compilados, sin el prefijo sonic-pi-.
 SYNTHDEFS = os.path.expandvars(
     r"%LOCALAPPDATA%\Programs\SonicPiPortable\PFiles\Sonic Pi\etc\synthdefs\compiled")
+# El ruby que trae Sonic Pi. Sirve para `ruby -c` sin instalar nada. Se saca
+# de la ruta de los synthdefs para no repetir la raiz de la instalacion.
+_SP_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SYNTHDEFS)))
+RUBY = os.path.join(_SP_ROOT, 'app', 'server', 'native', 'ruby', 'bin', 'ruby.exe')
+
+
+def syntax_error(path):
+    """Devuelve el mensaje de `ruby -c`, o None si la sintaxis esta bien."""
+    if not os.path.exists(RUBY):
+        return None
+    import subprocess
+    r = subprocess.run([RUBY, "-c", path], capture_output=True, text=True)
+    out = (r.stdout + r.stderr).strip()
+    if "Syntax OK" in out:
+        return None
+    return out.splitlines()[0] if out else "error de sintaxis"
 
 
 def known_samples():
@@ -53,15 +77,20 @@ def main(argv):
     samples, synths = known_samples(), known_synths()
     files = argv or sorted(f for f in os.listdir(HERE)
                            if f.endswith(".rb") and f not in ("lib.rb", "runner.rb"))
-    total = 0
+    total, roto = 0, 0
     for f in files:
         p = f if os.path.isabs(f) else os.path.join(HERE, f)
+        err = syntax_error(p)
+        if err:
+            roto += 1
+            print(f"{os.path.basename(p)}: SINTAXIS -> {err}")
+            continue           # con la sintaxis rota, los nombres dan igual
         bad = check(p, samples, synths)
         total += len(bad)
         for kind, name, line in bad:
             print(f"{os.path.basename(p)}:{line}: {kind} DESCONOCIDO -> :{name}")
-    print(f"{len(files)} partituras, {total} nombres malos")
-    return 1 if total else 0
+    print(f"{len(files)} partituras, {roto} con la sintaxis rota, {total} nombres malos")
+    return 1 if (total or roto) else 0
 
 
 if __name__ == "__main__":

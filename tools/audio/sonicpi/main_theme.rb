@@ -53,7 +53,7 @@ with_fx :reverb, room: 0.8, mix: 0.36 do
       if intro.include?(bar)
         # A media voz bajo el coro: sin esto la intro se queda en huecos de
         # 24 s entre golpe y golpe de sample.
-        hc(ch, amp: 0.10, pan: -0.28)
+        hc(ch, amp: 0.16, pan: -0.28)
       else
         hc(ch, amp: out.include?(bar) ? 0.12 : 0.23, pan: -0.34)
         hc(ch.map { |n| n + 12 }, amp: 0.10, pan: 0.4)
@@ -70,9 +70,10 @@ live_loop :bass do
   use_synth_defaults attack: 0.05, sustain: 2.6, release: 1.0, amp: 0.40
   32.times do |bar|
     if intro.include?(bar)
+      hp(dg(rt, s, prog[bar % 4][0], -1), amp: 0.45)
       sleep 4
     else
-      hp(dg(rt, s, prog[bar % 4][0], -1))
+      hp(dg(rt, s, prog[bar % 4][0], -1), amp: 1.0)
       sleep 4
     end
   end
@@ -95,17 +96,23 @@ with_fx :reverb, room: 0.72, mix: 0.3 do
   end
 end
 
-# --- ney: se queda solo en B ------------------------------------------------
+# --- cuerda frotada: se queda sola en B -------------------------------------
+# Era el ney (:recorder) hasta el 2026-09-14, o sea el MISMO solista que el
+# capitulo 1, y con el mismo pad de :prophet debajo las dos pistas sonaban a
+# la misma pieza aunque esten en modos distintos. La cuerda frotada no sale en
+# ningun capitulo: el titulo tiene voz propia.
 with_fx :reverb, room: 0.9, mix: 0.45 do
   live_loop :ney do
     sd 3005
-    use_synth :recorder
-    use_synth_defaults attack: 0.13, sustain: 0.28, release: 0.55,
-                       vibrato_rate: 5.2, vibrato_depth: 0.11, pan: -0.2
+    use_synth :dsaw
+    # :dsaw no tiene `res` (ni vibrato): lo que hace el cuerpo aqui es el
+    # detune de las dos sierras y el ataque lento del arco.
+    use_synth_defaults attack: 0.28, sustain: 0.34, release: 0.9, detune: 0.08,
+                       cutoff: 84, pan: -0.2
     32.times do |bar|
       if pb.include?(bar) || pa2.include?(bar)
         ph(rt, s, [t2, t3, t1, t4, t2, t3, t1, t4][(bar - 12) % 8], 0.5, 1,
-           pb.include?(bar) ? 0.40 : 0.30, {})
+           pb.include?(bar) ? 0.26 : 0.21, {})
       else
         sleep 4
       end

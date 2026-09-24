@@ -556,9 +556,11 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
     if (in->joystick_move.active) {
         Vec2 o = in->joystick_move.origin;
         Vec2 k = o + in->joystick_move.get_axis() * 13.0f;
-        renderer.draw_rect({o.x - 17, o.y - 17, 34, 34}, {255, 245, 220, 60});
-        renderer.draw_rect({o.x - 15, o.y - 15, 30, 30}, {20, 16, 26, 110});
-        renderer.draw_rect({k.x - 7, k.y - 7, 14, 14}, {250, 230, 190, 205});
+        // Redondos y mas transparentes que antes: en cuadrado se leian como una caja de
+        // dialogo puesta encima del juego, y tapaban demasiado.
+        renderer.draw_disc(o, 16.0f, {20, 16, 26, 60});
+        renderer.draw_ring(o, 17.0f, {255, 245, 220, 90});
+        renderer.draw_disc(k, 7.5f, {250, 230, 190, 170});
     }
 
     // --- Apuntado manual (hold + drag en la mitad derecha) ---
@@ -567,12 +569,11 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
     if (in->joystick_aim.active) {
         Vec2 o = in->joystick_aim.origin;
         Vec2 dir = in->joystick_aim.get_axis();
-        renderer.draw_rect({o.x - 9, o.y - 9, 18, 18}, {245, 205, 90, 70});
-        renderer.draw_rect({o.x - 7, o.y - 7, 14, 14}, {20, 16, 26, 90});
+        renderer.draw_disc(o, 8.5f, {20, 16, 26, 50});
+        renderer.draw_ring(o, 9.0f, {245, 205, 90, 58});
         for (int d = 1; d <= 4; d++) {
             Vec2 p = o + dir * (7.0f * d);
-            renderer.draw_rect({p.x - 1.5f, p.y - 1.5f, 3, 3},
-                               {250, 225, 160, static_cast<u8>(210 - d * 30)});
+            renderer.draw_disc(p, 1.5f, {250, 225, 160, static_cast<u8>(175 - d * 25)});
         }
         Vec2 t = o + dir * 34.0f;
         renderer.draw_rect({t.x - 5, t.y - 1, 10, 2}, {255, 235, 175, 235});
@@ -654,19 +655,27 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
     }
 }
 
+// UN icono por milagro (filas 9-10 del tileset). Antes los diez se repartian seis sprites
+// de la fila 4, que ademas son los pickups y los proyectiles: Fuego del Cielo y Carro de
+// Fuego salian con el MISMO dibujo en dos celdas contiguas, y el Aceite Inagotable con el
+// corazon, que encima miente (no cura nada).
 static TileSprite miracle_icon(MiracleID id) {
     switch (id) {
-        case MiracleID::CuervosDeQuerit:   return TileSprite::Heart;
-        case MiracleID::PalabraDeSequia:   return TileSprite::Skull;
-        case MiracleID::FuegoDelCielo:     return TileSprite::Fireball;
-        case MiracleID::CarroDeFuego:      return TileSprite::Fireball;
-        case MiracleID::AltarConsumido:    return TileSprite::Star;
-        case MiracleID::SanarAguas:        return TileSprite::Orb;
-        case MiracleID::AceiteInagotable:  return TileSprite::Heart;
-        case MiracleID::OjosAbiertos:      return TileSprite::Star;
-        case MiracleID::EjercitoCelestial: return TileSprite::Lightbolt;
-        case MiracleID::DoblePorcion:      return TileSprite::Star;
-        default:                           return TileSprite::Star;
+        case MiracleID::CuervosDeQuerit:   return TileSprite::MirCuervo;
+        case MiracleID::PalabraDeSequia:   return TileSprite::MirSequia;
+        case MiracleID::FuegoDelCielo:     return TileSprite::MirFuego;
+        case MiracleID::CarroDeFuego:      return TileSprite::MirCarro;
+        case MiracleID::AltarConsumido:    return TileSprite::MirAltar;
+        case MiracleID::SanarAguas:        return TileSprite::MirAguas;
+        case MiracleID::AceiteInagotable:  return TileSprite::MirAceite;
+        case MiracleID::OjosAbiertos:      return TileSprite::MirOjos;
+        case MiracleID::EjercitoCelestial: return TileSprite::MirEjercito;
+        case MiracleID::DoblePorcion:      return TileSprite::MirManto;
+        default:
+            // Un milagro nuevo sin icono se NOTA. El default ya no es Star, que es el icono
+            // de las reliquias: se colaba como dibujo bueno y nadie se enteraba.
+            SDL_Log("HUD: milagro %u sin icono propio", static_cast<u32>(id));
+            return TileSprite::MirManto;
     }
 }
 

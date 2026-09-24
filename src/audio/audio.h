@@ -4,10 +4,18 @@
 // MANTLE - Audio System (SDL3_mixer)
 // =============================================================================
 //
-// Music tracks: siete globales + DOS por capitulo (la de juego y la de su
-// cinematica y dialogo de apertura). Los temas por capitulo sustituyen a los
-// tres viejos de ambiente (Exploration / EliasCombat / EliseoCombat), que
-// repartian diez capitulos entre dos pistas.
+// Music tracks: siete globales + CUATRO por capitulo. La apertura de un
+// capitulo se oye en cuatro tramos seguidos y cada uno estrena pista, porque
+// con una sola el jugador cree que no ha cambiado nada:
+//
+//   1. dialogo de apertura (escena guionizada)  -> ChapterIntro  capNN_intro
+//   2. cinematica, estampa A (el versiculo)     -> ChapterCineA  capNN_cine1
+//   3. cinematica, estampa B (el objetivo)      -> ChapterCineB  capNN_cine2
+//   4. carta de apertura y a jugar              -> ChapterIntro / ChapterTheme
+//
+// Los temas por capitulo sustituyen a los tres viejos de ambiente
+// (Exploration / EliasCombat / EliseoCombat), que repartian diez capitulos
+// entre dos pistas.
 //
 // SFX categories (from GDD 6.3):
 //   Combat, Miracles, UI, Ambient
@@ -63,6 +71,31 @@ enum class MusicID : u32 {
     ChapterIntro9,
     ChapterIntro10,
 
+    // --- Cinematica de apertura: una pista por estampa (~15 s, en bucle) ---
+    // Estampa A: el rotulo del capitulo y el versiculo. Sin pulso.
+    ChapterCineA1,
+    ChapterCineA2,
+    ChapterCineA3,
+    ChapterCineA4,
+    ChapterCineA5,
+    ChapterCineA6,
+    ChapterCineA7,
+    ChapterCineA8,
+    ChapterCineA9,
+    ChapterCineA10,
+    // Estampa B: la narracion y el objetivo. Aparece el pulso y empalma con la
+    // carta de apertura.
+    ChapterCineB1,
+    ChapterCineB2,
+    ChapterCineB3,
+    ChapterCineB4,
+    ChapterCineB5,
+    ChapterCineB6,
+    ChapterCineB7,
+    ChapterCineB8,
+    ChapterCineB9,
+    ChapterCineB10,
+
     COUNT
 };
 
@@ -72,10 +105,20 @@ inline MusicID chapter_theme(int chapter) {
     return static_cast<MusicID>(static_cast<u32>(MusicID::ChapterTheme1) + (chapter - 1));
 }
 
-// Tema de la cinematica / dialogo de apertura del capitulo (1..10).
+// Tema del dialogo y la carta de apertura del capitulo (1..10).
 inline MusicID chapter_intro(int chapter) {
     if (chapter < 1 || chapter > MUSIC_CHAPTERS) chapter = 1;
     return static_cast<MusicID>(static_cast<u32>(MusicID::ChapterIntro1) + (chapter - 1));
+}
+
+// Las dos estampas de la cinematica de apertura (1..10).
+inline MusicID chapter_cine_a(int chapter) {
+    if (chapter < 1 || chapter > MUSIC_CHAPTERS) chapter = 1;
+    return static_cast<MusicID>(static_cast<u32>(MusicID::ChapterCineA1) + (chapter - 1));
+}
+inline MusicID chapter_cine_b(int chapter) {
+    if (chapter < 1 || chapter > MUSIC_CHAPTERS) chapter = 1;
+    return static_cast<MusicID>(static_cast<u32>(MusicID::ChapterCineB1) + (chapter - 1));
 }
 
 // =============================================================================

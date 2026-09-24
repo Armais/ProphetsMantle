@@ -68,6 +68,7 @@ struct SpriteComponent {
     i32 z_order      = 0;      // Draw order
     bool flip_x      = false;
     bool visible      = true;
+    bool fixed_src   = false;  // celda horneada: system_animation no toca src_rect
 };
 
 struct AnimationComponent {

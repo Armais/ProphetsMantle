@@ -34,7 +34,7 @@ escribe un guion:
 
 ## Guiones
 
-- **Guiones de verificación** en `scripts/`: `lore_check.txt` y `pulido_check.txt` (regresión, deben pasar siempre), **`feel_baseline.txt`** (MEDIDA de tacto, no captura: se ejecuta antes y después de tocar `Config::Feel` y se comparan las líneas `FEEL`), `feel_check.txt`, `audio_check.txt` (criterio negativo: cero `Failed to load`), `logros_check.txt` (desbloquea 18/18 desde guardado limpio), `vfx_check.txt` (efectos, retratos y paleta), `encuentros_check.txt` (los **38** encuentros del pozo, en ES y EN; su gate es el log, no las capturas), `hint_check.txt`, `actoII_check.txt` (conductas del Acto II), `codice_check.txt` (las 5 pestañas del Códice), **`secretos_check.txt`** (secretos de bioma y los tres milagros-llave), **`interiores_check.txt`** (entrar y salir de un interior sin perder el estado de fuera), `milagros_check.txt` (Ojos Abiertos, cargas del consumible, tercer slot y guardar/cargar), `intro_check.txt` (las 8 estampas del prólogo), **`audiencia_check.txt`** (la audiencia con Acab: orden audiencia → intro → Playing, ES/EN, ESC y Continuar; gates del log), **`escenas_check.txt`** (las 20 escenas guionizadas —10 aperturas, 10 diálogos de jefe— paradas con captura y completas en ES y EN; cero TEXT TRUNCATED es el gate que manda), **`intros_check.txt`** (las 10 intros cinemáticas de capítulo en ES y EN; sus gates son del log — ver la sección de intros), `ascension_check.txt` (Manto de Elías + milagro heredado), `caducidad_check.txt`, `tactil_check.txt`, **`tactil_ancho_check.txt`** y **`menus_tactil_check.txt`** (**todos piden `--touch`**), `epilogo_check.txt` (las dos ramas de la victoria) y `discipulos_check.txt`.
+- **Guiones de verificación** en `scripts/`: `lore_check.txt` y `pulido_check.txt` (regresión, deben pasar siempre), **`feel_baseline.txt`** (MEDIDA de tacto, no captura: se ejecuta antes y después de tocar `Config::Feel` y se comparan las líneas `FEEL`), `feel_check.txt`, `audio_check.txt` (criterio negativo: cero `Failed to load`), **`musica_check.txt`** (el mapeo de las 47 pistas: `chintro N` deja la cinematica parada en su PRIMERA estampa y el `press confirm` siguiente pasa a la segunda, asi que el log tiene que cambiar de `capNN_cine1.ogg` a `capNN_cine2.ogg`; si las dos dieran el mismo indice, las dos estampas volverian a sonar igual), `logros_check.txt` (desbloquea 18/18 desde guardado limpio), `vfx_check.txt` (efectos, retratos y paleta), `encuentros_check.txt` (los **38** encuentros del pozo, en ES y EN; su gate es el log, no las capturas), `hint_check.txt`, `actoII_check.txt` (conductas del Acto II), `codice_check.txt` (las 5 pestañas del Códice), **`secretos_check.txt`** (secretos de bioma y los tres milagros-llave), **`interiores_check.txt`** (entrar y salir de un interior sin perder el estado de fuera), `milagros_check.txt` (Ojos Abiertos, cargas del consumible, tercer slot y guardar/cargar), `intro_check.txt` (las 8 estampas del prólogo), **`audiencia_check.txt`** (la audiencia con Acab: orden audiencia → intro → Playing, ES/EN, ESC y Continuar; gates del log), **`escenas_check.txt`** (las 20 escenas guionizadas —10 aperturas, 10 diálogos de jefe— paradas con captura y completas en ES y EN; cero TEXT TRUNCATED es el gate que manda), **`intros_check.txt`** (las 10 intros cinemáticas de capítulo en ES y EN; sus gates son del log — ver la sección de intros), `ascension_check.txt` (Manto de Elías + milagro heredado), `caducidad_check.txt`, `tactil_check.txt`, **`tactil_ancho_check.txt`** y **`menus_tactil_check.txt`** (**todos piden `--touch`**), `epilogo_check.txt` (las dos ramas de la victoria) y `discipulos_check.txt`.
 **Comandos de autoplay nuevos**: `lang <0|1>`, `aimmode <0|1|2>` y **`defaults`** (ajustes
 de fabrica). `defaults` no es un lujo: las filas que **ciclan** (auto-mira, vibracion,
 idioma) no tienen un valor absoluto al que llevarlas con `press`, asi que sin el un guion
@@ -258,3 +258,27 @@ Gate del log, y es el bueno porque no depende de mirar una captura: el `LOADOUT`
 the Jordan" con un `lang 1` de por medio, y vuelve con `lang 0`. Mas una linea
 `i18n: registros re-traducidos (...)` por cambio. Las capturas cubren El Santuario (sus 15
 mejoras, con el estado COMPRADO intacto) y el rotulo de la barra del jefe.
+
+## Los cuatro arreglos del feedback del tester (2026-09-15)
+
+Tres guiones nuevos, de las cuatro cosas que el tester saco jugando el APK:
+
+- **`pnj_paseo_check.txt`**: que un PNJ no cambie de personaje a mitad de escena. La
+  apertura del cap. 2 es la UNICA escena con paseo cinematico, y el paseo llama a
+  `world.update`: `system_animation` avanzaba la celda del `src_rect` sobre `npcs.png`, que
+  es **una fila de 16 personajes distintos**, asi que la viuda de Sarepta se convertia en
+  otra persona cada 0,15 s y se quedaba congelada en la que tocara para las cuatro cajas
+  siguientes. **Su gate es VISUAL y no hay otro**: diez capturas a 0,4 s durante el paseo
+  (sin el arreglo no hay dos seguidas iguales) mas las cajas posteriores.
+- **`tutorial_gastado_check.txt`**: gastar ANTES de que te lo pidan. El paso 2 mide tinajas
+  rotas y el 5 el flanco del consumible, y como ningun paso se cierra solo, quien rompia las
+  cinco tinajas o se bebia la pocion durante el paso de moverse dejaba el tutorial colgado
+  para siempre. El guion hace el destrozo con el paso 1 todavia ABIERTO — es lo unico que
+  prueba algo: en cuanto el paso 1 se cierra, `tutorial_setup_step` ya ha replantado.
+  Detalle que costo una pasada: las tinajas de los extremos estan a 107 unidades y **desde
+  el punto de nacimiento no se alcanzan** (el alcance es 120, pero el tiro no llega), asi
+  que hay que arrimarse 144 unidades de las 220 que cierran el paso 1.
+- **`iconos_milagro_check.txt`**: los diez iconos de milagro, uno por milagro. Gate del log:
+  cero `HUD: milagro N sin icono propio`. Gate visual: las celdas Q/E/F con los pares que
+  antes compartian dibujo (Fuego/Carro, Cuervos/Aceite, Altar/Ojos/Doble) y las cartas de
+  `mcards`, juzgados **a tamano de HUD**, no ampliados.

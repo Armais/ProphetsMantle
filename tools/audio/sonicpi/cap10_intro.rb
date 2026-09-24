@@ -1,72 +1,79 @@
-# MANTLE cap. 10 (apertura) - Samaria sitiada. La ciudad con hambre: frigia,
-# marcha lenta y el coro callado. La liberacion no se anuncia en la carta; se
-# gana dentro. 16 compases a 92 BPM = 41,7391 s.
-use_bpm 92
+# MANTLE cap. 10 - DIALOGO Y CARTA DE APERTURA (Samaria).
+# "Jehova, te ruego que abras sus ojos para que vea". Pieza propia: laud
+# (:pluck) sobre acordes de :tri, sin percusion y a bastante menos de la mitad
+# de velocidad que el tema, que es una marcha de metal a 112 BPM.
+# Frigio en MI, el modo con el que arranca el capitulo antes de girar a mayor.
+#
+# Periodo: 16 compases de 4/4 a 80 BPM = 48,000 s exactos.
+use_bpm 80
 
-rt = 52
+rt = 52            # MI3
 s  = sc(:phryg)
-prog = [[0, 2, 4], [1, 3, 5], [0, 2, 4], [5, 0, 2]]
-w1 = [0, nil, 1, nil, 0, nil, nil, nil]
-w2 = [0, 1, 2, nil, 1, 0, nil, nil]
-w3 = [4, nil, 3, 2, nil, 1, 0, nil]
 
-live_loop :march do
-  sd 3101
-  16.times do |bar|
-    a = (bar >= 3 && bar < 14) ? 0.26 : 0.14
-    pk(:drum_tom_lo_soft, amp: a, rate: 0.75, pan: -0.3)
-    sleep 2
-    pk(:drum_tom_mid_soft, amp: a * 0.6, rate: 0.85, pan: 0.26)
-    sleep 2
-  end
-end
+prog = [[0, 2, 4], [1, 3, 5], [3, 5, 0], [0, 2, 4]]
 
-with_fx :reverb, room: 0.88, mix: 0.44 do
-  live_loop :pads do
-    sd 3102
-    use_synth :prophet
-    use_synth_defaults attack: 1.4, sustain: 2.2, release: 1.6, cutoff: 104
+l1 = [0, nil, 1, nil, 3, nil, nil, nil]
+l2 = [4, nil, 3, nil, 1, nil, 0, nil]
+l3 = [5, nil, 4, nil, 3, nil, 1, nil]
+l4 = [0, nil, nil, 1, nil, 0, nil, nil]
+
+with_fx :reverb, room: 0.88, mix: 0.5 do
+  live_loop :fondo do
+    sd 3401
+    use_synth :tri
+    use_synth_defaults attack: 1.5, sustain: 1.5, release: 2.1, cutoff: 84, res: 0.1
     16.times do |bar|
-      ch = prog[bar % 4].map { |d| dg(rt, s, d, 0) }
-      hc(ch, amp: (bar >= 2 && bar < 14) ? 0.20 : 0.08, pan: -0.35)
-      hc(ch.map { |n| n + 12 }, amp: 0.08, pan: 0.42) if bar >= 4
+      a = case bar
+          when 0..2   then 0.11
+          when 14, 15 then 0.09
+          when 9..13  then 0.14
+          else 0.18
+          end
+      hc(prog[bar % 4].map { |d| dg(rt, s, d, 0) }, amp: a, pan: 0.33)
       sleep 4
     end
   end
-end
 
-live_loop :bass do
-  sd 3103
-  use_synth :bass_foundation
-  use_synth_defaults attack: 0.05, sustain: 2.6, release: 1.0, amp: 0.34
-  16.times do |bar|
-    hp(dg(rt, s, prog[bar % 4][0], -1)) if bar >= 2 && bar % 2 == 0
-    sleep 4
-  end
-end
-
-with_fx :reverb, room: 0.84, mix: 0.4 do
-  live_loop :horn do
-    sd 3104
-    use_synth :blade
-    use_synth_defaults attack: 0.12, sustain: 0.32, release: 0.55, cutoff: 112,
-                       vibrato_rate: 5.5, vibrato_depth: 0.12, pan: -0.2
+  live_loop :bajo do
+    sd 3402
+    use_synth :subpulse
+    use_synth_defaults attack: 0.25, sustain: 2.2, release: 1.2
+    raiz = [0, 1, 3, 0]
     16.times do |bar|
-      if bar >= 5 && bar < 13
-        ph(rt, s, [w1, w2, w1, w3, w2, w1, w3, w1][bar - 5], 0.5, 0, 0.32, {})
+      hp(dg(rt, s, raiz[bar % 4], 0) - 12, amp: bar < 3 ? 0.12 : 0.17)
+      sleep 4
+    end
+  end
+
+  live_loop :laud do
+    sd 3403
+    use_synth :pluck
+    use_synth_defaults coef: 0.2, cutoff: 112
+    skip 3
+    [l1, l2, l3, l4, l2, l3].each_with_index do |pat, i|
+      ph(rt, s, pat, 0.5, 1, [0.30, 0.34, 0.38, 0.28, 0.32, 0.24][i], pan: -0.25)
+    end
+    skip 7
+  end
+
+  live_loop :campana do
+    sd 3404
+    use_synth :pretty_bell
+    use_synth_defaults attack: 0.01, release: 2.4, cutoff: 118
+    16.times do |bar|
+      if bar >= 9 && bar <= 13
+        [0, 1, 2, 1].each_with_index do |i, k|
+          hp(dg(rt, s, prog[bar % 4][i], k == 3 ? 4 : 3), amp: 0.24 - k * 0.03,
+             pan: 0.22 + k * 0.09)
+          sleep 1
+        end
+      elsif bar == 4
+        hp(dg(rt, s, 0, 4), amp: 0.22, pan: -0.25); sleep 4
+      elsif bar == 15
+        hp(dg(rt, s, 0, 3), amp: 0.15, pan: 0.15); sleep 4
       else
         sleep 4
       end
     end
-  end
-end
-
-live_loop :air do
-  sd 3105
-  16.times do |bar|
-    pk(:hat_cab, amp: bar >= 4 ? 0.045 : 0.02, rate: 1.35, pan: 0.46)
-    sleep 2
-    pk(:hat_cab, amp: 0.02, rate: 1.5, pan: -0.36)
-    sleep 2
   end
 end

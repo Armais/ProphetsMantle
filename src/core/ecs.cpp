@@ -272,10 +272,13 @@ static void system_animation(ECSWorld& w, f32 dt) {
         }
 
         // Update sprite source rect based on current frame/row (always, so a freshly
-        // selected row shows immediately)
-        f32 frame_w = spr.src_rect.w;
-        spr.src_rect.x = static_cast<f32>(anim.current_frame) * frame_w;
-        spr.src_rect.y = static_cast<f32>(anim.row) * spr.src_rect.h;
+        // selected row shows immediately). Con fixed_src la celda la eligio quien
+        // creo la entidad (atlas de PNJ) y aqui no se toca.
+        if (!spr.fixed_src) {
+            f32 frame_w = spr.src_rect.w;
+            spr.src_rect.x = static_cast<f32>(anim.current_frame) * frame_w;
+            spr.src_rect.y = static_cast<f32>(anim.row) * spr.src_rect.h;
+        }
     }
 }
 

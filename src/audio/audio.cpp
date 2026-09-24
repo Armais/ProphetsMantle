@@ -270,14 +270,20 @@ void Audio::load_all_music() {
     load_music_or(MusicID::Ascension, "ascension.ogg",  "main_theme.ogg");
     load_music_or(MusicID::Prologue,  "prologue.ogg",   "main_theme.ogg");
 
-    // Dos pistas por capitulo: capNN.ogg para jugar, capNN_intro.ogg para la
-    // cinematica y el dialogo de apertura.
+    // Cuatro pistas por capitulo: capNN.ogg para jugar, capNN_intro.ogg para el
+    // dialogo y la carta de apertura, y una por estampa de la cinematica. Si
+    // falta una de cinematica se cae a la de apertura del MISMO capitulo, para
+    // que el juego no suene a otro sitio mientras se generan.
     for (int c = 1; c <= MUSIC_CHAPTERS; c++) {
-        char path[32];
+        char path[32], intro[32];
         SDL_snprintf(path, sizeof(path), "cap%02d.ogg", c);
         load_music_or(chapter_theme(c), path, "main_theme.ogg");
-        SDL_snprintf(path, sizeof(path), "cap%02d_intro.ogg", c);
-        load_music_or(chapter_intro(c), path, "prologue.ogg");
+        SDL_snprintf(intro, sizeof(intro), "cap%02d_intro.ogg", c);
+        load_music_or(chapter_intro(c), intro, "prologue.ogg");
+        SDL_snprintf(path, sizeof(path), "cap%02d_cine1.ogg", c);
+        load_music_or(chapter_cine_a(c), path, intro);
+        SDL_snprintf(path, sizeof(path), "cap%02d_cine2.ogg", c);
+        load_music_or(chapter_cine_b(c), path, intro);
     }
 }
 

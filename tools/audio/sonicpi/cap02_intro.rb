@@ -1,110 +1,100 @@
-# MANTLE cap. 2 (apertura) - el tema de Sarepta desnudo: el organo de la casa,
-# el oud solo y las palmas fuera. Periodo: 16 compases a 70 BPM = 54,8571 s.
-use_bpm 70
+# MANTLE cap. 2 - DIALOGO Y CARTA DE APERTURA (Sarepta).
+# Pieza propia, NO el tema del capitulo desnudo: el tema es oud (:pluck) con
+# organo y darbuka; esto es un salterio (:kalimba) sobre acordes de :tri, sin
+# percusion, a la mitad de velocidad. Mismo modo (eolico en LA) y mismo centro
+# tonal, que es lo que los hace del mismo sitio sin sonar a lo mismo.
+#
+# Periodo: 16 compases de 4/4 a 72 BPM = 53,3333 s exactos.
+# Forma: 0-2 se abre | 3-8 canta el salterio | 9-13 le responde la voz |
+#        14-15 se apaga.
+use_bpm 72
 
-rt = 57
+rt = 57            # LA3
 s  = sc(:aeolian)
-prog = [[0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1]]
-o1 = [0, nil, 2, nil, 1, 0, nil, nil]
-o2 = [2, 3, nil, 4, nil, 3, 2, nil]
-o3 = [4, nil, 3, 4, nil, 5, nil, 4]
-o4 = [2, nil, 1, nil, 0, nil, nil, nil]
 
-with_fx :reverb, room: 0.78, mix: 0.42 do
-  live_loop :room_tone do
-    sd 2201
-    use_synth :organ_tonewheel
-    use_synth_defaults attack: 2.0, sustain: 2.6, release: 2.2
+prog = [[0, 2, 4], [5, 0, 2], [3, 5, 0], [6, 1, 3]]
+
+k1 = [0, 2, 4, 2, nil, 4, nil, nil]
+k2 = [4, 5, 4, 2, nil, 0, nil, nil]
+k3 = [2, 4, 5, 4, nil, 2, 0, nil]
+k4 = [0, nil, -2, nil, 0, nil, nil, nil]
+
+with_fx :reverb, room: 0.86, mix: 0.5 do
+  live_loop :fondo do
+    sd 3311
+    use_synth :tri
+    use_synth_defaults attack: 1.6, sustain: 1.6, release: 2.2, cutoff: 86, res: 0.1
     16.times do |bar|
-      ch = prog[bar % 4].map { |d| dg(rt, s, d, 0) }
-      hc(ch, amp: (bar >= 2 && bar < 14) ? 0.15 : 0.10, pan: -0.38)
-      hc([ch[0] + 12], amp: 0.05, pan: 0.44)
+      a = case bar
+          when 0..2   then 0.11
+          when 14, 15 then 0.09
+          when 9..13  then 0.15
+          else 0.18
+          end
+      hc(prog[bar % 4].map { |d| dg(rt, s, d, 0) }, amp: a, pan: -0.35)
       sleep 4
     end
   end
-end
 
-live_loop :bass do
-  sd 2202
-  use_synth :bass_foundation
-  use_synth_defaults attack: 0.06, sustain: 2.8, release: 1.2
-  16.times do |bar|
-    if bar % 2 == 0
-      hp(dg(rt, s, prog[bar % 4][0], -2),
-         amp: (bar >= 2 && bar < 14) ? 0.38 : 0.18)
-    end
-    sleep 4
-  end
-end
-
-with_fx :reverb, room: 0.72, mix: 0.36 do
-  live_loop :oud do
-    sd 2203
-    use_synth :pluck
-    use_synth_defaults sustain: 0.3, release: 1.1, coef: 0.55, pan: -0.2
+  live_loop :bajo do
+    sd 3312
+    use_synth :subpulse
+    use_synth_defaults attack: 0.3, sustain: 2.4, release: 1.2
+    raiz = [0, 5, 3, 6]
     16.times do |bar|
-      if bar >= 4 && bar < 12
-        ph(rt, s, [o1, o2, o1, o3, o4, o2, o3, o1][bar - 4], 0.5, 0, 0.36, {})
-      else
-        sleep 4
-      end
-    end
-  end
-end
-
-with_fx :echo, phase: 1.0, decay: 3, mix: 0.26 do
-  live_loop :harm do
-    sd 2204
-    16.times do |bar|
-      if bar >= 8 && bar < 14
-        pk(:guit_harmonics, amp: 0.18, rate: bar.even? ? 1.0 : 1.5, pan: 0.38)
-      elsif bar % 4 == 1
-        pk(:guit_harmonics, amp: 0.10, rate: 0.75, pan: 0.3)
-      end
+      hp(dg(rt, s, raiz[bar % 4], 0) - 12, amp: bar < 3 ? 0.16 : 0.24)
       sleep 4
     end
   end
-end
 
-# Una vasija de barro golpeada con el nudillo: la kalimba es lo unico agudo de
-# la pieza, y sin ella la apertura salia con el 0,6% de energia sobre 2 kHz.
-with_fx :echo, phase: 1.0, decay: 3, mix: 0.22 do
-  live_loop :vasija do
-    sd 2206
+  # --- el salterio: la voz de la escena --------------------------------------
+  live_loop :salterio do
+    sd 3313
     use_synth :kalimba
-    use_synth_defaults release: 1.3, pan: 0.32
+    use_synth_defaults release: 1.4
     16.times do |bar|
-      if bar >= 4 && bar < 14
-        hp(dg(rt, s, prog[bar % 4][2], 2), amp: 0.20)
-        sleep 2
-        hp(dg(rt, s, prog[bar % 4][0], 2), amp: 0.14)
-        sleep 2
+      if bar < 3
+        skip 1
+      elsif bar <= 8
+        ph(rt, s, [k1, k2, k3, k4][(bar - 3) % 4], 0.5, 1,
+           [0.34, 0.40, 0.44, 0.30][(bar - 3) % 4], pan: 0.3)
+      elsif bar <= 13
+        # acompana en corcheas sueltas mientras responde la voz
+        [0, 2, 4].each_with_index do |d, k|
+          hp(dg(rt, s, prog[bar % 4][k], 1), amp: 0.20, pan: 0.35 + k * 0.06)
+          sleep 1
+        end
+        sleep 1
       else
-        hp(dg(rt, s, prog[bar % 4][0], 2), amp: 0.06)
+        hp(dg(rt, s, prog[bar % 4][0], 1), amp: 0.14, pan: 0.25)
         sleep 4
       end
     end
   end
-end
 
-with_fx :echo, phase: 1.0, decay: 3, mix: 0.2 do
-  live_loop :campanita do
-    sd 2207
-    use_synth :pretty_bell
-    use_synth_defaults release: 1.6, pan: 0.42
-    16.times do |bar|
-      hp(dg(rt, s, prog[bar % 4][2], 2), amp: bar >= 3 ? 0.14 : 0.07) if bar % 2 == 0
-      sleep 4
+  # --- la voz: solo en la segunda mitad --------------------------------------
+  live_loop :voz do
+    sd 3314
+    use_synth :blade
+    use_synth_defaults attack: 0.6, sustain: 1.2, release: 1.8, cutoff: 108,
+                       vibrato_rate: 4.0
+    skip 9
+    [k2, k3, k1, k4].each_with_index do |pat, i|
+      ph(rt, s, pat.map { |d| d && d - 2 }, 0.5, 2, [0.22, 0.26, 0.24, 0.18][i],
+         pan: -0.15)
     end
+    skip 3
   end
-end
 
-live_loop :air do
-  sd 2205
-  16.times do |bar|
-    pk(:hat_cab, amp: (bar >= 4 && bar < 14) ? 0.11 : 0.045, rate: 1.4, pan: 0.45)
-    sleep 2
-    pk(:hat_cab, amp: 0.05, rate: 1.5, pan: -0.36)
-    sleep 2
+  # --- campana: el aire de la mezcla ----------------------------------------
+  live_loop :campana do
+    sd 3315
+    use_synth :pretty_bell
+    use_synth_defaults attack: 0.01, release: 2.6, cutoff: 118
+    sleep 8
+    hp(dg(rt, s, 0, 3), amp: 0.18, pan: -0.3); sleep 12
+    hp(dg(rt, s, 4, 3), amp: 0.14, pan: 0.3);  sleep 10
+    hp(dg(rt, s, 2, 3), amp: 0.22, pan: 0.1);  sleep 12
+    hp(dg(rt, s, 0, 3), amp: 0.12, pan: -0.2); sleep 22
   end
 end

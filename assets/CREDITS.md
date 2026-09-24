@@ -14,14 +14,15 @@ trámite que respetar la OFL de la fuente.
 
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
-| 27 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
+| 47 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
 | 37 efectos de sonido | `assets/audio/sfx/*.ogg` | `tools/audio/gen_audio.py` |
 | 15 exclamaciones de voz | `assets/audio/sfx/voz_*.ogg` | `tools/audio/gen_audio.py` (132 KB) |
 
-**Música (2026-09-13): compuesta por el proyecto en Sonic Pi.** Las 27 partituras viven en
-`tools/audio/sonicpi/*.rb` y son composición original: **siete globales y dos por capítulo**
-—el tema de juego y su variación desnuda para la cinemática y el diálogo de apertura—, cada
-capítulo con su propio modo, su solista y su percusión. `record.py` arranca el daemon de Sonic
+**Música (2026-09-14): compuesta por el proyecto en Sonic Pi.** Las 47 partituras viven en
+`tools/audio/sonicpi/*.rb` y son composición original: **siete globales y cuatro por
+capítulo** —el tema de juego, el del diálogo y la carta de apertura, y una por cada una de
+las dos estampas de la cinemática—, cada capítulo con su propio modo, su solista y su
+percusión, y cada tramo de la apertura con instrumentos que no se repiten entre ellos. `record.py` arranca el daemon de Sonic
 Pi sin GUI, graba la salida de
 SuperCollider bit a bit, corta el periodo exacto del bucle y encodea el `.ogg`. Sonic Pi y
 SuperCollider son **herramientas de generación** (como Blender o ffmpeg): no se distribuye ni

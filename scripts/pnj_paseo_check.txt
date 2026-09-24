@@ -1,0 +1,73 @@
+# ============================================================================
+# pnj_paseo_check.txt - El PNJ no puede cambiar de personaje a mitad de escena.
+# Correr: MANTLE.exe --script scripts/pnj_paseo_check.txt
+#
+# QUE SE COMPRUEBA. La apertura del capitulo 2 (la puerta de Sarepta) es la UNICA escena
+# del juego con paseo cinematico (`walk_after = 0` en game/scenes.h), y el paseo llama a
+# `world.update(dt)`. `npcs.png` es UNA FILA de 16 personajes distintos, no una hoja de
+# animacion: mientras el paseo corria, `system_animation` avanzaba `current_frame` y movia
+# la `x` del `src_rect` 128 px por fotograma, o sea que la viuda de Sarepta pasaba a ser
+# Eliseo labrador, luego el hombre de Jerico y luego la mujer profeta, en bucle cada 0,6 s.
+# Al acabar el paseo se quedaba congelada en la celda que tocara, asi que las cuatro cajas
+# de dialogo siguientes se hablaban con la cara de otro (el tester lo describio como "el
+# PNJ cambia de personaje en el video del final de la primera mision").
+#
+# El arreglo es `SpriteComponent::fixed_src`, que `spawn_npc_figure` pone a true y
+# `system_animation` respeta (core/ecs.cpp).
+#
+# GATE: es VISUAL, y no hay otro. Las capturas 80_* cubren los ~4,5 s del paseo a intervalos
+# de 0,4 s (la animacion IdleDown cambia de celda cada 0,15 s, o sea que sin el arreglo NO
+# HAY DOS capturas seguidas con el mismo personaje) y las 81_* las cajas de dialogo
+# posteriores. La figura de la puerta tiene que ser LA MISMA mujer en las catorce.
+# Del log (el id 1 del comando es la apertura del cap. 2): "Apertura del capitulo 2: a la
+# puerta de Sarepta", "Apertura 2: paseo tras la parada 1/5", "paseo de escena terminado" y
+# las paradas 2/5 a 5/5. Las capturas 80_04..08 son las que caen DENTRO del paseo.
+#
+# escenas_check.txt cubre las 20 escenas y no debe romperse con esto.
+
+# Entrar a jugar (el prologo y el menu piden tres confirmaciones, como en escenas_check).
+wait 0.6
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+lang 0
+escena 1 1
+
+# --- El paseo (los primeros ~4,5 s): una captura cada 0,4 s ------------------------
+wait 0.3
+shot 80_pnj_paseo_00
+wait 0.4
+shot 80_pnj_paseo_01
+wait 0.4
+shot 80_pnj_paseo_02
+wait 0.4
+shot 80_pnj_paseo_03
+wait 0.4
+shot 80_pnj_paseo_04
+wait 0.4
+shot 80_pnj_paseo_05
+wait 0.4
+shot 80_pnj_paseo_06
+wait 0.4
+shot 80_pnj_paseo_07
+wait 0.4
+shot 80_pnj_paseo_08
+wait 0.4
+shot 80_pnj_paseo_09
+
+# --- Las cajas de dialogo, ya con el paseo terminado -------------------------------
+# Las paradas se pasan solas cada ~2 s y la escena tiene cinco: con esperas mas largas las
+# ultimas capturas caian ya en la cinematica del capitulo.
+wait 1.0
+shot 81_pnj_caja_00
+wait 1.5
+shot 81_pnj_caja_01
+wait 1.5
+shot 81_pnj_caja_02
+
+wait 1.0
+quit

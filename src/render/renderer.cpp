@@ -26,6 +26,8 @@ bool Renderer::init(SDL_Renderer* renderer, SDL_Texture* render_target) {
     shadow_tex   = create_radial_texture("@shadow",   64, 32, 1.0f, 0.0f, 1.6f);
     vignette_tex = create_radial_texture("@vignette", 160, 90, 0.0f, 1.0f, 2.5f);
     panel_tex    = create_panel_texture("@panel", PANEL_TEX_SIZE, static_cast<int>(PANEL_TEX_SIZE * PANEL_CORNER_FRAC));
+    disc_tex     = create_disc_texture("@disc", 64, 0.0f);
+    ring_tex     = create_disc_texture("@ring", 64, 0.78f);
 
     // UI font (falls back to the debug bitmap font if missing)
     has_font = load_font("fonts/LilitaOne-Regular.ttf");
@@ -197,6 +199,31 @@ u32 Renderer::create_radial_texture(const char* name, int w, int h, f32 inner_a,
     return id;
 }
 
+// Disco blanco de `size` x `size` con el borde antialiaseado a mano (la cobertura del pixel
+// se aproxima por la distancia al borde en pixeles, que a este tamano se ve limpio al
+// escalar). Con `inner_frac` > 0 se recorta el agujero del centro y lo que queda es un aro
+// de grosor (1 - inner_frac) * radio.
+u32 Renderer::create_disc_texture(const char* name, int size, f32 inner_frac) {
+    if (size <= 0) return TEXTURE_NONE;
+    std::vector<u8> rgba(static_cast<size_t>(size) * size * 4, 0);
+    const f32 c = (size - 1) * 0.5f;
+    const f32 r_out = (size - 1) * 0.5f;
+    const f32 r_in  = r_out * std::max(0.0f, std::min(0.98f, inner_frac));
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            const f32 dx = x - c, dy = y - c;
+            const f32 d = std::sqrt(dx * dx + dy * dy);
+            // Cobertura: 1 dentro, 0 fuera, y un pixel de rampa en cada borde.
+            f32 a = std::max(0.0f, std::min(1.0f, r_out - d + 0.5f));
+            if (r_in > 0.0f) a = std::min(a, std::max(0.0f, std::min(1.0f, d - r_in + 0.5f)));
+            u8* px = &rgba[(static_cast<size_t>(y) * size + x) * 4];
+            px[0] = px[1] = px[2] = 255;
+            px[3] = static_cast<u8>(std::round(a * 255.0f));
+        }
+    }
+    return create_texture_from_rgba(name, size, size, rgba.data(), true);
+}
+
 // Textura desde pixeles ya calculados en CPU. Reutiliza el id si el nombre ya existe:
 // ver el comentario de la declaracion (el mapa se regenera muchas veces por partida).
 u32 Renderer::create_texture_from_rgba(const char* name, int w, int h, const u8* rgba, bool smooth) {
@@ -288,6 +315,30 @@ void Renderer::draw_panel(Rect dst, Color tint, f32 corner) {
             if (dw[i] > 0.01f && dh[j] > 0.01f)
                 draw_sprite_rect(panel_tex, {so[i], so[j], ss[i], ss[j]},
                                  {dx[i], dy[j], dw[i], dh[j]}, tint);
+}
+
+void Renderer::draw_disc(Vec2 center, f32 radius, Color color) {
+    if (radius <= 0.0f) return;
+    if (disc_tex == TEXTURE_NONE) {
+        draw_rect({center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
+        return;
+    }
+    const TextureEntry* t = get_texture(disc_tex);
+    const f32 tw = t ? static_cast<f32>(t->width) : 64.0f;
+    draw_sprite_rect(disc_tex, {0.0f, 0.0f, tw, tw},
+                     {center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
+}
+
+void Renderer::draw_ring(Vec2 center, f32 radius, Color color) {
+    if (radius <= 0.0f) return;
+    if (ring_tex == TEXTURE_NONE) {
+        draw_rect_outline({center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
+        return;
+    }
+    const TextureEntry* t = get_texture(ring_tex);
+    const f32 tw = t ? static_cast<f32>(t->width) : 64.0f;
+    draw_sprite_rect(ring_tex, {0.0f, 0.0f, tw, tw},
+                     {center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
 }
 
 void Renderer::shutdown() {

@@ -654,14 +654,17 @@ Entity spawn_npc_figure(ECSWorld& world, Vec2 position, u32 npc_texture, int cel
     world.transforms[e].position = position;
     world.transforms[e].facing   = Direction::Down;
 
-    // Animation solo para que collect_draws la trate como figura (sombra y orden por pies);
-    // system_animation no corre en Dialogue, asi que la celda horneada aqui es la que se ve.
+    // Animation solo para que collect_draws la trate como figura (sombra y orden por pies).
     world.add(e, Component::Animation);
     play_anim(world.animations[e], AnimID::IdleDown, true);
 
+    // npcs.png es UNA fila de 16 personajes distintos, no una hoja de animacion: si
+    // system_animation avanzara la celda (y corre, durante el paseo cinematico de las
+    // aperturas), el PNJ cambiaria de persona cada 0,15 s. fixed_src la clava.
     world.add(e, Component::Sprite);
     world.sprites[e].texture_id = npc_texture;
     world.sprites[e].src_rect   = Npc::src(cell);
+    world.sprites[e].fixed_src  = true;
     world.sprites[e].z_order    = 5;
     return e;
 }

@@ -180,6 +180,16 @@ const char* tutorial_choice_title() {
 // La puerta de salida va SIEMPRE en el centro del muro norte y nace cerrada:
 // Engine::update_tutorial la abre al cerrarse el ultimo paso de la sala.
 
+// Blancos de tiro de la sala 1, en fila y a la vista desde la entrada. Cinco: dos para el
+// cayado, una para la honda y las de los lados para quien falle. Solo sobre suelo libre, para
+// que replantar no pise nada de lo que haya en la sala.
+void tutorial_plant_jars(Room& room) {
+    for (int i = 0; i < 5; i++) {
+        const int tx = 4 + i * 3;
+        if (room.tiles[5][tx] == TileType::Floor) room.tiles[5][tx] = TileType::Jar;
+    }
+}
+
 void tutorial_open_north_door(Room& room) {
     room.tiles[0][room.tiles_w / 2] = TileType::Doorway;
     room.has_doorway = true;
@@ -218,9 +228,7 @@ void tutorial_build_room(Room& room, int index, int chapter) {
         // justo esas dos filas, y tapaba entero lo que el paso manda mirar (se vio en la
         // primera captura: la tinaja del centro y el altar desaparecian detras del panel).
         if (index == 0) {
-            // Blancos de tiro, en fila y a la vista desde la entrada. Cinco: dos para el
-            // cayado, una para la honda y las de los lados para quien falle.
-            for (int i = 0; i < 5; i++) room.tiles[5][4 + i * 3] = TileType::Jar;
+            tutorial_plant_jars(room);
         } else {
             // El altar del paso de la oracion. DESCENTRADO a proposito: en la columna del
             // profeta cae justo en la linea recta entre donde nace y la puerta del norte, y

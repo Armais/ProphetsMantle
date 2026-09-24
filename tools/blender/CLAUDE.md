@@ -19,7 +19,8 @@ tools/
                             (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
                             rings (helmet band, hood cowl) and soft cap edges.
                             tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=64,
-                            TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
+                            TILE_ROWS=11 (rows 9-10 = los diez iconos de milagro, `mir_cuervo`..`mir_manto`,
+                            builders en el dict SMALL, uno por MiracleID); `only=[...]` patches the existing tiles.png instead of blanking it);
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
                             top-down FLAT cells, DETAILS = transparent top-down decals, SMALL/PROPS/PROPS_TALL = 30 deg.
                             cine.py renders the 8 prologue panels AND the 10 chapter-intro

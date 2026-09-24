@@ -1,83 +1,94 @@
-# MANTLE cap. 8 (apertura) - La sunamita. El latido esta, tranquilo y entero:
-# aqui el nino todavia vive. Menor melodico, sin campanas de vuelta.
-# 16 compases a 68 BPM = 56,4706 s.
-use_bpm 68
+# MANTLE cap. 8 - DIALOGO Y CARTA DE APERTURA (la sunamita).
+# "Haganos un pequeno aposento de paredes". Pieza propia: cuerda frotada
+# (:dsaw) sobre acordes de :tri, sin percusion y mucho mas lenta que el tema
+# que va de ney agudo con latido. Menor melodico en RE.
+#
+# Periodo: 16 compases de 4/4 a 80 BPM = 48,000 s exactos.
+use_bpm 80
 
-rt = 50
+rt = 50            # RE3
 s  = sc(:melmin)
-prog = [[0, 2, 4], [3, 5, 0], [1, 3, 5], [4, 6, 1]]
-s1 = [0, nil, 2, nil, 4, nil, 2, nil]
-s2 = [4, nil, 3, 2, nil, 1, nil, nil]
-s3 = [2, nil, 4, 5, nil, 4, 2, nil]
 
-live_loop :heart do
-  sd 2801
-  16.times do |bar|
-    a = (bar >= 3 && bar < 14) ? 0.24 : 0.13
-    pk(:drum_bass_soft, amp: a, rate: 0.55, pan: 0.0)
-    sleep 2
-    pk(:drum_bass_soft, amp: a * 0.6, rate: 0.55, pan: 0.0)
-    sleep 2
-  end
-end
+prog = [[0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1]]
 
-with_fx :reverb, room: 0.9, mix: 0.46 do
-  live_loop :pads do
-    sd 2802
-    use_synth :prophet
-    use_synth_defaults attack: 2.0, sustain: 2.4, release: 2.0, cutoff: 102
+d1 = [0, nil, nil, 2, nil, nil, 4, nil]
+d2 = [4, nil, nil, 5, nil, 4, nil, nil]
+d3 = [6, nil, 5, nil, 4, nil, 2, nil]
+d4 = [2, nil, nil, nil, 0, nil, nil, nil]
+
+with_fx :reverb, room: 0.88, mix: 0.5 do
+  live_loop :fondo do
+    sd 3381
+    use_synth :tri
+    use_synth_defaults attack: 1.6, sustain: 1.5, release: 2.2, cutoff: 86, res: 0.1
     16.times do |bar|
-      ch = prog[bar % 4].map { |d| dg(rt, s, d, 0) }
-      hc(ch, amp: (bar >= 2 && bar < 14) ? 0.19 : 0.07, pan: -0.32)
-      hc(ch.map { |n| n + 12 }, amp: 0.07, pan: 0.38) if bar >= 4
+      a = case bar
+          when 0..2   then 0.11
+          when 14, 15 then 0.09
+          when 9..13  then 0.14
+          else 0.17
+          end
+      hc(prog[bar % 4].map { |d| dg(rt, s, d, 0) }, amp: a, pan: 0.32)
       sleep 4
     end
   end
-end
 
-live_loop :bass do
-  sd 2803
-  use_synth :bass_foundation
-  use_synth_defaults attack: 0.08, sustain: 3.0, release: 1.2, amp: 0.30
-  16.times do |bar|
-    hp(dg(rt, s, prog[bar % 4][0], -1)) if bar >= 2 && bar % 2 == 0
-    sleep 4
-  end
-end
-
-with_fx :reverb, room: 0.92, mix: 0.5 do
-  live_loop :voice do
-    sd 2804
-    use_synth :recorder
-    use_synth_defaults attack: 0.22, sustain: 0.4, release: 0.9,
-                       vibrato_rate: 4.6, vibrato_depth: 0.09, pan: -0.16
+  live_loop :bajo do
+    sd 3382
+    use_synth :subpulse
+    use_synth_defaults attack: 0.3, sustain: 2.2, release: 1.2
+    raiz = [0, 5, 3, 4]
     16.times do |bar|
-      if bar >= 5 && bar < 13
-        ph(rt, s, [s1, s2, s1, s3, s2, s1, s3, s1][bar - 5], 0.5, 1, 0.34, {})
+      hp(dg(rt, s, raiz[bar % 4], 0) - 12, amp: bar < 3 ? 0.11 : 0.16)
+      sleep 4
+    end
+  end
+
+  live_loop :cuerda do
+    sd 3383
+    use_synth :dsaw
+    use_synth_defaults attack: 0.45, sustain: 0.55, release: 1.3, detune: 0.07,
+                       cutoff: 92, res: 0.18
+    skip 3
+    [d1, d2, d3, d4, d2, d3].each_with_index do |pat, i|
+      ph(rt, s, pat, 0.5, 1, [0.24, 0.27, 0.30, 0.22, 0.26, 0.20][i], pan: -0.2)
+    end
+    skip 7
+  end
+
+  live_loop :candil do
+    sd 3384
+    use_synth :kalimba
+    use_synth_defaults release: 1.2
+    16.times do |bar|
+      if bar >= 9 && bar <= 13
+        [0, 2, 1, 2].each_with_index do |i, k|
+          hp(dg(rt, s, prog[bar % 4][i], k == 3 ? 3 : 2), amp: 0.24 - k * 0.03,
+             pan: 0.2 + k * 0.1)
+          sleep 1
+        end
+      elsif bar == 5
+        hp(dg(rt, s, 0, 4), amp: 0.16, pan: -0.2); sleep 4
+      elsif bar == 15
+        hp(dg(rt, s, 0, 3), amp: 0.11, pan: 0.15); sleep 4
       else
         sleep 4
       end
     end
   end
-end
-
-with_fx :echo, phase: 1.0, decay: 3, mix: 0.24 do
-  live_loop :bell do
-    sd 2805
+  # Campana: con la kalimba sola la pista se queda por debajo del 2% sobre
+  # 2 kHz y el centroide se hunde en los graves.
+  live_loop :brillo do
+    sd 3385
     use_synth :pretty_bell
-    use_synth_defaults release: 2.0, pan: 0.35
-    16.times do |bar|
-      hp(dg(rt, s, [0, 4, 2, 5][(bar / 2) % 4], 2),
-         amp: (bar >= 6 && bar < 14) ? 0.12 : 0.06) if bar % 2 == 0
-      sleep 4
-    end
-  end
-end
-
-live_loop :air do
-  sd 2806
-  16.times do |bar|
-    pk(:hat_cab, amp: (bar >= 4 && bar < 14) ? 0.04 : 0.018, rate: 1.4, pan: 0.46)
+    use_synth_defaults attack: 0.01, release: 2.6, cutoff: 118
     sleep 4
+    hp(dg(rt, s, 0, 3), amp: 0.20, pan: -0.3); sleep 8
+    hp(dg(rt, s, 4, 3), amp: 0.15, pan: 0.25); sleep 12
+    hp(dg(rt, s, 2, 4), amp: 0.24, pan: 0.1);  sleep 8
+    hp(dg(rt, s, 0, 3), amp: 0.16, pan: -0.2); sleep 16
+    hp(dg(rt, s, 4, 4), amp: 0.18, pan: 0.15); sleep 8
+    hp(dg(rt, s, 0, 3), amp: 0.11, pan: 0.0);  sleep 8
   end
+
 end

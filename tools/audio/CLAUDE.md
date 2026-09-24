@@ -52,7 +52,10 @@ Guion: `scripts/audio_check.txt` (menu -> prologo -> combate -> muertes con soni
 Las pistas NO salen de `gen_audio.py` (eso quedo para SFX y voz): salen de Sonic Pi.
 **Una partitura por pista, 27 en total**: siete globales (`main_theme`, `menu`, `boss_theme`,
 `victory`, `death`, `ascension`, `prologue`) y **dos por capitulo** — `capNN.ogg` para jugar y
-`capNN_intro.ogg`, el mismo tema desnudo, para la cinematica y el dialogo de apertura. Antes
+`capNN_intro.ogg` para el dialogo y la carta de apertura, y `capNN_cine1.ogg` /
+`capNN_cine2.ogg`, una por estampa de la cinematica. Dentro de un capitulo **ningun tramo
+repite fondo ni solista**: cuando `capNN_intro` era el tema desnudo (misma melodia, mismo
+ney) el jugador oia la misma pista desde el menu hasta el primer enemigo. Antes
 habia diez pistas para diez capitulos repartidas entre DOS temas de ambiente.
 
 **Flujo**: `record.py boot` (proceso de larga vida; sin su keep-alive el daemon se suicida en
@@ -86,7 +89,7 @@ las diez viejas da **0/10 en verde**):
 - **Sonoridad comun**: `ebur128` mide y se normaliza a **-18 LUFS** con techo en -1,5 dBFS. Antes
   se igualaba el RMS contra `music_backup/`, que solo existe para las diez viejas: cualquier
   pista nueva salia con ganancia 1,0 y a otro volumen. Dos de las viejas **clipean** (pico 1,02).
-- **Encode a 32 kHz `-q:a 3`**: con 27 pistas, `assets/` crece ~15 MB en vez de ~26.
+- **Encode a 32 kHz `-q:a 3`**: con 47 pistas, `assets/` crece ~18 MB en vez de ~31.
 
 **Los WAV de `tools/audio/sonicpi/tmp/` NO se borran** (723 MB, fuera del repo por
 .gitignore). Son la grabacion cruda de cada pista —2 periodos en PCM 16 bits, 176 KB/s— y con
@@ -97,25 +100,51 @@ en minutos: sonoridad, brillo, filtros y crossfade. Solo hay que regrabar si cam
 **El periodo de cada pista** (segundo argumento de `capture` y de `reprocess`; si se falla, el
 bucle no cierra):
 
-| pista | periodo | apertura | periodo |
+| capitulo | tema (jugando) | apertura (dialogo y carta) | estampa A | estampa B |
+|---|---|---|---|---|
+| cap01 | 96 | 48 | 16 | 12 |
+| cap02 | 87.272727 | 53.333333 | 16 | 13.3333 |
+| cap03 | 80 | 48 | 16 | 10.6667 |
+| cap04 | 128 | 48 | 16 | 16 |
+| cap05 | 83.478261 | 48 | 16 | 10.6667 |
+| cap06 | 76.8 | 48 | 16 | 10 |
+| cap07 | 80 | 48 | 16 | 10 |
+| cap08 | 101.052632 | 48 | 16 | 12 |
+| cap09 | 73.846154 | 48 | 16 | 10 |
+| cap10 | 68.571429 | 48 | 16 | 10 |
+
+Las de cinematica son cortas a proposito: la estampa A dura 10,5 s en pantalla y la B 9 s
+(`ui/cinematic.cpp`), asi que **del bucle solo se oye el arranque**. Lo que tenga que pasar,
+que pase en los primeros diez segundos.
+
+| global | periodo | global | periodo |
 |---|---|---|---|
-| cap01 | 96 | cap01_intro | 53.333333 |
-| cap02 | 87.272727 | cap02_intro | 54.857143 |
-| cap03 | 80 | cap03_intro | 50.526316 |
-| cap04 | 128 | cap04_intro | 68.571429 |
-| cap05 | 83.478261 | cap05_intro | 48 |
-| cap06 | 76.8 | cap06_intro | 45.714286 |
-| cap07 | 80 | cap07_intro | 45.714286 |
-| cap08 | 101.052632 | cap08_intro | 56.470588 |
-| cap09 | 73.846154 | cap09_intro | 43.636364 |
-| cap10 | 68.571429 | cap10_intro | 41.739130 |
 | main_theme | 96 | menu | 90 |
 | boss_theme | 58.181818 | victory | 31.304348 |
 | death | 48 | ascension | 75.789474 |
 | prologue | 87.272727 | | |
 
-**Dos trampas que costaron varias tomas** y que conviene mirar ANTES de grabar:
+**Cuatro trampas que costaron varias tomas** y que conviene mirar ANTES de grabar:
 
+- **Solo `:blade` tiene vibrato.** `:dsaw`, `:saw`, `:tri`, `:pluck` y `:recorder` aceptan
+  `vibrato_rate` y `vibrato_depth` sin dar ningun error y los IGNORAN: no existen en su
+  synthdef. Comprobar los opts de verdad es mirar el `.scsyndef` compilado
+  (`etc/synthdefs/compiled/sonic-pi-<synth>.scsyndef`), donde los nombres de los argumentos
+  estan en texto plano. `:dsaw` tampoco tiene `res`. Para un violin, la unica via es doblar
+  `:blade` (vibrato) con `:dsaw` (el rascado del arco) y ligar las notas con
+  `control <nodo>, note:` + `note_slide`, que es lo que hay en `prologue.rb`.
+- **Un `rate:` bajo en un sample lo manda a los graves.** `ambi_choir` a `rate: 0.38` suena
+  mas de una octava por debajo y cuenta entero como energia grave; en `cap04_cine1` el coro y
+  el drone de `:hollow` se llevaban el 72% de la mezcla y la pista se quedaba en el 0,9% de
+  aire por muchas campanas que tuviera encima. Para que un coro haga de coro, `rate` entre
+  0,75 y 1,0.
+- **Un drone gana siempre a una campana.** El drone suena los cuatro compases (sustain 5 +
+  release 4) y la campana son toques sueltos: en energia integrada, que es como mide el
+  analizador, no hay color. Si una pista de textura no da el gate de aire, lo que hay que
+  bajar es el drone, no subir la campana.
+- **La `:kalimba` no sirve de aire.** Concentra casi toda su energia en la fundamental, asi
+  que en la octava 2 no pasa de los 2 kHz y la pista se queda en el 0-2% por mucho que la
+  oigas tintinear. En la 3 ya cuenta, y si el gate aprieta, detras va una `pretty_bell`.
 - **Una nota por debajo de 55 Hz no existe**: el paso alto de bus se la come. `cap04` tenia
   su drone en la nota 37 (46 Hz) y su bajo en la 25 (35 Hz), y la pista salia con el 93% de
   la energia en los medios. Con tonicas graves (DO#3 y similares) el bajo va a `-1`, no a `-2`.
@@ -129,6 +158,13 @@ de 6 dB. Lo que deja escalon son las capas de cola larga al cruzar el bucle (el 
 el final no. Aun asi, un escalon grande se arregla en la PARTITURA, igualando el nivel de la
 entrada y el de la salida: si el bucle empieza en una seccion llena y acaba en una vacia, se
 oye a cada vuelta.
+
+**Antes de grabar, `python check_names.py`**: comprueba la SINTAXIS de las 47 partituras con
+el `ruby -c` que trae Sonic Pi (no hace falta que el daemon este arrancado) y que los nombres
+de sample y de synth existen. Una partitura con un parentesis mal puesto no da error visible:
+el harness graba dos periodos de silencio o, peor, la cola de la pista anterior, y los
+numeros que salen no dicen nada. Lo que NO comprueba son los opts de cada synth, por la
+trampa de arriba.
 
 **El gate es `analyze.py`** (lo llama `capture` solo): rango dinamico, costura, hueco de 2 s,
 correlacion L/R, centroide, reparto por bandas, **energia sobre 2 kHz** y densidad de ataques

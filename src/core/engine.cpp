@@ -1579,6 +1579,25 @@ void Engine::tutorial_setup_step() {
                      ItemComponent::Pickup::Offering, 3.0f);
     }
 
+    // Las tinajas del paso de atacar, REPLANTADAS. La sala 1 solo trae cinco y el paso pide
+    // romper dos: quien se entretiene a tiros durante el paso de moverse llegaba aqui con
+    // cuatro o cinco rotas y el objetivo ya era inalcanzable. Ningun paso se cierra solo, asi
+    // que eso colgaba el tutorial para siempre.
+    if (goal == TutorialGoal::Attack) {
+        tutorial_plant_jars(current_room_data);
+        // Y el recuento se rehace DESPUES de sembrar: el bucle de update_tutorial fija
+        // prev_props antes de llamar aqui, asi que sin esto la replantacion dejaria el
+        // contador desfasado y el paso pediria romper mas tinajas de la cuenta.
+        tutorial.prev_props = tutorial_count_props(current_room_data);
+    }
+
+    // La pocion del paso del consumible, por lo mismo: solo hay una carga, se da al arrancar
+    // y quien se la bebio antes de que se la pidieran dejaba el paso sin nada que usar. La
+    // guarda evita apilar una segunda carga a quien todavia la lleve.
+    if (goal == TutorialGoal::Consumable && player.consumable_slot == UINT32_MAX) {
+        if (const ItemDef* d = item_registry.get(9)) player.grant_item(world, faith, *d, false);
+    }
+
     // El arquero del paso del dash: dispara de verdad, que es lo que hace que esquivar
     // signifique algo. Y el mordisco que te lleva deja el paso siguiente de la sala (el
     // consumible) con algo que curar.
@@ -2363,11 +2382,13 @@ void Engine::update_music() {
             // El prologo tiene el suyo; el Ascenso conserva el que ya suena desde
             // trigger_ascension (cortarlo justo cuando aparece el carro seria lo
             // contrario de una cinematica). La cinematica de capitulo estrena el
-            // tema de ese capitulo: es la primera vez que el jugador lo oye, y
-            // entra desnudo antes de sonar entero al empezar a jugar.
+            // tema de ese capitulo: es la primera vez que el jugador lo oye.
             if      (cine_then == CineThen::MainMenu)        want = MusicID::Prologue;
             else if (cine_then == CineThen::FinishAscension) want = MusicID::Ascension;
-            else want = chapter_intro(state.current_chapter);
+            // Las dos estampas del capitulo estrenan pista cada una: la A es la
+            // estampa y el versiculo, la B trae el pulso y el objetivo.
+            else want = (cinematic.scene <= 0) ? chapter_cine_a(state.current_chapter)
+                                               : chapter_cine_b(state.current_chapter);
             break;
         case GameScene::MainMenu:   want = MusicID::MainTheme; break;
         case GameScene::Playing:
@@ -2378,6 +2399,11 @@ void Engine::update_music() {
             const Room* zone = zone_ptr();
             bool boss_room = current_room_data.type == RoomType::Zone && zone && zone->arena_sealed;
             if (boss_room) want = MusicID::BossTheme;
+            // La escena guionizada de APERTURA se juega antes de la cinematica y
+            // sonaba con el tema de juego, o sea el capitulo empezaba con su
+            // musica ya gastada. Lleva la de apertura, como la carta.
+            else if (scene_id >= 0 && scene_id == Scene::opening_of(state.current_chapter))
+                want = chapter_intro(state.current_chapter);
             else want = chapter_theme(state.current_chapter);
             break;
         }

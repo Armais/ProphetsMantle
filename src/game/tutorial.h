@@ -104,6 +104,11 @@ int tutorial_secrets_opened(const Room& room);
 // tres salas son identicas en todas las partidas, como el resto del mundo del juego.
 void tutorial_build_room(Room& room, int index, int chapter);
 
+// Siembra las cinco tinajas de la sala 1 en las casillas libres. La llama `tutorial_build_room`
+// al montar la sala y `tutorial_setup_step` al abrirse el paso de atacar, porque quien rompio
+// las tinajas ANTES de que se las pidieran dejaba el paso imposible (no hay timeout).
+void tutorial_plant_jars(Room& room);
+
 // Abre la puerta del muro norte (el ultimo paso de la sala se ha cerrado).
 void tutorial_open_north_door(Room& room);
 

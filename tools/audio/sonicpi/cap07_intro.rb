@@ -1,79 +1,80 @@
-# MANTLE cap. 7 (apertura) - El aceite. La casa vacia antes del milagro: el
-# salterio solo y una vasija (dos notas de kalimba), sin palmas. El arpegio se
-# queda en dos voces a proposito: las vasijas todavia no se han llenado.
-# 16 compases a 84 BPM = 45,7143 s.
-use_bpm 84
+# MANTLE cap. 7 - DIALOGO Y CARTA DE APERTURA (el aceite).
+# "Tu sierva ninguna cosa tiene en casa, sino una vasija de aceite". Pieza
+# propia: voz tenida (:blade) sobre acordes de :tri, sin percusion y a la
+# mitad de velocidad que el tema, que va de salterio y laud a 96 BPM.
+# Mayor en SOL.
+#
+# Periodo: 16 compases de 4/4 a 80 BPM = 48,000 s exactos.
+use_bpm 80
 
-rt = 55
+rt = 55            # SOL3
 s  = sc(:major)
-prog = [[0, 2, 4], [3, 5, 0], [4, 6, 1], [0, 2, 4]]
-a1 = [0, nil, 2, 4, nil, 2, 0, nil]
-a2 = [4, nil, 2, 1, nil, 2, nil, nil]
-a3 = [2, 4, nil, 5, nil, 4, 2, nil]
 
-with_fx :reverb, room: 0.66, mix: 0.34 do
-  live_loop :room_pad do
-    sd 2701
-    use_synth :prophet
-    use_synth_defaults attack: 1.6, sustain: 2.2, release: 1.8, cutoff: 104
+prog = [[0, 2, 4], [5, 0, 2], [3, 5, 0], [4, 6, 1]]
+
+b1 = [0, nil, nil, 2, nil, nil, 4, nil]
+b2 = [4, nil, nil, 2, nil, 1, nil, nil]
+b3 = [5, nil, 4, nil, 2, nil, 0, nil]
+b4 = [2, nil, nil, nil, 0, nil, nil, nil]
+
+with_fx :reverb, room: 0.84, mix: 0.46 do
+  live_loop :fondo do
+    sd 3371
+    use_synth :tri
+    use_synth_defaults attack: 1.4, sustain: 1.5, release: 2.0, cutoff: 88, res: 0.1
     16.times do |bar|
-      ch = prog[bar % 4].map { |d| dg(rt, s, d, 0) }
-      hc(ch, amp: (bar >= 2 && bar < 14) ? 0.16 : 0.07, pan: -0.3)
-      hc(ch.map { |n| n + 12 }, amp: 0.06, pan: 0.36) if bar >= 4
+      a = case bar
+          when 0..2   then 0.11
+          when 14, 15 then 0.09
+          when 9..13  then 0.14
+          else 0.17
+          end
+      hc(prog[bar % 4].map { |d| dg(rt, s, d, 0) }, amp: a, pan: -0.3)
       sleep 4
     end
   end
-end
 
-live_loop :bass do
-  sd 2702
-  use_synth :bass_foundation
-  use_synth_defaults attack: 0.06, sustain: 2.4, release: 1.0, amp: 0.28
-  16.times do |bar|
-    hp(dg(rt, s, prog[bar % 4][0], -1)) if bar >= 2 && bar % 2 == 0
-    sleep 4
-  end
-end
-
-with_fx :echo, phase: 0.75, decay: 3, mix: 0.22 do
-  live_loop :oil do
-    sd 2703
-    use_synth :kalimba
-    use_synth_defaults release: 1.2, pan: 0.28
+  live_loop :bajo do
+    sd 3372
+    use_synth :subpulse
+    use_synth_defaults attack: 0.25, sustain: 2.0, release: 1.1
+    raiz = [0, 5, 3, 4]
     16.times do |bar|
-      ch = prog[bar % 4]
-      if bar >= 4
-        hp(dg(rt, s, ch[0], 1), amp: 0.15)
-        sleep 2
-        hp(dg(rt, s, ch[2], 1), amp: 0.11)
-        sleep 2
+      hp(dg(rt, s, raiz[bar % 4], 0) - 12, amp: bar < 3 ? 0.15 : 0.23)
+      sleep 4
+    end
+  end
+
+  live_loop :voz do
+    sd 3373
+    use_synth :blade
+    use_synth_defaults attack: 0.5, sustain: 1.0, release: 1.6, cutoff: 108,
+                       vibrato_rate: 4.2
+    skip 3
+    [b1, b2, b3, b4, b2, b3].each_with_index do |pat, i|
+      ph(rt, s, pat, 0.5, 2, [0.22, 0.25, 0.28, 0.20, 0.24, 0.18][i], pan: 0.15)
+    end
+    skip 7
+  end
+
+  live_loop :campana do
+    sd 3374
+    use_synth :pretty_bell
+    use_synth_defaults attack: 0.01, release: 2.2, cutoff: 118
+    16.times do |bar|
+      if bar >= 9 && bar <= 13
+        [0, 2, 1, 2].each_with_index do |i, k|
+          hp(dg(rt, s, prog[bar % 4][i], k == 3 ? 3 : 2), amp: 0.22 - k * 0.03,
+             pan: -0.2 - k * 0.08)
+          sleep 1
+        end
+      elsif bar == 4
+        hp(dg(rt, s, 0, 3), amp: 0.16, pan: 0.25); sleep 4
+      elsif bar == 15
+        hp(dg(rt, s, 0, 2), amp: 0.11, pan: -0.15); sleep 4
       else
-        hp(dg(rt, s, ch[0], 1), amp: 0.07)
         sleep 4
       end
     end
-  end
-end
-
-with_fx :reverb, room: 0.68, mix: 0.32 do
-  live_loop :psaltery do
-    sd 2704
-    use_synth :pluck
-    use_synth_defaults sustain: 0.25, release: 0.9, coef: 0.32, pan: -0.24
-    16.times do |bar|
-      if bar >= 5 && bar < 13
-        ph(rt, s, [a1, a2, a1, a3, a2, a1, a3, a1][bar - 5], 0.5, 0, 0.34, {})
-      else
-        sleep 4
-      end
-    end
-  end
-end
-
-live_loop :air do
-  sd 2705
-  16.times do |bar|
-    pk(:hat_cab, amp: bar >= 4 ? 0.04 : 0.018, rate: 1.45, pan: 0.44)
-    sleep 4
   end
 end

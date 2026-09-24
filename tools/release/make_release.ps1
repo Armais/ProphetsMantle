@@ -26,14 +26,21 @@
 param(
   [string]$NotesFile = '',
   [string]$Name      = '',
-  [string]$Apk       = ''
+  [string]$Apk       = '',
+  # Repo destino. Por defecto el del codigo, que es PRIVADO: el enlace solo lo
+  # abre quien tenga acceso al repositorio. Con -Repo mantle-builds -CreatePublic
+  # se sube a un repo PUBLICO aparte, que es como se le manda el APK a alguien de
+  # fuera sin ensenarle el codigo.
+  [string]$Owner     = 'Armais',
+  [string]$Repo      = 'ProphetsMantle',
+  [switch]$CreatePublic
 )
 
 $ErrorActionPreference = 'Stop'
 $repoDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Apk) { $Apk = Join-Path $repoDir 'android\app\build\outputs\apk\debug\app-debug.apk' }
-$owner = 'Armais'
-$repo  = 'ProphetsMantle'
+$owner = $Owner
+$repo  = $Repo
 
 if (-not (Test-Path $Apk)) { Write-Output "[ERROR] no hay APK en $Apk (compila con build_android.bat)"; exit 1 }
 
@@ -58,17 +65,37 @@ Write-Output ("credencial: usuario {0}, token de {1} caracteres" -f $user, $toke
 
 $h = @{ Authorization = "Bearer $token"; 'User-Agent' = 'mantle-release'; Accept = 'application/vnd.github+json' }
 
-$info = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo" -Headers $h
+$info = $null
+try {
+  $info = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo" -Headers $h
+} catch {
+  if (-not $CreatePublic) {
+    Write-Output ("[ERROR] el repo {0}/{1} no existe (usa -CreatePublic para crearlo)" -f $owner, $repo)
+    exit 1
+  }
+}
+if (-not $info) {
+  # auto_init crea la rama por defecto con un README: sin ninguna rama, la API se
+  # niega a crear un release.
+  $new = @{ name = $repo; private = $false; auto_init = $true
+            description = 'Builds de MANTLE para probar en el movil (el codigo vive en otro repo, privado)'
+          } | ConvertTo-Json
+  $info = Invoke-RestMethod -Method Post -Uri 'https://api.github.com/user/repos' -Headers $h -Body $new -ContentType 'application/json'
+  Write-Output ("repo PUBLICO creado: {0}" -f $info.html_url)
+}
 Write-Output ("repo: {0}  visibilidad={1}" -f $info.full_name, $info.visibility)
 
 # --- release ------------------------------------------------------------------
 $body = @{
-  tag_name         = $tag
-  target_commitish = $sha
-  name             = $Name
-  prerelease       = $true
-  body             = $notes
-} | ConvertTo-Json -Depth 4
+  tag_name   = $tag
+  name       = $Name
+  prerelease = $true
+  body       = $notes
+}
+# El tag se ancla al commit del codigo SOLO si el release va al repo del codigo: en
+# el repo de builds ese sha no existe y la API responde 422.
+if ($repo -eq 'ProphetsMantle') { $body.target_commitish = $sha }
+$body = $body | ConvertTo-Json -Depth 4
 
 try {
   $rel = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$owner/$repo/releases" -Headers $h -Body $body -ContentType 'application/json'

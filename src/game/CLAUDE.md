@@ -251,9 +251,22 @@ se re-discuten. Lo que hay que saber antes de tocarlo:
   `update_room_state` está guardada contra `tutorial.active`: sin esa guarda, caminar sobre él
   en cualquiera de los últimos pasos lanzaba el epílogo narrado del capítulo 1 y
   `advance_chapter()` con el tutorial todavía puesto.
-- **Cada paso de milagro repone la fe entera** (`tutorial_setup_step`). No es un lujo desde que
-  no hay relojes: Fuego del Cielo es Tier 3 (pide 50) y cuesta 20, así que llegar ahí con la fe
-  mordida por el arquero dejaba el paso IMPOSIBLE y el tutorial colgado para siempre.
+- **`tutorial_setup_step` repone lo que el paso que se abre necesita EN EL MUNDO**, y eso no es
+  un lujo desde que no hay relojes: un paso que mide un FLANCO de algo que el jugador pudo
+  gastarse antes de que se lo pidieran deja el tutorial colgado PARA SIEMPRE. Van tres casos,
+  y los tres por la misma razón:
+  - **La fe, entera, en cada paso de milagro**: Fuego del Cielo es Tier 3 (pide 50) y cuesta
+    20, así que llegar ahí con la fe mordida por el arquero dejaba el paso IMPOSIBLE.
+  - **Las tinajas del paso de atacar** (2026-09-15, del feedback del tester): la sala 1 solo
+    trae cinco y el paso pide romper dos, así que quien se entretiene a tiros durante el paso
+    de moverse llegaba con cuatro o cinco rotas. Se replantan con `tutorial_plant_jars` — el
+    mismo helper que usa `tutorial_build_room`, para no tener las coordenadas en dos sitios —
+    y **acto seguido se REHACE `tutorial.prev_props`**: el bucle de `update_tutorial` lo fija
+    ANTES de llamar aquí, así que sin ese recálculo el paso pediría romper más de la cuenta.
+  - **La poción del paso del consumible**: solo hay una carga, dada al arrancar. Se repone
+    solo si `consumable_slot == UINT32_MAX`, para no apilar una segunda a quien no se la haya
+    bebido. Con el slot repuesto, el botón táctil USAR vuelve a dibujarse solo.
+  Guion: `scripts/tutorial_gastado_check.txt`.
 - **Al terminar salen dos páginas de cierre** (`story_tutorial_outro`, `ui/story.h`): la vida,
   la fe y sus grados, las ofrendas; y el camino que queda, con el objetivo del capítulo 1 al
   pie. Son además la pantalla que faltaba entre el tutorial y el diálogo de Acab y Jezabel.

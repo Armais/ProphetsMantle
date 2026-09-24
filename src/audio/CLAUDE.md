@@ -8,16 +8,32 @@ La API es la de SDL3_mixer 3.1.2 (`MIX_*` en mayusculas, NO el `Mix_*` de SDL2):
 "Important: SDL3 API differences from SDL2" en el `CLAUDE.md` de la raiz. `Audio::load_*`
 cae `.ogg` -> `.wav`.
 
-## Musica: dos pistas por capitulo
+## Musica: cuatro pistas por capitulo
 
-`MusicID` tiene **siete globales y dos bloques CONTIGUOS de diez** (`ChapterTheme1..10` y
-`ChapterIntro1..10`). Los bloques se indexan con aritmetica desde el numero de capitulo
-—`chapter_theme(c)` / `chapter_intro(c)`, en `audio.h`—, igual que las variantes
-consecutivas de SFX: **no los reordenes ni metas un ID en medio**.
+`MusicID` tiene **siete globales y cuatro bloques CONTIGUOS de diez**
+(`ChapterTheme1..10`, `ChapterIntro1..10`, `ChapterCineA1..10`, `ChapterCineB1..10`).
+Los bloques se indexan con aritmetica desde el numero de capitulo —`chapter_theme(c)`,
+`chapter_intro(c)`, `chapter_cine_a(c)`, `chapter_cine_b(c)`, en `audio.h`—, igual que
+las variantes consecutivas de SFX: **no los reordenes ni metas un ID en medio**.
 
-- `ChapterTheme` suena jugando; `ChapterIntro` es el MISMO tema desnudo y suena en la
-  cinematica de capitulo y en su carta de apertura. Lo elige `Engine::update_music`
-  (`core/engine.cpp`) leyendo `state.current_chapter`.
+La apertura de un capitulo se oye en cuatro tramos seguidos y **cada uno estrena pista**:
+
+| tramo | pista | fichero |
+|---|---|---|
+| dialogo de apertura (escena guionizada) | `ChapterIntro` | `capNN_intro.ogg` |
+| cinematica, estampa A (rotulo y versiculo) | `ChapterCineA` | `capNN_cine1.ogg` |
+| cinematica, estampa B (narracion y objetivo) | `ChapterCineB` | `capNN_cine2.ogg` |
+| carta de apertura y a jugar | `ChapterIntro` / `ChapterTheme` | `capNN_intro.ogg` / `capNN.ogg` |
+
+- Lo elige `Engine::update_music` (`core/engine.cpp`) leyendo `state.current_chapter`,
+  `cinematic.scene` (0 = estampa A) y `scene_id` (la escena guionizada de apertura).
+- **El 2026-09-14 esto eran dos pistas y sonaba a una.** `ChapterIntro` era el tema del
+  capitulo desnudo —la misma melodia, el mismo solista, la misma progresion—, las dos
+  estampas de la cinematica pedian la misma, y el dialogo de apertura sonaba ya con el
+  tema de juego. O sea: el titulo, la apertura y el capitulo, lo mismo. Si vuelves a
+  tocar esto, la regla es que **dentro de un capitulo ningun tramo repite fondo ni
+  solista**; el modo y el centro tonal si se comparten, y es lo que los hace del mismo
+  sitio.
 - Antes de esto, `update_music` mandaba `Exploration` en todo el Acto I y `EliseoCombat`
   en todo el Acto II: **diez capitulos con dos pistas**. `EliasCombat` y `Menu` se
   cargaban y no las pedia nadie. Ahora el Santuario usa `Menu` y el titulo `MainTheme`.
