@@ -64,7 +64,7 @@ wait 0.1
 say ---- estela del dash ----
 killall
 wait 0.5
-walk 1440 854
+walks 160 150
 wait 2.5
 press dash
 wait 0.08
@@ -84,13 +84,13 @@ wait 0.1
 
 # =========================================================================
 # 6. Zona continua (2026-09-10): cruzar una COSTURA entre celdas no carga nada.
-#    En el log tiene que salir "Entered cell 6 [2,1]" y NINGUNA linea "Room transition"
+#    En el log tiene que salir "Entered cell N [gx,gy]" y NINGUNA linea "Room transition"
 #    ni un "Loaded room" nuevo: el capitulo es un solo mapa, sin fundido ni salto.
 # =========================================================================
 say ---- costura: sin transicion ----
 killall
 wait 0.6
-walk 1440 690
+walks 160 -14
 wait 3.5
 shot 100_feel_costura
 wait 0.1

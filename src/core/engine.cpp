@@ -249,6 +249,21 @@ void Engine::load_sprites() {
     if (vfx_texture == TEXTURE_NONE)
         SDL_Log("WARNING: hoja de efectos ausente (assets/sprites/vfx.png) - spawn_fx no dibujara");
 
+    // Iconos propios de cada objeto y milagro (namespace Icon). Filtrado SUAVE: se pintan de
+    // 9 a 34 unidades y el vecino mas proximo los escalonaria; las celdas llevan margen
+    // transparente, asi que el sangrado entre celdas no se ve. Sin la hoja, el HUD vuelve a
+    // los iconos genericos del tileset.
+    icons_texture = renderer.load_texture("sprites/icons.png", /*smooth=*/true);
+    set_icon_sheet(icons_texture);
+    if (icons_texture == TEXTURE_NONE)
+        SDL_Log("Iconos ausentes (assets/sprites/icons.png) - HUD con los iconos del tileset");
+
+    // El Carro de Fuego del milagro (tools/blender/mantle_sprites/chariot.py). Sin la hoja,
+    // el milagro se ve como antes: la embestida y su estela de fuego.
+    chariot_texture = renderer.load_texture("sprites/chariot.png", /*smooth=*/true);
+    if (chariot_texture == TEXTURE_NONE)
+        SDL_Log("Carro ausente (assets/sprites/chariot.png) - el Carro de Fuego ira sin carro");
+
     // Retratos del Bestiario. Su ausencia NO es un fallo: el Códice se dibuja igual.
     portrait_texture = renderer.load_texture("sprites/portraits.png", /*smooth=*/true);
     if (portrait_texture == TEXTURE_NONE)
@@ -903,6 +918,9 @@ void Engine::update(f32 dt) {
 
             update_cells();
             update_room_state();
+            // Despues de update_room_state: si la pista la dio una elite o un altar, su carta
+            // ya ha cambiado la escena y el aviso espera a que se vuelva a jugar.
+            if (state.scene == GameScene::Playing) update_boss_intel();
             check_achievements();
             renderer.update_shake(dt);
 
@@ -1094,6 +1112,7 @@ void Engine::render() {
         current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
                                         npc_texture, world.time, view);
         world.collect_draws(draw_list, renderer);
+        collect_chariot_draws(draw_list);
         renderer.draw_sorted(draw_list);
 
         current_room_data.render_exit_barriers(renderer, world.time);
@@ -1721,6 +1740,7 @@ void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
                                  // re-arma aqui para cubrir tambien avanzar y Continuar
     player.map_revealed = false;   // "Ojos Abiertos" revela ESTE capitulo, no los siguientes
     player.reveal_timer = 0.0f;
+    boss_intel_shown = -1;         // el rastro del jefe se vuelve a aprender en cada capitulo
     codex_see_chapter(save.data, chapter);
     state.current_act = chapter <= Config::CHAPTERS_ACT_I ? Act::Act_I : Act::Act_II;
 
@@ -2953,9 +2973,77 @@ void Engine::build_pristine_zone(Room& zone) {
         zone.blit_cell(cell_tmp, node.grid_x, node.grid_y, i);
     }
     zone.open_seams();
-    SDL_Log("Zone built: %dx%d cells (%dx%d tiles), boss cell %d, arena %s, door %s",
+    static const char* const SIDE_NAME[4] = {"North", "South", "West", "East"};
+    SDL_Log("Zone built: %dx%d cells (%dx%d tiles), boss cell %d, arena %s (%s), door %s",
             gw, gh, zone.tiles_w, zone.tiles_h, zone.boss_cell,
-            zone.has_arena ? "yes" : "no", zone.has_doorway ? "yes" : "no");
+            zone.has_arena ? "yes" : "no", SIDE_NAME[static_cast<int>(zone.arena_side) & 3],
+            zone.has_doorway ? "yes" : "no");
+}
+
+// Comprobacion de la zona recien cosida. Con el jefe en un lado distinto por capitulo y la
+// rejilla al doble, "se genera" ya no garantiza "se juega": se inunda desde el nudo de la
+// celda de inicio y se mira que se llegue al vano de la arena, a cada nudo, a cada punto de
+// interes y a la puerta, y que el cerco de la arena no tenga mas agujero que su vano. Es
+// una linea de log (`Zone check: ...`) y el gate de mapas_check.
+void Engine::check_zone(const Room& zone) {
+    static bool reach[Config::ZONE_TILES_Y][Config::ZONE_TILES_X];
+    SDL_memset(reach, 0, sizeof(reach));
+    int start = -1;
+    for (int i = 0; i < zone.cell_count && i < floor_map.room_count; i++)
+        if (floor_map.rooms[i].type == RoomType::Start) start = i;
+    if (start < 0) return;
+    std::vector<std::pair<int, int>> q;
+    q.reserve(4096);
+    const int sx = zone.cells[start].hub_tx, sy = zone.cells[start].hub_ty;
+    if (zone.is_tile_walkable(sx, sy)) { reach[sy][sx] = true; q.push_back({sx, sy}); }
+    for (size_t k = 0; k < q.size(); k++) {
+        const int x = q[k].first, y = q[k].second;
+        const int dx[4] = {1, -1, 0, 0}, dy[4] = {0, 0, 1, -1};
+        for (int d = 0; d < 4; d++) {
+            const int nx = x + dx[d], ny = y + dy[d];
+            if (nx < 0 || ny < 0 || nx >= zone.tiles_w || ny >= zone.tiles_h || reach[ny][nx]) continue;
+            if (!zone.is_tile_walkable(nx, ny)) continue;
+            reach[ny][nx] = true;
+            q.push_back({nx, ny});
+        }
+    }
+    int hubs = 0, hubs_ok = 0, pois = 0, pois_ok = 0;
+    for (int i = 0; i < zone.cell_count && i < floor_map.room_count; i++) {
+        const CellState& cs = zone.cells[i];
+        hubs++;
+        if (reach[cs.hub_ty][cs.hub_tx]) hubs_ok++;
+        else SDL_Log("Zone check: nudo de la celda %d (%d,%d) INALCANZABLE", i, cs.hub_tx, cs.hub_ty);
+        if (cs.poi_tx >= 0) {
+            pois++;
+            if (reach[cs.poi_ty][cs.poi_tx]) pois_ok++;
+            else SDL_Log("Zone check: punto de interes de la celda %d (%d,%d) INALCANZABLE", i, cs.poi_tx, cs.poi_ty);
+        }
+    }
+    bool gap_ok = false, ring_ok = true, door_ok = !zone.has_doorway;
+    if (zone.has_arena) {
+        int ox, oy;
+        zone.arena_gap_outside(ox, oy);
+        gap_ok = reach[oy][ox];
+        const int x0 = zone.arena_x0, y0 = zone.arena_y0;
+        const int x1 = x0 + Config::ARENA_TILES_X + 1, y1 = y0 + Config::ARENA_TILES_Y + 1;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++)
+                if (zone.in_arena_ring(x, y) && !zone.is_arena_gap(x, y) && zone.is_tile_walkable(x, y)) {
+                    ring_ok = false;
+                    SDL_Log("Zone check: agujero en el cerco de la arena en (%d,%d)", x, y);
+                }
+    }
+    if (zone.has_doorway) {
+        const int dx[4] = {1, -1, 0, 0}, dy[4] = {0, 0, 1, -1};
+        for (int d = 0; d < 4 && !door_ok; d++) {
+            const int nx = zone.door_tx + dx[d], ny = zone.door_ty + dy[d];
+            if (nx >= 0 && ny >= 0 && nx < zone.tiles_w && ny < zone.tiles_h && reach[ny][nx]) door_ok = true;
+        }
+    }
+    SDL_Log("Zone check: vano %s, cerco %s, nudos %d/%d, puntos %d/%d, puerta %s -> %s",
+            gap_ok ? "ok" : "INALCANZABLE", ring_ok ? "entero" : "ROTO", hubs_ok, hubs, pois_ok, pois,
+            door_ok ? "ok" : "INALCANZABLE",
+            (gap_ok && ring_ok && hubs_ok == hubs && pois_ok == pois && door_ok) ? "OK" : "FALLA");
 }
 
 const Room& Engine::pristine_zone() {
@@ -3259,6 +3347,7 @@ static const char* room_type_name(RoomType t) {
         case RoomType::Elite:    return "Elite";
         case RoomType::Treasure: return "Treasure";
         case RoomType::Altar:    return "Altar";
+        case RoomType::Rest:     return "Rest";
         case RoomType::Zone:     return "Zone";
         default:                 return "Special";
     }
@@ -3298,6 +3387,7 @@ void Engine::place_player(Vec2 spawn_pos) {
         spawn_pos = free_feet - foot;
     }
     world.transforms[player.entity].position = spawn_pos;
+    player.chariot_fx_t = -1.0f;   // un carro a medio despedirse no viaja con el teletransporte
     if (world.has(player.entity, Component::Movement)) {
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
@@ -3380,6 +3470,7 @@ void Engine::load_room(int room_index) {
     // Nodo de la rejilla: la zona
     if (!floor_map.zone_built) {
         build_pristine_zone(current_room_data);
+        check_zone(current_room_data);   // la zona que se va a JUGAR (no la copia pristina del guardado)
         if (apply_saved_rooms)   // Continuar (v9/v10): cada celda con estado guardado
             for (int i = 0; i < current_room_data.cell_count; i++) apply_saved_cell_state(i, current_room_data);
         for (int i = 0; i < current_room_data.cell_count && i < floor_map.room_count; i++)
@@ -3514,6 +3605,91 @@ void Engine::update_cells() {
         camera.set_room(zone.arena_bounds_world(), false);
     else
         camera.set_room({0, 0, zone.world_w(), zone.world_h()}, false);
+}
+
+// =============================================================================
+// El Carro de Fuego visible (2026-09-24)
+// =============================================================================
+// assets/sprites/chariot.png: 8x3 celdas de 256 px (64 unidades). Fila = direccion (este,
+// sur, norte; el oeste es el este en espejo), columnas 0-3 = capa `back` de los cuatro
+// fotogramas del galope y 4-7 = capa `front`. `back` va justo DETRAS del profeta en el orden
+// por Y y `front` justo DELANTE: su propio sprite queda dentro de la caja. El ancla (el suelo
+// de la caja) cae en CHARIOT_ANCHOR — la tabla ANCHOR de chariot.py: si cambia alli, aqui.
+void Engine::collect_chariot_draws(std::vector<DrawCmd>& out) {
+    if (chariot_texture == TEXTURE_NONE || player.chariot_fx_t < 0.0f) return;
+    static const f32 CHARIOT_ANCHOR[3][2] = {{52.0f, 158.0f}, {128.0f, 92.0f}, {128.0f, 200.0f}};
+    constexpr f32 CELL = 256.0f;
+    const Vec2 d = player.chariot_fx_dir;
+    int row = 0;               // este
+    bool flip = false;
+    if (std::fabs(d.y) > std::fabs(d.x) * 1.15f) row = d.y > 0.0f ? 1 : 2;   // sur (hacia camara) / norte
+    else flip = d.x < 0.0f;                                                  // oeste = este en espejo
+    const int frame = static_cast<int>(player.chariot_fx_t * 14.0f) % 4;
+    f32 ax = CHARIOT_ANCHOR[row][0], ay = CHARIOT_ANCHOR[row][1];
+    if (flip) ax = CELL - ax;
+    // Un 20% mayor que la escala de las hojas: a escala real (caballos tan altos como el
+    // profeta) el carro se perdia en una pantalla de 320x180; asi el profeta cabe en la caja
+    // y el tiro se lee de lejos. Se escala sobre el ancla, que es lo que tiene que casar.
+    const f32 inv = 1.2f / static_cast<f32>(Config::ASSET_SCALE);
+    const Vec2 a = player.chariot_fx_pos - Vec2{0, player.chariot_fx_lift};
+    const Rect dst = {a.x - ax * inv, a.y - ay * inv, CELL * inv, CELL * inv};
+    // Aparece en 0,08 s y se apaga en la segunda mitad de la despedida
+    f32 alpha = std::min(1.0f, player.chariot_fx_t / 0.08f);
+    const f32 fade0 = Config::CHARIOT_FX_DEPART * 0.45f;
+    if (player.chariot_fx_free > fade0)
+        alpha *= std::max(0.0f, 1.0f - (player.chariot_fx_free - fade0) / (Config::CHARIOT_FX_DEPART - fade0));
+    const u8 a8 = static_cast<u8>(255.0f * alpha);
+    // El orden por Y: pegado al del profeta (sus pies = el ancla) mientras lo lleva; al
+    // soltarlo, el del propio carro, sin la subida (la sombra de lo que vuela no cambia).
+    const f32 sort = player.chariot_fx_pos.y;
+    for (int layer = 0; layer < 2; layer++) {
+        DrawCmd c;
+        c.texture_id = chariot_texture;
+        c.src = {(layer * 4 + frame) * CELL, row * CELL, CELL, CELL};
+        c.dst = dst;
+        c.flip_x = flip;
+        c.tint = {255, 255, 255, a8};
+        c.sort_y = sort + (layer == 0 ? -0.5f : 0.5f);
+        out.push_back(c);
+    }
+}
+
+// =============================================================================
+// Pistas del jefe (2026-09-24)
+// =============================================================================
+// El nivel se DERIVA del estado de las celdas (rooms.h, get_boss_intel); aqui solo se avisa
+// cuando sube. El aviso es un BANNER y no un mensaje de pie: es lo que cambia el rumbo del
+// jugador, y un texto pequeno que dura dos segundos se pierde en mitad de una pelea.
+void Engine::update_boss_intel() {
+    if (tutorial.active) return;
+    const Room* z = zone_ptr();
+    if (!z || !z->has_arena) return;
+    const BossIntel bi = get_boss_intel(*z, floor_map, player.map_revealed);
+    if (boss_intel_shown < 0) { boss_intel_shown = bi.level; return; }
+    if (bi.level <= boss_intel_shown) return;
+    SDL_Log("Boss intel %d -> %d (pistas %d%s)", boss_intel_shown, bi.level, bi.clues,
+            bi.seen ? ", visto" : "");
+    boss_intel_shown = bi.level;
+    static char sub[128];
+    if (bi.level == 1) {
+        f32 cx = 0.0f, cy = 0.0f, r = 0.0f;
+        boss_rumor_circle(*z, cx, cy, r);
+        Vec2 from = {z->world_w() * 0.5f, z->world_h() * 0.5f};
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform) && z == &current_room_data)
+            from = world.transforms[player.entity].position;
+        const f32 dx = cx * Config::TILE_SIZE - from.x, dy = cy * Config::TILE_SIZE - from.y;
+        snprintf(sub, sizeof(sub), tr("Dicen que el jefe aguarda hacia el %s. Míralo en el mapa",
+                                      "They say the boss waits to the %s. Check the map"),
+                 compass_name(dx, dy, false));
+    } else if (bi.seen && !player.map_revealed && bi.clues < BOSS_CLUES_FOR_EXACT) {
+        snprintf(sub, sizeof(sub), "%s", tr("Desde aquí se ve su arena: ya está en el mapa",
+                                            "You can see its arena from here: it is on the map"));
+    } else {
+        snprintf(sub, sizeof(sub), "%s", tr("Ya sabes dónde está el jefe: está en el mapa",
+                                            "Now you know where the boss is: it is on the map"));
+    }
+    show_banner(tr("PISTA", "CLUE"), sub, 3.5f);
+    audio.play_sfx(SfxID::Notification, 0.8f);
 }
 
 // El profeta pisa la arena: nace el jefe (o el grupo del cap. 3), se sella el vano, banner y
@@ -4610,6 +4786,9 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "goto")  { ss >> c.arg; }   // indice, o el TIPO de sala ("event", "boss"...)
         else if (c.op == "bot")   { ss >> c.num; }
         else if (c.op == "walk")  { ss >> c.num >> c.num2; }
+        else if (c.op == "walks") { ss >> c.num >> c.num2; }   // walk relativo al origen de la celda de INICIO
+        else if (c.op == "walkarena") { ss >> c.num; }          // walk a `d` unidades del vano (+ = dentro)
+        else if (c.op == "intel") { }                          // loguea el rastro del jefe
         else if (c.op == "seed")  { ss >> c.num; }
         else if (c.op == "chapter") { ss >> c.num; }
         else if (c.op == "event")   { ss >> c.num >> c.num2; }   // capitulo + indice en su pozo
@@ -4738,6 +4917,7 @@ void Engine::update_autoplay(f32 dt) {
                     else if (c.arg == "elite")    want = RoomType::Elite;
                     else if (c.arg == "boss")     want = RoomType::Boss;
                     else if (c.arg == "start")    want = RoomType::Start;
+                    else if (c.arg == "rest")     want = RoomType::Rest;
                     for (int i = 0; i < floor_map.room_count; i++)
                         if (floor_map.rooms[i].type == want) { target = i; break; }
                     if (target < 0) SDL_Log("Autoplay: goto %s -> no hay ninguna en este mapa", c.arg.c_str());
@@ -5158,6 +5338,38 @@ void Engine::update_autoplay(f32 dt) {
                 continue;
             }
             if (c.op == "walk") { ap.walk_target = {c.num, c.num2}; ap.timer = 6.0f; ap.walking = true; break; }
+            // Mapa grande (2026-09-24): la celda de inicio y la del jefe cambian de sitio por
+            // capitulo, asi que un `walk` en coordenadas absolutas se pudre con cada cambio de
+            // CHAPTER_LAYOUT. `walks` va relativo al origen de la celda de INICIO (lo que los
+            // guiones clavaban en ella) y `walkarena d` a `d` unidades del centro del vano,
+            // hacia dentro si es positivo (en North, hacia arriba; en West/South, hacia la
+            // izquierda; en East, hacia la derecha) — valga el lado que valga.
+            if (c.op == "walks") {
+                Vec2 o = {0, 0};
+                for (int i = 0; i < floor_map.room_count; i++)
+                    if (floor_map.rooms[i].type == RoomType::Start)
+                        o = {static_cast<f32>(floor_map.rooms[i].grid_x * Config::ROOM_W_UNITS),
+                             static_cast<f32>(floor_map.rooms[i].grid_y * Config::ROOM_H_UNITS)};
+                ap.walk_target = o + Vec2{c.num, c.num2}; ap.timer = 6.0f; ap.walking = true; break;
+            }
+            if (c.op == "walkarena") {
+                const Room* z = zone_ptr();
+                if (!z || !z->has_arena) { SDL_Log("walkarena -> no hay arena"); continue; }
+                Vec2 in = {0, -1};
+                if (z->arena_side == ArenaSide::West || z->arena_side == ArenaSide::South) in = {-1, 0};
+                if (z->arena_side == ArenaSide::East) in = {1, 0};
+                ap.walk_target = z->arena_gap_center_world() + in * c.num;
+                SDL_Log("walkarena %.0f -> (%.0f,%.0f)", c.num, ap.walk_target.x, ap.walk_target.y);
+                ap.timer = 6.0f; ap.walking = true; break;
+            }
+            if (c.op == "intel") {
+                const Room* z = zone_ptr();
+                if (z) {
+                    const BossIntel bi = get_boss_intel(*z, floor_map, player.map_revealed);
+                    SDL_Log("INTEL nivel=%d pistas=%d visto=%d celda_jefe=%d", bi.level, bi.clues, bi.seen ? 1 : 0, z->boss_cell);
+                }
+                continue;
+            }
             if (c.op == "god")  { god_mode = !god_mode; continue; }
             // `entrada`: deja pasar la ENTRADA del jefe (paseo + dialogo), que el autoplay
             // suprime por defecto. Va antes del `walk` que mete al profeta en la arena.

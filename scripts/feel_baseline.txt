@@ -100,7 +100,7 @@ wait 1.5
 # El jefe del cap. 3 es desde hoy un GRUPO (sumo sacerdote + corro): la cifra cambia.
 goto boss
 wait 0.5
-walk 1600 150
+walkarena 50
 wait 2.0
 bot 20
 shot 93_feel_jefe

@@ -4,6 +4,7 @@
 
 #include "core/i18n.h"
 #include "ui/codex.h"
+#include "ui/hud.h"          // draw_icon: el icono propio del objeto / milagro
 #include "game/rooms.h"
 #include <algorithm>
 #include <cstdio>
@@ -264,6 +265,20 @@ void CodexScreen::render(Renderer& renderer, const SaveData& save,
     // lista de nombres en un bestiario: el texto se corre a su derecha para dejarle sitio.
     f32 text_x = 20.0f;
     f32 text_w = W - 40.0f;
+    // Y el icono propio del objeto o del milagro, en el mismo hueco (render/sprites.h, Icon)
+    int icon = Icon::NONE;
+    if (known && tab == CodexTab::Items && selected < static_cast<int>(registry.items.size()))
+        icon = Icon::item(registry.items[selected].id);
+    if (known && tab == CodexTab::Miracles) icon = Icon::miracle(static_cast<u32>(selected));
+    if (icon != Icon::NONE) {
+        const f32 pw = 34.0f;
+        renderer.draw_rect({15.0f, py + 3.0f, pw, pw}, {14, 11, 18, 235});
+        if (draw_icon(renderer, icon, {15.0f, py + 3.0f, pw, pw})) {
+            renderer.draw_rect({15.0f, py + 3.0f, pw, 0.7f}, {150, 122, 80, 170});
+            text_x = 15.0f + pw + 6.0f;
+            text_w = W - text_x - 16.0f;
+        }
+    }
     if (tab == CodexTab::Bestiary && known && portraits != TEXTURE_NONE &&
         selected < static_cast<int>(EnemyType::COUNT)) {
         const f32 pw = 34.0f;

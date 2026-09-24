@@ -207,6 +207,32 @@ namespace Portrait {
 }
 
 // =============================================================================
+// Iconos de objetos y milagros (assets/sprites/icons.png, tools/blender/mantle_sprites/icons.py)
+// =============================================================================
+// Decision del usuario (2026-09-24): "cada objeto y milagro debe tener su propio icono".
+// Hasta entonces los 22 objetos compartian CUATRO celdas del tileset (una por categoria) y
+// los 10 milagros seis — el Carro de Fuego y el Fuego del Cielo eran la misma bola.
+// Hoja de 8x4 celdas de 128 px: celda = ItemDef::id (0..21) y 22 + MiracleID (0..9). El
+// orden es el de `icons.ICONS` en Python: cambiar uno sin el otro cruza los iconos.
+// Sin la hoja (TEXTURE_NONE) el HUD vuelve a los iconos genericos del tileset.
+namespace Icon {
+    constexpr int CELL = 128;
+    constexpr int COLS = 8;
+    constexpr int ITEMS = 22;
+    constexpr int MIRACLE_BASE = 22;
+    constexpr int MIRACLES = 10;
+    constexpr int NONE = -1;
+
+    inline int item(u32 id)    { return id < static_cast<u32>(ITEMS) ? static_cast<int>(id) : NONE; }
+    inline int miracle(u32 m)  { return m < static_cast<u32>(MIRACLES) ? MIRACLE_BASE + static_cast<int>(m) : NONE; }
+    inline Rect src(int index) {
+        return {static_cast<f32>((index % COLS) * CELL),
+                static_cast<f32>((index / COLS) * CELL),
+                static_cast<f32>(CELL), static_cast<f32>(CELL)};
+    }
+}
+
+// =============================================================================
 // PNJ de los encuentros (assets/sprites/npcs.png, tools/blender/mantle_sprites/npcs.py)
 // =============================================================================
 // Una sola fila de celdas de 128 px, solo `Idle`: los locutores no pelean, no andan y no

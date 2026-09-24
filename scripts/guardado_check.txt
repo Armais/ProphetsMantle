@@ -1,8 +1,8 @@
 # Verificacion del GUARDADO: que subir de version no pierde nada.
 # Uso:  MANTLE.exe --script scripts/guardado_check.txt
 #
-# El fichero va por la v10 (zona continua, 2026-09-10: MISMA forma que la v9, el resumen de
-# salas se descarta al migrar porque cambio de significado).
+# El fichero va por la v11 (mapa grande, 2026-09-24: el resumen de celdas crece de 25 a 36
+# entradas; el de una v9/v10 describe otra rejilla y se descarta al migrar, como en la v10).
 # Cada version anade su lector de compatibilidad, asi que aqui se comprueba la ULTIMA
 # migracion que haya y que la meta llega entera al otro lado.
 #
@@ -12,7 +12,7 @@
 #   Save file vN migrated to v8 (...)   <- SOLO si habia un fichero v6 en el disco.
 #                                          Para forzarlo: copiar un save.dat viejo a
 #                                          %APPDATA%\MantleGame\MANTLE\ antes de correrlo.
-#   SAVEDUMP v10 ...                    <- las tres lineas, tres veces (antes/durante/tras borrar)
+#   SAVEDUMP v11 ...                    <- las tres lineas, tres veces (antes/durante/tras borrar)
 #
 # Gates:
 #   1. Migrar NO pierde nada: ofrendas, mejoras, codice, unlocks, logros y bajas del
@@ -42,6 +42,16 @@ chapter 10
 wait 3.0
 press confirm
 wait 2.5
+# Una celda de COMBATE: con el mapa grande (2026-09-24) el nudo de la celda de inicio
+# queda lejos de sus vecinas, ninguna se activa al llegar y el killall no limpiaba nada
+# (sin limpieza no hay guardado y el SAVEDUMP de "durante" salia con run=0). Tres
+# killall: el Agua Corrupta del Acto II se parte al morir y sus hijos sobreviven al primero.
+goto 24
+wait 1.0
+killall
+wait 0.5
+killall
+wait 0.5
 killall
 wait 1.5
 savedump

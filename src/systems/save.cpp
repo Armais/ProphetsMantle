@@ -269,6 +269,16 @@ struct SaveDataV8 {
     u64 codex_events;
 };
 
+// v9 y v10 son la v8 + el resumen de salas con 25 entradas (misma forma los dos: la v10
+// solo cambio el SIGNIFICADO). SaveDataV8 acaba en un u64 alineado, asi que anidarla no mete
+// relleno entre ella y los arrays: la disposicion es la del fichero.
+struct SaveDataV10 {
+    SaveDataV8 v8;
+    u8 room_flags[25];
+    u8 room_open[25][(Config::ROOM_TILES_X * Config::ROOM_TILES_Y + 7) / 8];
+};
+static_assert(sizeof(SaveDataV8) % alignof(u64) == 0, "SaveDataV10 tiene que casar byte a byte con la v10");
+
 void migrate_v8(const SaveDataV8& old, SaveData& out) {
     // El estado de sala (`room_flags`/`room_open`) se queda a cero: una partida v8 no guardo
     // que salas dejo despejadas, asi que su Continuar se comporta como siempre se comporto
@@ -313,6 +323,14 @@ void migrate_v8(const SaveDataV8& old, SaveData& out) {
     out.skin_equipped   = old.skin_equipped;
     out.entitlements    = old.entitlements;
     out.codex_events    = old.codex_events;
+}
+
+void migrate_v10(const SaveDataV10& old, SaveData& out) {
+    // El resumen de celdas NO se traslada: con la rejilla nueva (6x4 / 6x5 y el jefe en
+    // otra celda) el indice i ya no es la misma celda, y re-aplicarlo abriria tiles que no
+    // eran secretos. La partida sigue en su capitulo y rebobina a su celda de inicio.
+    migrate_v8(old.v8, out);
+    out.current_room = -1;
 }
 
 void migrate_v7(const SaveDataV7& old, SaveData& out) {
@@ -562,17 +580,16 @@ bool SaveSystem::load() {
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
-    if (version == 9) {
-        // v9 -> v10: MISMA forma de fichero (ver save.h); solo se descarta el resumen de
-        // salas, que con la zona continua ya no significa lo mismo. El resto (meta, equipo,
+    if (version == 9 || version == 10) {
+        // v9/v10 -> v11: la forma de la v10 con 25 salas (ver save.h). Se descarta el resumen
+        // de salas, que con el mapa grande describe otra rejilla. El resto (meta, equipo,
         // capitulo) sigue tal cual: el capitulo rebobina a su celda de inicio.
-        SDL_ReadIO(file, &data, sizeof(SaveData));
+        SaveDataV10 old{};
+        SDL_ReadIO(file, &old, sizeof(old));
         SDL_CloseIO(file);
-        SDL_memset(data.room_flags, 0, sizeof(data.room_flags));
-        SDL_memset(data.room_open,  0, sizeof(data.room_open));
-        data.current_room = -1;
-        SDL_Log("Save file v9 migrated to v%u (%s): estado de sala descartado, el capitulo rebobina",
-                SAVE_VERSION, save_path.c_str());
+        migrate_v10(old, data);
+        SDL_Log("Save file v%u migrated to v%u (%s): estado de sala descartado, el capitulo rebobina",
+                version, SAVE_VERSION, save_path.c_str());
         save();   // se reescribe ya en el formato nuevo
         return true;
     }

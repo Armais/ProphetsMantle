@@ -333,9 +333,20 @@ huérfanos.
 
 ### 3.3 Tamaño del capítulo
 
-- Rejilla de **4x3** celdas en la mayoría de capítulos, **4x4** en el 5 y el 10, **cosidas en
-  un solo mapa** desde 2026-09-10 (160x66 / 160x88 tiles).
-- 12 celdas de 2x2 pantallas = ~48 pantallas por capítulo, contra las 9 del v1.0.
+> "El mapa es muy pequeño, tiene que ser más grande." (usuario, 2026-09-24)
+
+- Rejilla de **6x4** celdas en la mayoría de capítulos, **6x5** en el 5 y el 10 (los que
+  cierran acto), **cosidas en un solo mapa** (240x88 / 240x110 tiles). Hasta el 2026-09-24
+  eran 4x3 y 4x4.
+- 24 celdas de 2x2 pantallas = ~96 pantallas por capítulo (120 en el 5 y el 10), contra las
+  48 de antes y las 9 del v1.0.
+- **El jefe cambia de sitio en cada capítulo**: siempre en un BORDE del mapa, y cada capítulo
+  en uno distinto (1 NE, 2 O, 3 N, 4 E, 5 S, 6 NO, 7 E, 8 S, 9 O, 10 N), con el inicio lejos.
+  Su arena va pegada a ese borde y se entra desde dentro del mapa.
+- **Y no se ve de salida: se averigua** (ver §4, punto 7).
+- Reparto desde 2026-09-24: todos los relatos · 2 Tesoro · 2 Altar · 3 Elite · 4 pasos
+  tranquilos (celdas sin enemigos, solo terreno y secretos) · el resto combate; en 6x5,
+  3 · 3 · 4 · 5. El párrafo de abajo es el reparto de las rejillas viejas.
 - **No todas están en el camino al jefe.** Eso es lo que convierte explorar en una decisión.
 - Reparto de tipos por mapa (FIJO por configuración desde 2026-08-27, ver §3.4): en 4x3,
   TODOS los relatos del pozo (3-4) · 1 Tesoro · 1 Altar · 2 Elite · resto normales; en 4x4,
@@ -378,15 +389,31 @@ volver — y volver es todo el punto. Por eso la tinaja, la grieta y el hueco es
    huecos que cruzar. Detrás: ofrendas, fe o corazones.
 2. ✅ **Los milagros como llaves.** Fuego del Cielo quema matorral y abre grietas. Sanar Aguas
    seca una charca. Carro de Fuego cruza un hueco. Ojos Abiertos revela lo oculto.
+   Desde 2026-09-24 el Carro de Fuego **se ve**: el carro con dos caballos de fuego de la
+   estampa del Ascenso lleva al profeta dentro durante la embestida y luego sube al cielo.
 3. ✅ **Salas opcionales de verdad**: la rejilla 4x3/4x4 de la fase 1 ya deja varias fuera de la
    ruta al jefe, y ahora tienen algo dentro.
 4. ✅ **El Códice como colección visible**: «Relatos N/M» por capítulo (fase 2).
 5. ✅ **Cachés de ofrendas** que sobreviven a la run: la ofrenda es el pago más probable de un
    secreto (60 %) precisamente porque vida y fe ya las suelta cualquier enemigo.
 6. ✅ **El objetivo del capítulo en el mapa grande** (`ChapterLore::objective`).
+7. ✅ **El jefe se AVERIGUA** (2026-09-24, "no debe ser visible desde el inicio, sino que lo
+   aprendes a medida que vas avanzando"): el mapa no lo marca de salida. Cada relato resuelto,
+   élite despejada o altar rezado es una **pista**: con una se sabe la ZONA (un anillo rojo en
+   el mapa y el rumbo aproximado bajo el minimapa, "Jefe: ~NO"), con dos el SITIO. Pisar una
+   celda vecina de la suya (desde ahí se ve la arena) o Ojos Abiertos también lo destapan.
+   Las élites van arrimadas al jefe a propósito: son su guardia.
+8. ✅ **Los puntos por explorar, en el minimapa** (2026-09-24): una "?" sobre cada celda sin
+   descubrir que guarda algo (cofre, altar, relato, élite, puerta de un interior) — dice QUE
+   hay algo, no QUÉ; lo visto lleva su chincheta y lo hecho se apaga. El mapa grande cuenta
+   lo explorado, los hallazgos y las pistas.
+9. ✅ **Cada objeto y cada milagro con su icono** (2026-09-24): 32 iconos propios en vez de
+   seis genéricos, en el HUD, las cartas y el Códice.
 
 Nada de esto tocó el formato del guardado: la celda **es** su propio estado y la sala entera se
-cachea, así que abrir un secreto persiste durante la partida sin un campo nuevo.
+cachea, así que abrir un secreto persiste durante la partida sin un campo nuevo. (El guardado
+subió a v11 el 2026-09-24 por el TAMAÑO de la rejilla, no por las pistas: esas se derivan del
+estado de las celdas.)
 
 ---
 

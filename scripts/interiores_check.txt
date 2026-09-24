@@ -2,15 +2,16 @@
 # Uso:  MANTLE.exe --script scripts/interiores_check.txt
 #
 # Gates del LOG:
-#   - "FloorMap: interior 12 colgado de la sala 7" -> el nodo existe y sabe de quien cuelga.
-#     Con otra semilla cambian los dos numeros; este guion fija `seed 31415`.
-#   - "Loaded room 12 [-1,-1] ... Special": el interior esta FUERA de la rejilla. Si saliera
+#   - "FloorMap: interior 24 colgado de la sala 7" -> el nodo existe y sabe de quien cuelga.
+#     El interior va DETRAS de la rejilla (24 = 6x4 desde el mapa grande, 2026-09-24); el
+#     anfitrion sale de `(capitulo*7) % celdas`, no de la semilla (`seed 31415`).
+#   - "Loaded room 24 [-1,-1] ... Interior": el interior esta FUERA de la rejilla. Si saliera
 #     con coordenadas de rejilla el minimapa mentiria, que es el gate del track.
 #   - El volcado ASCII del interior mide 20x11, esta cerrado por '#' y tiene una 'D' en el
 #     centro del muro sur; el de la sala 7 tiene otra 'D' sobre la senda.
 #   - "door -> puerta en tile (x,y)": el comando la ha encontrado y ha dejado al profeta
 #     AL LADO (pisarla la dispara, y asi se puede fotografiar antes de cruzarla).
-#   - Y la SECUENCIA de "Loaded room": 7 -> 12 -> 7. Volver carga la sala de fuera desde la
+#   - Y la SECUENCIA de "Loaded room": 7 -> 24 -> 7. Volver carga la sala de fuera desde la
 #     cache, asi que su estado no se pierde — eso es lo que habia que comprobar.
 #
 # Gates de las CAPTURAS:
@@ -68,5 +69,5 @@ wait 1.4
 shot 06_de_vuelta_fuera
 wait 0.2
 
-say ---- fin: la secuencia de "Loaded room" tiene que ser 7 -> 12 -> 7 ----
+say ---- fin: la secuencia de "Loaded room" tiene que ser 7 -> 24 -> 7 ----
 quit

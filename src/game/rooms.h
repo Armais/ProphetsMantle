@@ -9,6 +9,7 @@
 #include "core/config.h"
 #include "game/enemies.h"
 #include <vector>
+#include <cmath>
 
 // =============================================================================
 // Tile Types (gameplay semantics; visuals come from TileSprite + biome)
@@ -315,6 +316,13 @@ struct EnemySpawn {
     Vec2 position;
 };
 
+// A que lado de su celda va pegada la arena del jefe. Es el lado que da al BORDE del mapa,
+// asi que el cerco de atras coincide con el perimetro y nunca corta una costura. El vano
+// mira hacia dentro: abajo en North, al este en West y South, al oeste en East. El jefe
+// (el ancla de la escena) sigue en la fila de arriba del suelo en los cuatro casos, que es
+// lo que deja las diez escenas de jefe tal cual estaban.
+enum class ArenaSide : u8 { North, South, West, East };
+
 struct CellState {
     bool visited      = false;
     bool cleared      = false;
@@ -324,6 +332,10 @@ struct CellState {
     bool active       = false;   // Sus enemigos estan sembrados (celda viva, ALTTP)
     int  event_id     = -1;      // id de `namespace Ev` (game/events.h); -1 = ninguno
     int  hub_tx = 0, hub_ty = 0; // El nudo de las sendas: donde aparece el profeta al teletransportar
+    // El PUNTO DE INTERES de la celda (cofre, altar o PNJ del relato), en coordenadas de
+    // zona; -1 = no tiene. Lo apunta `place_special` al generar y lo lee el mapa: una
+    // chincheta tiene que caer sobre la cosa, no en el centro de cuatro pantallas.
+    int  poi_tx = -1, poi_ty = -1;
     std::vector<EnemySpawn> spawns;   // Coordenadas de ZONA (blit_cell las desplaza)
 };
 
@@ -335,7 +347,7 @@ struct Room {
     bool has_doorway = false;
     int  door_tx = 0, door_ty = 0;
 
-    // Tamano REAL en tiles. La matriz se dimensiona al maximo (la zona, 4x4 celdas) y una
+    // Tamano REAL en tiles. La matriz se dimensiona al maximo (la zona, 6x5 celdas) y una
     // celda, un interior o un escenario usan solo su esquina. Todo bucle sobre el mapa va
     // contra `tiles_w`/`tiles_h`, nunca contra las constantes.
     int tiles_w = Config::ROOM_TILES_X;
@@ -364,8 +376,10 @@ struct Room {
     bool has_arena    = false;
     bool arena_sealed = false;   // el vano no se pisa ni se atraviesa a tiros
     int  boss_cell    = -1;
+    ArenaSide arena_side = ArenaSide::North;
     int  arena_x0 = 0, arena_y0 = 0;                          // esquina del CERCO (tiles de zona)
-    int  arena_gap_x0 = 0, arena_gap_x1 = 0, arena_gap_y = 0;  // el vano, en el cerco de abajo
+    // El vano: un tramo de 4 tiles del cerco, horizontal (North) o vertical (el resto)
+    int  arena_gap_x0 = 0, arena_gap_x1 = 0, arena_gap_y0 = 0, arena_gap_y1 = 0;
 
     // --- Arco de salida del capitulo (zona) ----------------------------------------------
     bool exit_open = false;
@@ -395,6 +409,11 @@ struct Room {
     void arena_anchor(int& tx, int& ty) const;
     bool is_arena_gap(int tx, int ty) const;
     bool in_arena_ring(int tx, int ty) const;
+    bool in_arena_box(int tx, int ty) const;    // cerco o suelo: lo que ninguna senda puede tocar
+    // El tile de FUERA justo delante del vano (por donde se entra) y el centro del vano en
+    // unidades de mundo. Los usan el nudo de la celda, el mapa y el comando `walkarena`.
+    void arena_gap_outside(int& tx, int& ty) const;
+    Vec2 arena_gap_center_world() const;
     // Coser una celda generada en local en (gx, gy); `index` es su nodo de la rejilla
     void blit_cell(const Room& cell, int gx, int gy, int index);
     void open_seams();
@@ -447,16 +466,16 @@ struct ChapterDef {
 
 inline ChapterDef get_chapter_def(int chapter) {
     switch (chapter) {
-        case 1:  return {tr("El Arroyo Querit", "The Brook Cherith"),     tr("Cañón / Arroyo", "Canyon / Brook"),      1, 4, 3, EnemyType::SoldadoDeAcab,   tr("Capitán de Acab", "Ahab's Captain"),          BossPattern::CapitanDeAcab};
-        case 2:  return {tr("La Viuda de Sarepta", "The Widow of Zarephath"),  tr("Aldea fenicia", "Phoenician village"),       2, 4, 3, EnemyType::ProfetaDeBaal,   tr("Sacerdote de Baal", "Priest of Baal"),        BossPattern::SacerdoteBaal};
-        case 3:  return {tr("El Monte Carmelo", "Mount Carmel"),     tr("Montaña", "Mountain"),             3, 4, 3, EnemyType::ProfetaDeBaal,   tr("Los 450 Profetas de Baal", "The 450 Prophets of Baal"), BossPattern::ProfetasDeBaal};
-        case 4:  return {tr("La Cueva de Horeb", "The Cave of Horeb"),    tr("Desierto / Cueva", "Desert / Cave"),    4, 4, 3, EnemyType::LeonDelDesierto, tr("Tu Propia Desesperación", "Your Own Despair"),  BossPattern::Desesperacion};
-        case 5:  return {tr("El Llamado", "The Calling"),           tr("Campos", "Fields"),              5, 4, 4, EnemyType::ArqueroReal,     tr("Acab y Jezabel", "Ahab and Jezebel"),           BossPattern::AcabYJezabel};
-        case 6:  return {tr("Las Aguas de Jericó", "The Waters of Jericho"),  tr("Ciudad corrupta", "Corrupt city"), 6, 4, 3, EnemyType::AguaCorrupta,    tr("Espíritu de Corrupción", "Spirit of Corruption"),   BossPattern::EspirituCorrupto};
-        case 7:  return {tr("El Aceite de la Viuda", "The Widow's Oil"),tr("Aldea pobre", "Poor village"), 7, 4, 3, EnemyType::SoldadoSirio,    tr("El Acreedor", "The Creditor"),              BossPattern::Acreedor};
-        case 8:  return {tr("El Hijo Sunamita", "The Shunammite's Son"),     tr("Casa noble", "Noble house"), 8, 4, 3, EnemyType::IdolatraDeRimon, tr("La Muerte", "Death"),                BossPattern::LaMuerte};
-        case 9:  return {tr("Naamán el Sirio", "Naaman the Syrian"),      tr("Campamento / Jordán", "Camp / Jordan"), 9, 4, 3, EnemyType::GeneralSirio,    tr("Guiezi el Codicioso", "Gehazi the Covetous"),      BossPattern::Guiezi};
-        case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"), 10, 4, 4, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
+        case 1:  return {tr("El Arroyo Querit", "The Brook Cherith"),     tr("Cañón / Arroyo", "Canyon / Brook"),      1, 6, 4, EnemyType::SoldadoDeAcab,   tr("Capitán de Acab", "Ahab's Captain"),          BossPattern::CapitanDeAcab};
+        case 2:  return {tr("La Viuda de Sarepta", "The Widow of Zarephath"),  tr("Aldea fenicia", "Phoenician village"),       2, 6, 4, EnemyType::ProfetaDeBaal,   tr("Sacerdote de Baal", "Priest of Baal"),        BossPattern::SacerdoteBaal};
+        case 3:  return {tr("El Monte Carmelo", "Mount Carmel"),     tr("Montaña", "Mountain"),             3, 6, 4, EnemyType::ProfetaDeBaal,   tr("Los 450 Profetas de Baal", "The 450 Prophets of Baal"), BossPattern::ProfetasDeBaal};
+        case 4:  return {tr("La Cueva de Horeb", "The Cave of Horeb"),    tr("Desierto / Cueva", "Desert / Cave"),    4, 6, 4, EnemyType::LeonDelDesierto, tr("Tu Propia Desesperación", "Your Own Despair"),  BossPattern::Desesperacion};
+        case 5:  return {tr("El Llamado", "The Calling"),           tr("Campos", "Fields"),              5, 6, 5, EnemyType::ArqueroReal,     tr("Acab y Jezabel", "Ahab and Jezebel"),           BossPattern::AcabYJezabel};
+        case 6:  return {tr("Las Aguas de Jericó", "The Waters of Jericho"),  tr("Ciudad corrupta", "Corrupt city"), 6, 6, 4, EnemyType::AguaCorrupta,    tr("Espíritu de Corrupción", "Spirit of Corruption"),   BossPattern::EspirituCorrupto};
+        case 7:  return {tr("El Aceite de la Viuda", "The Widow's Oil"),tr("Aldea pobre", "Poor village"), 7, 6, 4, EnemyType::SoldadoSirio,    tr("El Acreedor", "The Creditor"),              BossPattern::Acreedor};
+        case 8:  return {tr("El Hijo Sunamita", "The Shunammite's Son"),     tr("Casa noble", "Noble house"), 8, 6, 4, EnemyType::IdolatraDeRimon, tr("La Muerte", "Death"),                BossPattern::LaMuerte};
+        case 9:  return {tr("Naamán el Sirio", "Naaman the Syrian"),      tr("Campamento / Jordán", "Camp / Jordan"), 9, 6, 4, EnemyType::GeneralSirio,    tr("Guiezi el Codicioso", "Gehazi the Covetous"),      BossPattern::Guiezi};
+        case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"), 10, 6, 5, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
         default: return {"???",                  "???",                  0, 3, 3, EnemyType::SoldadoDeAcab,  "???",                      BossPattern::CapitanDeAcab};
     }
 }
@@ -465,7 +484,9 @@ inline ChapterDef get_chapter_def(int chapter) {
 // Room Map (floor layout - which rooms connect to which)
 // =============================================================================
 struct FloorMap {
-    static constexpr int MAX_ROOMS = 25;  // hasta 5x5; hoy el techo real es 4x4
+    // La rejilla mas grande (6x5 = 30) + el nodo del interior, con holgura. Es tambien el
+    // tamano del resumen de celdas del guardado (SAVE_MAX_ROOMS, v11).
+    static constexpr int MAX_ROOMS = 36;
 
     struct RoomNode {
         RoomType type = RoomType::Normal;
@@ -497,3 +518,96 @@ struct FloorMap {
     void generate(int chapter);
     int room_at(int gx, int gy) const;  // Find room index by grid coords, -1 if none
 };
+
+// =============================================================================
+// Pistas del jefe (2026-09-24)
+// =============================================================================
+// Decision del usuario: "la ubicacion del jefe debe cambiar en cada capitulo y no debe ser
+// visible desde el inicio, sino que lo aprendes a medida que vas avanzando". El mapa ya no
+// trae el jefe marcado de salida: se AVERIGUA explorando, como las mazmorras de ALTTP.
+//
+//   nivel 0  no se sabe nada: ni chincheta, ni direccion ("Jefe: ???")
+//   nivel 1  un RUMOR: una zona aproximada en el mapa (circulo rojo) y la direccion a ella
+//   nivel 2  el sitio exacto: la chincheta roja de siempre y "Jefe: 2N 1E"
+//
+// Las PISTAS son lo que el jugador ya hace al explorar: resolver un relato (el PNJ sabe
+// por donde anda el enemigo), despejar una elite (la guardia del jefe) o rezar en un altar.
+// Una pista da el rumor y dos el sitio. Ademas se ve SIN pistas si se pisa una celda vecina
+// de la del jefe (desde ahi se ve la arena), si se entra en ella o con Ojos Abiertos.
+//
+// Es una funcion PURA del estado de las celdas, que ya viaja en el guardado (visited,
+// cleared, altar_used, event_used): el Continuar sabe lo mismo que se sabia sin un solo
+// campo nuevo en el fichero. La usan el Engine (el aviso al subir de nivel) y el HUD.
+struct BossIntel {
+    int  level = 0;      // 0 / 1 / 2
+    int  clues = 0;      // pistas ganadas en el capitulo
+    bool seen  = false;  // visto sin pistas: celda vecina pisada, dentro, u Ojos Abiertos
+};
+constexpr int BOSS_CLUES_FOR_RUMOR = 1;
+constexpr int BOSS_CLUES_FOR_EXACT = 2;
+
+inline BossIntel get_boss_intel(const Room& zone, const FloorMap& fm, bool revealed) {
+    BossIntel bi;
+    if (zone.type != RoomType::Zone) return bi;
+    const int bc = zone.boss_cell;
+    bool seen = revealed;
+    for (int i = 0; i < zone.cell_count && i < fm.room_count; i++) {
+        const CellState& cs = zone.cells[i];
+        const RoomType t = fm.rooms[i].type;
+        if ((t == RoomType::Event && cs.event_used) || (t == RoomType::Elite && cs.cleared) ||
+            (t == RoomType::Altar && cs.altar_used))
+            bi.clues++;
+        if (bc >= 0 && cs.visited) {
+            if (i == bc) seen = true;
+            for (int c = 0; c < 4; c++) if (fm.rooms[i].connections[c] == bc) seen = true;
+        }
+    }
+    if (bc >= 0 && zone.cells[bc].cleared) seen = true;
+    bi.seen  = seen;
+    bi.level = (seen || bi.clues >= BOSS_CLUES_FOR_EXACT) ? 2 : (bi.clues >= BOSS_CLUES_FOR_RUMOR ? 1 : 0);
+    return bi;
+}
+
+// Rumbo de 8 puntos de (dx, dy) — y hacia ABAJO, como el mundo. `abbrev`: "NE" / "NE"
+// para el HUD; si no, el nombre entero ("noreste" / "northeast") para las frases.
+inline const char* compass_name(f32 dx, f32 dy, bool abbrev) {
+    const f32 a = std::atan2(-dy, dx);                       // 0 = este, pi/2 = norte
+    int k = static_cast<int>(std::floor(a / (3.14159265f / 4.0f) + 0.5f));
+    k = ((k % 8) + 8) % 8;                                    // 0 E, 1 NE, 2 N, 3 NO, 4 O, 5 SO, 6 S, 7 SE
+    if (abbrev) {
+        static const char* const ES[8] = {"E", "NE", "N", "NO", "O", "SO", "S", "SE"};
+        static const char* const EN[8] = {"E", "NE", "N", "NW", "W", "SW", "S", "SE"};
+        return tr(ES[k], EN[k]);
+    }
+    switch (k) {
+        case 0:  return tr("este", "east");
+        case 1:  return tr("noreste", "northeast");
+        case 2:  return tr("norte", "north");
+        case 3:  return tr("noroeste", "northwest");
+        case 4:  return tr("oeste", "west");
+        case 5:  return tr("suroeste", "southwest");
+        case 6:  return tr("sur", "south");
+        default: return tr("sureste", "southeast");
+    }
+}
+
+// La zona del RUMOR, en tiles de la zona: un circulo que contiene la arena pero NO esta
+// centrado en ella (si lo estuviera, el rumor seria el sitio exacto con otro dibujo). El
+// desplazamiento sale del capitulo, asi que es el mismo en cada partida (mapas fijos).
+inline void boss_rumor_circle(const Room& zone, f32& cx, f32& cy, f32& r) {
+    int ax = zone.tiles_w / 2, ay = zone.tiles_h / 2;
+    if (zone.has_arena) zone.arena_anchor(ax, ay);
+    const u32 h = static_cast<u32>(zone.chapter) * 2654435761u;
+    // Entre media y una celda de desplazamiento, y SIEMPRE hacia el centro del mapa: el jefe
+    // vive en el borde, y un rumor centrado fuera del mapa no se veria entero. Con menos, el
+    // centro del circulo caia dentro de la propia celda del jefe y el rumor era el sitio
+    // exacto con otro dibujo (se vio en la primera captura). El radio deja la arena a mas
+    // de un tercio de celda del anillo: dentro, pero no pegada.
+    f32 ox = 0.45f + ((h >> 8) & 0xFF) / 255.0f * 0.5f;
+    f32 oy = 0.45f + ((h >> 16) & 0xFF) / 255.0f * 0.5f;
+    if (ax > zone.tiles_w / 2) ox = -ox;
+    if (ay > zone.tiles_h / 2) oy = -oy;
+    cx = ax + 0.5f + ox * zone.cell_w * 0.9f;
+    cy = ay + 0.5f + oy * zone.cell_h * 0.9f;
+    r  = zone.cell_w * 1.45f;
+}

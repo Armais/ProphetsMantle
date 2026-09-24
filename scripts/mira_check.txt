@@ -51,8 +51,8 @@ faith 50
 aimmode 0
 killall
 wait 0.5
-walk 1816 904
-walk 1816 1016
+walks 536 200
+walks 536 312
 hold up 0.06
 spawn 0 1
 feel marca
@@ -64,8 +64,8 @@ feel A_OFF_dentro
 aimmode 1
 killall
 wait 0.5
-walk 1816 904
-walk 1816 1016
+walks 536 200
+walks 536 312
 hold up 0.06
 spawn 0 1
 feel marca
@@ -77,8 +77,8 @@ feel B_ASIST_dentro
 aimmode 2
 killall
 wait 0.5
-walk 1816 904
-walk 1816 1016
+walks 536 200
+walks 536 312
 hold up 0.06
 spawn 0 1
 feel marca
@@ -90,8 +90,8 @@ feel C_ON_dentro
 aimmode 1
 killall
 wait 0.5
-walk 1776 1016
-walk 1816 1016
+walks 496 312
+walks 536 312
 hold right 0.06
 spawn 0 1
 feel marca
@@ -103,8 +103,8 @@ feel D_ASIST_fuera
 aimmode 2
 killall
 wait 0.5
-walk 1776 1016
-walk 1816 1016
+walks 496 312
+walks 536 312
 hold right 0.06
 spawn 0 1
 feel marca

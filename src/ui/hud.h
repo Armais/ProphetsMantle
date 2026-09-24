@@ -74,8 +74,16 @@ struct ChoiceCard {
     const char* extra = "";      // "HEREDABLE", "Sustituye a X"... (may be empty)
     const char* desc  = "";
     Color accent      = {200, 195, 185, 255};
-    TileSprite icon   = TileSprite::Star;
+    TileSprite icon   = TileSprite::Star;   // respaldo si no hay hoja de iconos
+    int icon_idx      = -1;                 // celda de icons.png (render/sprites.h, Icon)
 };
+
+// La hoja de iconos propios de objetos y milagros (render/sprites.h, namespace Icon). La
+// fija el Engine al cargar; con TEXTURE_NONE todo vuelve a los iconos genericos del tileset.
+void set_icon_sheet(u32 tex);
+// Pinta la celda `idx` de la hoja en `dst`. Devuelve false (sin pintar) si no hay hoja o
+// la celda es NONE: el llamante cae entonces a su icono del tileset.
+bool draw_icon(Renderer& renderer, int idx, Rect dst, Color tint = Color::white());
 
 // `touch`: la linea de ayuda del pie habla de dedos en vez de teclas.
 void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* cards,

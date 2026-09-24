@@ -169,6 +169,34 @@ que importe `mantle_sprites.run` y llame a `cine.main`; el rig se construye sin 
 Componer con PIL sobre el degradado de `look.SKY` (el cielo lo pinta el motor, no Blender)
 y mirar los 22 en dos hojas de contacto ANTES de copiar nada.
 
+## Iconos y Carro de Fuego: `icons.py` y `chariot.py` (2026-09-24)
+
+- **`icons.py`** -> `assets/sprites/icons.png`: 32 iconos (22 objetos por `ItemDef::id` + 10
+  milagros en 22 + `MiracleID`), 8x4 celdas de 128 px. Workbench con el estilo de los props
+  (cavity, contorno de 3 px: a 9 unidades uno de 2 se pierde) y el ENCUADRE MEDIDO por la caja
+  de cada objeto (camara a 35 grados, `MARGIN` 1,12), como portraits.py. La tabla `ICONS` fija
+  el orden de las celdas y tiene su espejo en `render/sprites.h` (`namespace Icon`). Lo que
+  costo pasadas, mirando la hoja de contacto: la honda con dos tramos por cuerda salia un
+  hexagono (una cuerda recta por lado: un triangulo que se lee como honda); las sandalias
+  hay que GIRARLAS +50 en X o la suela sale de canto; el manto no se lee ni como capa (una
+  pantalla de lampara) ni como pliegues apilados (una tarta): es una tela ondulada
+  (`heightfield`) con el orillo de oro; y el Fuego del Cielo es la NUBE con su columna, no un
+  cometa (primero salio una oruga de bolas y luego una zanahoria).
+- **`chariot.py`** -> `assets/sprites/chariot.png`: el carro y los caballos de fuego de
+  `cine.carro_fuego` / `cine.caballo_fuego`, rehechos por piezas para GALOPAR (cuatro
+  fotogramas: patas en fase, radios girando, llamas latiendo) y para separarse en DOS CAPAS:
+  `back` (todo, detras del profeta) y `front` (las piezas del carro mas cerca de la camara que
+  el ancla y por encima del suelo de la caja: la pared cercana, el peto, la rueda de este
+  lado). Filas este / sur / norte (el oeste es el espejo), 256 px, a la escala de las hojas;
+  el ANCLA (suelo de la caja) cae en `ANCHOR`, copiada en `Engine::collect_chariot_draws`.
+  La lanza de la estampa (2,4 m) dejaba el tiro suelto: en el sprite el yugo va a 1,7 m.
+  Halo calido en el post (`_glow`, como vfx.py).
+- **Blender sin ventana y sin GPU** (lo que se uso en un contenedor Linux): el modulo `bpy`
+  de PyPI (4.2 LTS; 4.1 no esta publicado) en un venv con numpy y pillow, y Mesa para EGL
+  (`libegl1 libegl-mesa0 libgl1-mesa-dri`) con `EGL_PLATFORM=surfaceless`. Workbench renderiza
+  por software (llvmpipe) sin cambiar el aspecto; el aviso `EGL_BAD_MATCH` sale y no importa.
+  Runner: `sys.path.insert(0, 'tools/blender')` e `icons.main(out, tmp)` / `chariot.main(out, tmp)`.
+
 ## Efectos: `vfx.py` (el unico que NO usa el pipeline de personajes)
 
 El arte lo genera `tools/blender/mantle_sprites/vfx.py`, que **no usa nada del pipeline
