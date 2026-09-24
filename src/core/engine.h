@@ -378,6 +378,10 @@ struct Engine {
     int  pending_scene = -1;      // dialogo de jefe pedido por load_room: arranca en el
                                   // siguiente paso de Playing, no en mitad de la transicion
     u32  boss_talk_seen = 0;      // bit por capitulo: el jefe habla una vez por partida
+    // Pistas del jefe (rooms.h, get_boss_intel): el nivel que el jugador ya ha visto
+    // anunciado. -1 = recien cargado: se toma el nivel actual SIN aviso (un Continuar no
+    // repite lo que ya se sabia). Lo pone a -1 start_chapter.
+    int  boss_intel_shown = -1;
 
     // La ENTRADA del jefe: mientras `boss_approach_t > 0` el motor lleva al profeta hasta
     // el sitio exacto en que la escena guionizada lo coloca, con la camara adelantandose
@@ -448,6 +452,8 @@ struct Engine {
     // siguen siendo una pantalla aparte (FloorMap::room_cache[1]) y el fundido queda solo
     // para la puerta. Detalle: docs/mundo-exterior.md ("Zona continua").
     void build_pristine_zone(Room& out);              // todas las celdas, cosidas (generacion pura)
+    void check_zone(const Room& zone);                // log `Zone check:` (vano, cerco, nudos, puntos, puerta)
+    void update_boss_intel();                         // aviso "PISTA" al subir de nivel el rastro del jefe
     void generate_pristine_cell(int node, Room& out); // UNA celda (o el interior), en coordenadas locales
     const Room& pristine_zone();                      // copia pristina cacheada por (semilla, capitulo)
     Room* zone_ptr();                                 // la zona: current_room_data, o su cache dentro de un interior

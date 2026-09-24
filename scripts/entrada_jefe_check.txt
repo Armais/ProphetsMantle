@@ -38,7 +38,7 @@ goto boss
 wait 1.0
 # Hasta el BORDE del vano, sin cruzarlo: `walk` es bloqueante, y con el destino dentro del
 # recinto se comia el paseo entero antes de que el guion pudiera fotografiarlo.
-walk 1600 214
+walkarena -14
 wait 0.4
 hold up 0.45
 wait 0.10
@@ -58,14 +58,17 @@ wait 1.2
 
 # --- Y se puede SALTAR: Cancel (el boton atras en Android) corta el paseo ---
 # Otro capitulo porque `boss_talk_seen` lleva un bit por capitulo y el 1 ya se ha gastado.
-# Gate: `boss approach end (saltado)` y, justo detras, la escena del jefe del cap. 2. Lo
+# El 6 y no el 2 desde el mapa grande (2026-09-24): el `hold up` de abajo cruza un vano que
+# mira al SUR, y la arena del cap. 2 va pegada al borde oeste (vano al este). La del 6 es
+# North, como la del 1.
+# Gate: `boss approach end (saltado)` y, justo detras, la escena del jefe del cap. 6. Lo
 # que NO puede pasar es que el profeta se quede andando solo con la caja abierta.
-chapter 2
+chapter 6
 wait 2.5
 entrada
 goto boss
 wait 1.0
-walk 1600 214
+walkarena -14
 wait 0.4
 hold up 0.45
 wait 0.20

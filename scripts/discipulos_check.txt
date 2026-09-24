@@ -58,7 +58,7 @@ stats tras_pelea
 # =============================================================================
 # Hace falta una sala de COMBATE. Desde los mapas fijos (2026-08-27) el reparto de salas
 # es CONFIGURACION (CHAPTER_LAYOUT, rooms.cpp) y no depende de la semilla: en el cap. 1
-# las Normal son 1, 6 y 8 (la 3 paso a ser sala de Encuentro).
+# las Normal son 2, 6, 8, 13, 16, 18, 21 y 23 (rejilla 6x4 desde el 2026-09-24).
 seed 4242
 chapter 1
 wait 3.0
