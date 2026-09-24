@@ -12,15 +12,24 @@ que falla solo se ve leyendo las lineas del log que cada guion declara como crit
 Un capitulo es UN mapa (`docs/mundo-exterior.md`, "Zona continua"), y eso cambia como se
 escribe un guion:
 
-- **`walk x y` va en coordenadas de ZONA.** La celda `(gx,gy)` empieza en `(gx*640, gy*352)`;
-  la de inicio es (2,2) en las rejillas 4x3 (origen (1280,704)) y (2,3) en las 4x4 (5 y 10:
-  (1280,1056)). Toda coordenada "de sala" clavada antes del 2026-09-10 esta podrida: sumale el
-  origen de su celda.
+- **`walk x y` va en coordenadas de ZONA.** La celda `(gx,gy)` empieza en `(gx*640, gy*352)`.
+  Desde el mapa grande (2026-09-24) la celda de inicio y la del jefe CAMBIAN por capitulo, asi
+  que un guion nuevo no clava coordenadas absolutas: **`walks x y`** va relativo al origen de
+  la celda de INICIO (x = tile*16+8 del volcado ASCII de esa celda, el que sale JUSTO ANTES de
+  su linea `Loaded room`) y **`walkarena d`** a `d` unidades del centro del vano de la arena,
+  positivo hacia dentro, sea North, West, East o South (lo viejo `walk 1600 150` es
+  `walkarena 50`; `walk 1600 214`, `walkarena -14`).
 - **`goto <celda|tipo>` teletransporta al NUDO de la celda** (sus enemigos nacen al frame
-  siguiente, determinista). **El jefe se entra ANDANDO**: `goto boss` deja bajo el recinto y
-  hace falta `walk 1600 150` (la celda B es (2,0) en todos los capitulos; el vano esta en
-  (1568..1632, 192..208)). Sin el walk no nace el jefe y `bot`/`killall` no tienen a quien.
-  `escena <jefe>` lo hace solo.
+  siguiente, determinista). Tipos: `event`, `treasure`, `altar`, `elite`, `boss`, `start` y
+  `rest` (paso tranquilo). **El jefe se entra ANDANDO**: `goto boss` deja enfrente del vano y
+  hace falta `walkarena 50`. Sin el walk no nace el jefe y `bot`/`killall` no tienen a quien.
+  `escena <jefe>` lo hace solo. Ojo con `hold up` para cruzar el vano: solo vale en arenas
+  North (caps. 1, 3, 6 y 10).
+- **`intel`** loguea el rastro del jefe: `INTEL nivel=N pistas=M visto=V celda_jefe=C`. Y la
+  zona recien construida deja `Zone check: ... -> OK` (o `FALLA`, con la linea de lo que no se
+  alcanza): es el gate de `mapas_check`.
+- **`killall` no despeja una celda del Acto II a la primera**: el Agua Corrupta se parte al
+  morir y sus hijos sobreviven al barrido. Tres `killall` con medio segundo entre medias.
 - **`pit`** busca el hueco MAS CERCANO al profeta (la zona tiene varios).
 - Logs nuevos: `Zone built: WxH cells (...), boss cell N, arena yes, door yes`, `Entered cell
   N [gx,gy] (Tipo)` al cruzar una costura, `Arena sealed: boss cell N`, `Cell N cleared

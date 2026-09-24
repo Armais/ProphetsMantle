@@ -77,6 +77,25 @@ Detalle del icono, el logo y su empaquetado: `tools/branding/CLAUDE.md`.
 
 A full rebuild from cold takes minutes (SDL3 + mixer + ttf dependencies); incremental builds of `src/` are seconds. `build.bat` at the project root does the same thing.
 
+### Linux sin pantalla (sesiones en la nube)
+
+Para compilar y correr los guiones en un contenedor Linux sin GPU: los fuentes de SDL3 se
+clonan en `build/_deps/{sdl3,sdl3_image,sdl3_mixer,sdl3_ttf}-src` (release-3.4.x, 3.4.0,
+3.2.0, 3.2.2; FreeType del fork `libsdl-org/freetype`, rama `VER-2-13-2-SDL`, en
+`sdl3_ttf-src/external/freetype`) y se configura SIN ventana:
+
+```bash
+cmake -S . -B build/linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DSDL_X11=OFF -DSDL_WAYLAND=OFF \
+      -DSDL_KMSDRM=OFF -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_UNIX_CONSOLE_BUILD=ON
+ninja -C build/linux        # -> ./MANTLE (ignorado por git)
+XDG_DATA_HOME=/tmp/run1 SDL_VIDEODRIVER=offscreen SDL_AUDIO_DRIVER=dummy \
+      ./MANTLE --script scripts/mapas_check.txt --shots /tmp/run1/shots
+```
+
+`XDG_DATA_HOME` aisla el guardado de cada pasada (se pueden correr varios guiones en
+paralelo). El renderer por software pinta igual que el de escritorio. **No sustituye a la
+build de Windows**: el `MANTLE.exe` se sigue compilando en la maquina del usuario.
+
 ### Important: SDL3 API differences from SDL2
 
 This project uses **SDL3**, which has breaking API changes from SDL2. Common pitfalls:
@@ -123,7 +142,7 @@ docs/               - temas largos, se leen bajo demanda
 | Audio | `audio/audio.h` | `Audio` | MIX_Mixer*, MIX_Track*, MIX_Audio* |
 | Faith | `game/faith.h` | `FaithSystem` | Core mechanic, 6 tiers |
 | Combat | `game/combat.h` | (free functions) | O(n^2) collision, projectiles |
-| Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; **zona continua** por capitulo (`RoomType::Zone`, celdas de 40x22 cosidas hasta 160x88; arena del jefe dentro de la celda B); interior 20x11 |
+| Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; **zona continua** por capitulo (`RoomType::Zone`, celdas de 40x22 cosidas en 6x4 / 6x5 hasta 240x110; arena del jefe dentro de la celda B, pegada a un borde distinto por capitulo; el jefe se averigua con pistas, `get_boss_intel`); interior 20x11 |
 | Save | `systems/save.h` | `SaveSystem` | Binary format, version 1 |
 | Progression | `systems/progression.h` | `ProgressionSystem` | 8 meta-upgrades |
 | Achievements | `systems/achievements.h` | `AchievementSystem` | 18 logros, bitmask en el guardado |
