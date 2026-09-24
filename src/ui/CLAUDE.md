@@ -406,17 +406,6 @@ Los radios de DIBUJO viven en `hud.cpp`; el radio **logico** del stick es
 `VirtualJoystick::radius = 40` (`src/input/input.h`) y no se toca: el stick no tiene
 hit-test de rect, asi que redondear el dibujo no cambia ni un pixel de lo que responde.
 
-### Un icono por milagro (2026-09-15)
-
-`miracle_icon` repartia los diez milagros entre SEIS sprites de la fila 4 del tileset, que
-ademas son **pickups y proyectiles**: Fuego del Cielo y Carro de Fuego salian con el mismo
-dibujo en dos celdas contiguas, y el Aceite Inagotable con un corazon (que no cura nada).
-Ahora hay diez iconos propios en las **filas 9-10** de `tiles.png` (`TileSprite::MirCuervo`
-.. `MirManto`, recetas `mir_*` en `tools/blender/mantle_sprites/tiles.py`) y la funcion es
-1:1. El `default` **ya no devuelve `Star` en silencio** —que es el icono de las reliquias—:
-loguea `HUD: milagro N sin icono propio`, para que un milagro nuevo sin icono se note.
-Guion: `scripts/iconos_milagro_check.txt`.
-
 **El HUD no puede mentir sobre lo que pinta**: durante el tutorial el minimapa muestra el
 capítulo 1 —el que se va a jugar al salir—, así que `HUDContext::tutorial` cambia la línea del
 objetivo por "Mapa del cap. 1" en vez de dar una dirección de jefe que aquí no significa nada.

@@ -287,7 +287,3 @@ Tres guiones nuevos, de las cuatro cosas que el tester saco jugando el APK:
   Detalle que costo una pasada: las tinajas de los extremos estan a 107 unidades y **desde
   el punto de nacimiento no se alcanzan** (el alcance es 120, pero el tiro no llega), asi
   que hay que arrimarse 144 unidades de las 220 que cierran el paso 1.
-- **`iconos_milagro_check.txt`**: los diez iconos de milagro, uno por milagro. Gate del log:
-  cero `HUD: milagro N sin icono propio`. Gate visual: las celdas Q/E/F con los pares que
-  antes compartian dibujo (Fuego/Carro, Cuervos/Aceite, Altar/Ojos/Doble) y las cartas de
-  `mcards`, juzgados **a tamano de HUD**, no ampliados.

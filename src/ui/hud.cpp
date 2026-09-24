@@ -681,27 +681,19 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
     }
 }
 
-// UN icono por milagro (filas 9-10 del tileset). Antes los diez se repartian seis sprites
-// de la fila 4, que ademas son los pickups y los proyectiles: Fuego del Cielo y Carro de
-// Fuego salian con el MISMO dibujo en dos celdas contiguas, y el Aceite Inagotable con el
-// corazon, que encima miente (no cura nada).
 static TileSprite miracle_icon(MiracleID id) {
     switch (id) {
-        case MiracleID::CuervosDeQuerit:   return TileSprite::MirCuervo;
-        case MiracleID::PalabraDeSequia:   return TileSprite::MirSequia;
-        case MiracleID::FuegoDelCielo:     return TileSprite::MirFuego;
-        case MiracleID::CarroDeFuego:      return TileSprite::MirCarro;
-        case MiracleID::AltarConsumido:    return TileSprite::MirAltar;
-        case MiracleID::SanarAguas:        return TileSprite::MirAguas;
-        case MiracleID::AceiteInagotable:  return TileSprite::MirAceite;
-        case MiracleID::OjosAbiertos:      return TileSprite::MirOjos;
-        case MiracleID::EjercitoCelestial: return TileSprite::MirEjercito;
-        case MiracleID::DoblePorcion:      return TileSprite::MirManto;
-        default:
-            // Un milagro nuevo sin icono se NOTA. El default ya no es Star, que es el icono
-            // de las reliquias: se colaba como dibujo bueno y nadie se enteraba.
-            SDL_Log("HUD: milagro %u sin icono propio", static_cast<u32>(id));
-            return TileSprite::MirManto;
+        case MiracleID::CuervosDeQuerit:   return TileSprite::Heart;
+        case MiracleID::PalabraDeSequia:   return TileSprite::Skull;
+        case MiracleID::FuegoDelCielo:     return TileSprite::Fireball;
+        case MiracleID::CarroDeFuego:      return TileSprite::Fireball;
+        case MiracleID::AltarConsumido:    return TileSprite::Star;
+        case MiracleID::SanarAguas:        return TileSprite::Orb;
+        case MiracleID::AceiteInagotable:  return TileSprite::Heart;
+        case MiracleID::OjosAbiertos:      return TileSprite::Star;
+        case MiracleID::EjercitoCelestial: return TileSprite::Lightbolt;
+        case MiracleID::DoblePorcion:      return TileSprite::Star;
+        default:                           return TileSprite::Star;
     }
 }
 
