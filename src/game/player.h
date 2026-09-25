@@ -88,6 +88,22 @@ struct Player {
     Vec2 chariot_fx_pos  = {0, 0};     // el ANCLA (suelo de la caja) en el mundo
     Vec2 chariot_fx_dir  = {1, 0};
     f32  chariot_fx_lift = 0.0f;       // cuanto ha subido tras soltarlo (unidades)
+    // El FUEGO DEL CIELO que se ve caer (2026-09-24, "la cinematica deberia ver como cae un
+    // fuego del cielo"; 2 Reyes 1:10, "descienda fuego del cielo, y consumate a ti y a tus
+    // cincuenta"). Al lanzarlo el cielo se oscurece, una bola grande baja desde fuera de
+    // pantalla sobre el sitio donde se invoco y otra mas pequena sobre cada enemigo del
+    // radio; el DANO llega cuando tocan suelo (SKY_FIRE_FALL), no antes. Lo pinta
+    // Engine::render_sky_fire por ENCIMA del mundo: el fuego viene del cielo, no pasa por
+    // detras de los arboles.
+    static constexpr int SKY_FIRE_BOLTS = 8;
+    struct SkyBolt { Vec2 target; f32 start; f32 size; };
+    SkyBolt sky_bolts[SKY_FIRE_BOLTS] = {};
+    int  sky_bolt_count = 0;
+    f32  sky_fire_t     = -1.0f;   // segundos desde que se invoco; < 0 = no hay fuego en el aire
+    Vec2 sky_fire_pos   = {0, 0};  // donde cae la bola grande (y el centro del dano)
+    f32  sky_fire_mult  = 1.0f;    // multiplicador de dano apuntado AL LANZARLO
+    bool sky_fire_hit   = false;   // ya ha tocado suelo (el dano se aplica una vez)
+    bool sky_fire_landed = false;  // aviso de un frame para el Engine: sonido del impacto
     f32  trail_timer   = 0.0f;   // Cadencia de la estela
     bool crossed_gap   = false;  // ya se ha logueado el cruce de hueco de esta embestida
     f32  reveal_pulse  = 0.0f;   // Cadencia de las marcas de Ojos Abiertos
@@ -117,6 +133,8 @@ struct Player {
     // a proposito — se vuelve a llamar al reintentar capitulo, al cargar y en la Ascension.
     void apply_relic_effects(struct FaithSystem& faith);
     void cast_miracle(ECSWorld& world, struct FaithSystem& faith, MiracleID id);
+    // Fuego del Cielo en el aire: avanza la caida y, al tocar suelo, dano + llave del bioma
+    void update_sky_fire(ECSWorld& world, f32 dt);
     // Ataque secundario del arma equipada (weapon_slot). Honda = piedra que atraviesa,
     // Vara = barrido de largo alcance. Devuelve true si llego a disparar.
     bool fire_secondary(ECSWorld& world, struct FaithSystem& faith, Vec2 aim, f32 damage_mult);

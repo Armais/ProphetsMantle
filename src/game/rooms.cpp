@@ -1317,7 +1317,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
 }
 
 void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
-                         u32 npc_tex, f32 time, Rect view) const {
+                         u32 npc_tex, f32 time, Rect view, u32 ring_tex) const {
     BiomeStyle biome = get_biome_style(chapter);
     if (type == RoomType::Interior) apply_interior_style(biome);
     constexpr f32 ts = static_cast<f32>(TS);
@@ -1336,8 +1336,8 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
             // como cualquier personaje — misma celda de 32 unidades, misma sombra, mismo
             // orden por Y. Hasta esta pasada esto era la celda de ANTORCHA del tileset.
             // Si el locutor es una ESCENA (los cuervos, el altar del Carmelo, la boca de la
-            // cueva) no hay nadie a quien dibujar: la hoguera de siempre marca el sitio, que
-            // es lo honesto — ponerle una cara a un pasaje seria mentir sobre lo que se mira.
+            // cueva) no hay nadie a quien dibujar: un resplandor en el suelo marca el sitio,
+            // que es lo honesto — ponerle una cara a un pasaje seria mentir sobre lo que se mira.
             if (t == TileType::Event && npc_tex != TEXTURE_NONE) {
                 const int ci = cell_of_tile(x, y);
                 const int ev = (ci >= 0) ? cells[ci].event_id : -1;
@@ -1362,17 +1362,63 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
                     // borde del tile, y el PNJ pisa el suelo igual que el profeta.
                     n.dst = {px + ts * 0.5f - 16.0f, feet - 28.0f, 32.0f, 32.0f};
                     out.push_back(n);
-                    // Marca flotante: se ve desde lejos que ahi espera alguien, que es medio
-                    // motivo para desviarse del camino.
-                    if (ci >= 0 && !cells[ci].event_used) {
-                        DrawCmd m;
-                        m.sort_y = feet + 0.1f;
-                        m.texture_id = tileset;
-                        m.src = get_tile_src(TileSprite::Star);
-                        f32 bob = std::sin(time * 3.0f + static_cast<f32>(x)) * 1.5f;
-                        m.dst = {px + ts * 0.5f - 4.0f, feet - 34.0f + bob, 8.0f, 8.0f};
-                        m.tint = {255, 226, 150, 255};
-                        out.push_back(m);
+                    // La marca de "aqui hay un relato" (el bocadillo con "!") ya no es una
+                    // estrella entre los props: la pinta render_event_markers por ENCIMA de
+                    // todo, para que ningun arbol la tape.
+                    continue;
+                }
+                // Encuentro de ESCENA (los cuervos, la boca de la cueva, el arroyo seco): no
+                // hay nadie de pie. Hasta el 2026-09-24 era la celda de ANTORCHA teñida, y el
+                // usuario la marco en una captura: "no esta claro que ahi hay una interaccion"
+                // — un palo con una bola naranja se lee como decorado. Ahora el sitio brilla
+                // en el suelo, suben chispas doradas, y encima flota el mismo bocadillo "!"
+                // que sobre un PNJ. Resuelto, no queda nada.
+                const bool pending = (ci < 0 || !cells[ci].event_used);
+                if (!pending) continue;
+                if (textured) {
+                    const f32 feet = py + 13.0f;
+                    const f32 pulse = 0.5f + 0.5f * std::sin(time * 3.2f + static_cast<f32>(x));
+                    // Sobre la arena un dorado apagado no se distingue del suelo (primera
+                    // prueba): el resplandor va casi blanco, doble, y a pleno alfa en el centro
+                    if (shadow_tex != TEXTURE_NONE) {
+                        for (int layer = 0; layer < 2; layer++) {
+                            DrawCmd g;
+                            g.sort_y = -999.0f;
+                            g.texture_id = shadow_tex;
+                            g.src = {0, 0, 64, 32};
+                            const f32 gw = (layer ? 18.0f : 34.0f) + 4.0f * pulse;
+                            const f32 gh = (layer ? 8.0f : 14.0f) + 2.0f * pulse;
+                            g.dst = {px + ts * 0.5f - gw * 0.5f, feet - gh * 0.5f - 1.0f, gw, gh};
+                            g.tint = layer ? Color{255, 250, 220, static_cast<u8>(170 + 85 * pulse)}
+                                           : Color{255, 205, 90, static_cast<u8>(150 + 80 * pulse)};
+                            out.push_back(g);
+                        }
+                    }
+                    // Un aro que se abre en el suelo y se apaga, una vez por segundo: lo que se
+                    // mueve se ve de lejos, y lo que brilla quieto parece decorado
+                    if (ring_tex != TEXTURE_NONE) {
+                        const f32 rp = std::fmod(time * 0.8f + (x % 7) * 0.13f, 1.0f);
+                        DrawCmd r;
+                        r.sort_y = -998.0f;
+                        r.texture_id = ring_tex;
+                        r.src = {0, 0, 64, 64};
+                        const f32 rw = 10.0f + 30.0f * rp, rh = rw * 0.45f;
+                        r.dst = {px + ts * 0.5f - rw * 0.5f, feet - rh * 0.5f - 1.0f, rw, rh};
+                        r.tint = {255, 226, 140, static_cast<u8>(230.0f * (1.0f - rp))};
+                        out.push_back(r);
+                    }
+                    // Tres chispas que suben en bucle, desfasadas (solo reloj: sin entidades)
+                    for (int k = 0; k < 3; k++) {
+                        const f32 ph = std::fmod(time * 0.9f + k * 0.333f + (x % 5) * 0.07f, 1.0f);
+                        DrawCmd s;
+                        s.sort_y = feet + 0.1f;
+                        s.texture_id = tileset;
+                        s.src = get_tile_src(TileSprite::Star);
+                        const f32 sz = 5.0f * (1.0f - ph * 0.6f);
+                        const f32 sx = px + ts * 0.5f + std::sin(ph * 6.2831853f + k * 2.1f) * 5.0f;
+                        s.dst = {sx - sz * 0.5f, feet - 3.0f - ph * 22.0f - sz * 0.5f, sz, sz};
+                        s.tint = {255, 226, 150, static_cast<u8>(230.0f * (1.0f - ph))};
+                        out.push_back(s);
                     }
                     continue;
                 }
@@ -1405,9 +1451,8 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
                 case TileType::Crack:     sprite = TileSprite::Crack; tint = biome.prop_tint; break;
                 case TileType::Torch:     sprite = TileSprite::Torch; tall = true; break;
                 case TileType::Exit:      sprite = TileSprite::Exit;  tall = true; break;
-                // Encuentro: una hoguera encendida marca donde espera el personaje. El
-                // tileset no tiene celda de PNJ; el tinte calido la separa de una antorcha
-                // normal y el dialogo pone el nombre. (Celda propia pendiente en tiles.py.)
+                // Encuentro sin textura (modo de respaldo): el rectangulo de siempre. Con
+                // textura lo resuelve el bloque de arriba (PNJ de pie o resplandor + chispas).
                 case TileType::Event:     sprite = TileSprite::Torch; tall = true;
                                           tint = {255, 226, 150, 255}; break;
                 default: break;
@@ -1441,6 +1486,57 @@ void Room::collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
                 cmd.outline = true;
             }
             out.push_back(cmd);
+        }
+    }
+}
+
+// =============================================================================
+// Marcas de encuentro: "aqui hay algo que escuchar"
+// =============================================================================
+// Un bocadillo con "!" flotando sobre cada relato sin resolver —PNJ o escena— y, al
+// acercarse, el titulo del relato encima. Va DESPUES de draw_sorted: por encima de arboles,
+// figuras y profeta, que es lo que hace que se vea desde lejos y que ningun decorado lo tape.
+// Antes solo los PNJ llevaban una estrellita, y las escenas una antorcha que nadie leia como
+// interaccion (captura del usuario, 2026-09-24).
+void Room::render_event_markers(Renderer& renderer, f32 time, Rect view, Vec2 player_pos) const {
+    constexpr f32 ts = static_cast<f32>(TS);
+    int x_lo, x_hi, y_lo, y_hi;
+    view_range(*this, view, x_lo, x_hi, y_lo, y_hi);
+    for (int y = y_lo; y <= y_hi; y++) {
+        for (int x = x_lo; x <= x_hi; x++) {
+            if (tiles[y][x] != TileType::Event) continue;
+            const int ci = cell_of_tile(x, y);
+            if (ci >= 0 && cells[ci].event_used) continue;
+            const int ev = (ci >= 0) ? cells[ci].event_id : -1;
+            const f32 cx = static_cast<f32>(x) * ts + ts * 0.5f;
+            const f32 feet = static_cast<f32>(y) * ts + 13.0f;
+            const bool person = ev >= 0 && get_event_def(ev).npc != Npc::NONE;
+            // Sobre la cabeza del PNJ (28 unidades de alto) o, en una escena, a media altura
+            const f32 bob = std::sin(time * 3.0f + static_cast<f32>(x)) * 1.5f;
+            const f32 cy = feet - (person ? 36.0f : 30.0f) + bob;
+            // Late un poco: lo que respira se lee como "vivo", no como un cartel pintado.
+            // Discos y no panel de 9 trozos: a este tamano el panel dejaba costuras visibles.
+            const f32 rad = 6.0f * (1.0f + 0.07f * (0.5f + 0.5f * std::sin(time * 5.0f + static_cast<f32>(y))));
+            const f32 bh = rad * 2.0f;
+            const Color ink = {60, 38, 22, 255};
+            // Pico del bocadillo, apuntando al sitio
+            renderer.draw_rect({cx - 1.5f, cy + rad - 0.5f, 3.0f, 2.0f}, ink);
+            renderer.draw_rect({cx - 0.5f, cy + rad + 1.5f, 1.0f, 1.5f}, ink);
+            renderer.draw_disc({cx, cy}, rad + 1.0f, ink);
+            renderer.draw_disc({cx, cy}, rad, {255, 240, 200, 255});
+            const f32 ew = renderer.measure_text("!", 1.05f);
+            renderer.draw_text("!", cx - ew * 0.5f, cy - 4.6f, {190, 60, 25, 255}, 1.05f);
+
+            // Cerca: el titulo del relato, para que se sepa QUE hay antes de pisarlo
+            if (ev < 0) continue;
+            const f32 dx = player_pos.x - cx, dy = player_pos.y - (feet - 6.0f);
+            if (dx * dx + dy * dy > 64.0f * 64.0f) continue;
+            const char* title = get_event_def(ev).speaker;
+            if (!title || !title[0]) continue;
+            const f32 tw = renderer.measure_text(title, 0.62f);
+            const f32 ty = cy - bh * 0.5f - 11.0f;
+            renderer.draw_panel({cx - tw * 0.5f - 4.0f, ty - 1.5f, tw + 8.0f, 8.5f}, {30, 22, 18, 225}, 3.0f);
+            renderer.draw_text(title, cx - tw * 0.5f, ty, {250, 228, 170, 255}, 0.62f);
         }
     }
 }

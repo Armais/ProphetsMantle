@@ -428,11 +428,14 @@ struct Room {
     // Rendering: solo el rectangulo VISIBLE (`view`, unidades de mundo) mas un margen. La
     // zona son hasta 14.000 tiles y pintarla entera cada frame no tiene sentido.
     void render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) const;
-    // `npc_tex` es assets/sprites/npcs.png: quien espera en la celda de encuentro. Sin ella
-    // (o si el locutor es una escena y no una persona) el sitio lo sigue marcando una hoguera.
+    // `npc_tex` es assets/sprites/npcs.png: quien espera en la celda de encuentro. Si el
+    // locutor es una escena y no una persona, el sitio lo marcan un resplandor, un aro que
+    // se abre en el suelo (`ring_tex`, Renderer::ring_tex) y chispas que suben.
     void collect_props(std::vector<DrawCmd>& out, u32 tileset, u32 shadow_tex,
-                       u32 npc_tex, f32 time, Rect view) const;
+                       u32 npc_tex, f32 time, Rect view, u32 ring_tex = TEXTURE_NONE) const;
     void render_exit_barriers(Renderer& renderer, f32 time) const;   // la banda roja del vano sellado
+    // El bocadillo "!" sobre cada relato pendiente y su titulo cuando el profeta esta cerca
+    void render_event_markers(Renderer& renderer, f32 time, Rect view, Vec2 player_pos) const;
 
     // Tamano en unidades de juego (lo que ve la camara)
     f32 world_w() const { return static_cast<f32>(tiles_w * Config::TILE_SIZE); }

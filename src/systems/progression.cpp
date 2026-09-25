@@ -25,7 +25,7 @@ void ProgressionSystem::init() {
     // "Los hijos de los profetas" (2 Reyes 2:3): el sistema de Discipulos del GDD es la
     // fortaleza propia de Eliseo, asi que se compra aqui y solo le sirve a el.
     upgrades.push_back({7, tr("La Escuela de Profetas", "The School of Prophets"),
-        tr("Eliseo entra en cada sala con un discípulo", "Elisha enters every room with a disciple"), 220, false});
+        tr("Eliseo camina siempre con un discípulo", "Elisha always walks with a disciple"), 220, false});
 
     // --- Mejoras que DESBLOQUEAN objetos (GDD 3.1, paso 7 del bucle) ---
     // Cuatro de los seis objetos del catalogo ampliado nacen bloqueados: hasta que se

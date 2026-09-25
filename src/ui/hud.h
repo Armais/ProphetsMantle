@@ -104,6 +104,15 @@ void draw_miracle_choice(Renderer& renderer, const char* title, const MiracleID*
                          int selected, u32 tileset, const char* const* extras,
                          bool touch = false);
 
+// Una consecuencia de una opcion del dialogo ("+18 Fe", "-12 HP"), ya escrita y con su
+// color: dorado la fe que se gana, rojo lo que se pierde, verde lo demas que se gana, azul
+// un objeto. La construye Engine::build_event_chips desde get_event_effect (events.h).
+struct EffectChip {
+    char  text[40] = "";
+    Color color    = Color::white();
+};
+constexpr int DIALOGUE_MAX_CHIPS = 6;
+
 // Encuentro biblico (GameScene::Dialogue): caja inferior sobre el mundo congelado.
 // `body` es el texto ya elegido por el Engine (linea de dialogo o resultado).
 // Con `option_count` > 0 se pintan las opciones; `selected` marca la activa.
@@ -112,7 +121,12 @@ struct DialogueView {
     int  portrait = Portrait::NONE;             // indice en portraits.png, -1 = sin cara
     const char* body    = "";
     const char* options[2] = {nullptr, nullptr};
-    const char* costs[2]   = {nullptr, nullptr};
+    // Lo que CAMBIA cada opcion, pintado junto a ella (antes: un "coste" a mano que callaba
+    // lo que se ganaba). Tras decidir, `result_chips` repite lo que ha pasado bajo el texto.
+    EffectChip chips[2][DIALOGUE_MAX_CHIPS];
+    int  chip_count[2] = {0, 0};
+    EffectChip result_chips[DIALOGUE_MAX_CHIPS];
+    int  result_chip_count = 0;
     int  option_count = 0;
     int  selected     = 0;
     bool more_lines   = false;                  // Quedan lineas: el pie dice "seguir"

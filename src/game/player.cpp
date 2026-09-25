@@ -239,6 +239,7 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
             }
         }
     }
+    update_sky_fire(world, dt);
     // El carro visible: mientras dura la embestida va pegado a los pies del profeta (lo
     // lleva dentro); despues sigue adelante, sube y se apaga (2 Reyes 2:11: "subio al cielo").
     if (chariot_fx_t >= 0.0f) {
@@ -329,7 +330,7 @@ bool Player::fire_secondary(ECSWorld& world, FaithSystem& faith, Vec2 aim, f32 d
         case 0: {   // Honda de David (1 Samuel 17:40): una piedra rápida que atraviesa
             Entity p = spawn_projectile(world, transform.position + aim * 7.0f, aim,
                                         base * damage_mult * 1.6f, true,
-                                        ProjectileKind::Arrow, 320.0f, 240.0f);
+                                        ProjectileKind::Stone, 320.0f, 240.0f);
             if (p != ENTITY_NONE && world.has(p, Component::Projectile))
                 world.projectiles[p].pierce = true;
             // Volteo de la honda: la piedra sale de un giro, no de la nada
@@ -547,6 +548,58 @@ static void vfx_pillar(ECSWorld& w, Vec2 c, TileSprite s, Color col, int segment
         spawn_vfx(w, c, s, col, size, life + i * 0.05f, 0.6f, -90.0f, {0, -55.0f - i * 22.0f}, 11);
 }
 
+// -----------------------------------------------------------------------------
+// Fuego del Cielo: la caida y el impacto (el dibujo de las bolas es de
+// Engine::render_sky_fire; aqui solo el tiempo y lo que pasa al tocar suelo)
+// -----------------------------------------------------------------------------
+void Player::update_sky_fire(ECSWorld& world, f32 dt) {
+    if (sky_fire_t < 0.0f) return;
+    sky_fire_t += dt;
+    if (!sky_fire_hit && sky_fire_t >= Config::SKY_FIRE_FALL) {
+        sky_fire_hit = true;
+        sky_fire_landed = true;
+        const Vec2 pos = sky_fire_pos;
+        const f32 R = Config::SKY_FIRE_RADIUS;
+        // El dano es el de siempre (80 x fe x Arca x herencia, apuntado al lanzarlo), en el
+        // radio de siempre, pero centrado donde CAYO el fuego y no donde esta el profeta ahora
+        int hits = 0;
+        for (u32 e = 0; e < world.entity_count; e++) {
+            if (!world.is_alive(e) || !is_hostile(world, e) || !world.has(e, Component::Health)) continue;
+            if (!world.healths[e].is_alive()) continue;
+            Vec2 ep = world.transforms[e].position;
+            if (ep.distance_to(pos) < R) {
+                hits++;
+                if (apply_damage(world, entity, e, 80.0f * sky_fire_mult)) pending_kills.push_back(e);
+                if (world.has(e, Component::Movement))
+                    world.movements[e].knockback = (ep - pos).normalized() * 200.0f;
+            }
+        }
+        // ...y es la LLAVE del bioma: quema el matorral y abre las grietas de la roca
+        // (GDD2.0 fase 4). El radio es el mismo que el del dano, para que lo que arde sea
+        // exactamente lo que se ve arder.
+        const int opened = world.active_room
+            ? world.active_room->open_secrets(pos, R, SECRET_BUSH | SECRET_CRACK, world.loot_drops) : 0;
+        // Con el dano diferido, "Cast miracle" ya no dice que paso: esta linea si
+        SDL_Log("Fuego del Cielo toca suelo en (%.0f,%.0f): %d enemigo(s), %d secreto(s) abierto(s)",
+                pos.x, pos.y, hits, opened);
+        // El golpe: columna de fuego donde cayo la bola grande, estallido y la onda
+        spawn_fx(world, pos, FxID::Holy, {255, 150, 60, 250}, 84.0f, 0.6f, 11);
+        spawn_fx(world, pos, FxID::Explosion, {255, 170, 80, 245}, 70.0f, 0.5f, 11);
+        vfx_ring(world, pos, TileSprite::Fireball, {255, 150, 60, 245}, 16, 13.0f, 210.0f, 0.5f, 300.0f);
+        ring_of_bolts(world, pos, 14, ProjectileKind::Fireball, 0.0f, 240.0f, R, true);
+        spawn_particles(world, pos, {255, 200, 120, 255}, 16, 110.0f, 0.5f);
+        // Y un estallido pequeno donde cayo cada una de las otras
+        for (int i = 1; i < sky_bolt_count; i++) {
+            const Vec2 t = sky_bolts[i].target;
+            spawn_fx(world, t, FxID::Explosion, {255, 160, 70, 235}, 34.0f, 0.4f, 11);
+            spawn_particles(world, t, {255, 180, 90, 255}, 6, 70.0f, 0.4f);
+        }
+        shake_request = std::max(shake_request, 6.0f);
+        world.hitstop = std::max(world.hitstop, 0.06f);   // el peso del golpe: tres frames quieto
+    }
+    if (sky_fire_t >= Config::SKY_FIRE_FALL + Config::SKY_FIRE_AFTER) sky_fire_t = -1.0f;
+}
+
 void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
     if (entity == ENTITY_NONE) return;
     Vec2 pos = world.transforms[entity].position;
@@ -584,28 +637,39 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             break;
 
         case MiracleID::FuegoDelCielo: {
-            // Divine fire: heavy damage to everything near the prophet + visual ring
-            for (u32 e = 0; e < world.entity_count; e++) {
+            // El fuego se INVOCA aqui y CAE despues: el dano, el matorral y las grietas llegan
+            // cuando la bola toca suelo (update_sky_fire, desde Player::update). Hasta el
+            // 2026-09-24 todo pasaba en el mismo frame y lo unico que se veia era un circulo
+            // abriendose alrededor del profeta: no caia nada del cielo.
+            sky_fire_t      = 0.0f;
+            sky_fire_pos    = pos;
+            sky_fire_mult   = mult;
+            sky_fire_hit    = false;
+            sky_fire_landed = false;
+            // La bola grande, sobre el profeta, sale la primera
+            sky_bolt_count = 0;
+            sky_bolts[sky_bolt_count++] = {pos, 0.0f, 1.0f};
+            // Una por enemigo del radio ("y consumate a ti y a tus cincuenta"), saliendo un
+            // poco despues y cayendo mas deprisa: todas tocan suelo JUNTAS, en un solo golpe
+            for (u32 e = 0; e < world.entity_count && sky_bolt_count < SKY_FIRE_BOLTS; e++) {
                 if (!world.is_alive(e) || !is_hostile(world, e) || !world.has(e, Component::Health)) continue;
                 if (!world.healths[e].is_alive()) continue;
                 Vec2 ep = world.transforms[e].position;
-                if (ep.distance_to(pos) < 80.0f) {
-                    if (apply_damage(world, entity, e, 80.0f * mult)) pending_kills.push_back(e);
-                    if (world.has(e, Component::Movement))
-                        world.movements[e].knockback = (ep - pos).normalized() * 200.0f;
-                }
+                if (ep.distance_to(pos) >= Config::SKY_FIRE_RADIUS) continue;
+                const f32 start = 0.06f + 0.035f * static_cast<f32>(sky_bolt_count);
+                sky_bolts[sky_bolt_count++] = {ep, start, 0.62f};
             }
-            // ...y es la LLAVE del bioma: quema el matorral y abre las grietas de la roca
-            // (GDD2.0 fase 4). El radio es el mismo que el del dano, para que lo que arde sea
-            // exactamente lo que se ve arder.
-            if (world.active_room)
-                world.active_room->open_secrets(pos, 80.0f, SECRET_BUSH | SECRET_CRACK, world.loot_drops);
-            // El fuego CAE: una columna sobre el profeta antes de que se abra el circulo
-            spawn_fx(world, pos, FxID::Holy, {255, 196, 110, 245}, 78.0f, 0.55f, 11);
-            spawn_fx(world, pos, FxID::Explosion, {255, 170, 80, 240}, 62.0f, 0.45f);
-            vfx_ring(world, pos, TileSprite::Fireball, {255, 150, 60, 245}, 16, 13.0f, 210.0f, 0.5f, 300.0f);
-            ring_of_bolts(world, pos, 14, ProjectileKind::Fireball, 0.0f, 240.0f, 80.0f, true);
-            shake_request = 5.0f;
+            // Sin enemigos cerca tambien llueve: minimo tres bolas en corona, que el milagro
+            // se lance igual para quemar matorral o abrir una grieta
+            for (int i = 0; sky_bolt_count < 4; i++) {
+                f32 a = 0.6f + i * 2.1f;
+                sky_bolts[sky_bolt_count++] = {pos + Vec2{std::cos(a) * 44.0f, std::sin(a) * 30.0f},
+                                               0.08f + 0.04f * i, 0.55f};
+            }
+            // Donde va a caer, marcado en el suelo mientras baja: un aro rojo del radio del dano
+            spawn_fx(world, pos, FxID::Ring, {255, 90, 40, 230}, Config::SKY_FIRE_RADIUS * 2.0f,
+                     Config::SKY_FIRE_FALL, 7);
+            shake_request = 1.5f;   // el cielo que se abre
             break;
         }
 

@@ -326,7 +326,8 @@ static void system_projectiles(ECSWorld& w, f32 dt) {
         auto& t = w.transforms[e];
 
         t.position += proj.direction * proj.speed * dt;
-        t.rotation = std::atan2(proj.direction.y, proj.direction.x) * 57.2957795f;
+        if (proj.spin != 0.0f) t.rotation += proj.spin * dt;
+        else                   t.rotation = std::atan2(proj.direction.y, proj.direction.x) * 57.2957795f;
 
         // Destroy if exceeded max range or out of room bounds. Los limites son los de la
         // SALA, no los de la pantalla: con las salas de 2x2 pantallas, el 320x180 de antes

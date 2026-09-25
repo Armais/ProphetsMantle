@@ -176,7 +176,7 @@ enum : int {
 // =============================================================================
 // Mismo struct que el pozo (EventDef) para que la caja de dialogo no sepa de donde viene el
 // texto. `options[0].label == nullptr` es lo que la hace cerrar sola, sin decision.
-#define SC_NO_OPTIONS {{nullptr, nullptr, nullptr}, {nullptr, nullptr, nullptr}}
+#define SC_NO_OPTIONS {{nullptr, nullptr}, {nullptr, nullptr}}
 
 inline EventDef get_scene_line(int line) {
     // Retratos de los jefes que son un EnemyType (las ocho primeras celdas del Bestiario)

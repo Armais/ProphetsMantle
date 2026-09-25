@@ -197,6 +197,8 @@ struct ProjectileComponent {
     Entity owner     = ENTITY_NONE;  // Who fired this
     bool friendly    = true;          // Player projectile?
     bool pierce      = false;         // Goes through enemies (miracles)
+    f32  spin        = 0.0f;          // Grados/s. 0 = el sprite apunta hacia donde vuela;
+                                      // la piedra de la Honda gira sobre si misma
     Entity hit_list[8] = {ENTITY_NONE, ENTITY_NONE, ENTITY_NONE, ENTITY_NONE,
                           ENTITY_NONE, ENTITY_NONE, ENTITY_NONE, ENTITY_NONE};  // Piercing: already hit
     u8 hit_count = 0;

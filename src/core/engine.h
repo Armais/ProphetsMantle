@@ -457,6 +457,7 @@ struct Engine {
     void check_zone(const Room& zone);                // log `Zone check:` (vano, cerco, nudos, puntos, puerta)
     void update_boss_intel();                         // aviso "PISTA" al subir de nivel el rastro del jefe
     void collect_chariot_draws(std::vector<DrawCmd>& out);   // las dos capas del Carro de Fuego
+    void render_sky_fire();                                  // el Fuego del Cielo cayendo
     void generate_pristine_cell(int node, Room& out); // UNA celda (o el interior), en coordenadas locales
     const Room& pristine_zone();                      // copia pristina cacheada por (semilla, capitulo)
     Room* zone_ptr();                                 // la zona: current_room_data, o su cache dentro de un interior
@@ -476,6 +477,8 @@ struct Engine {
     void open_dialogue(int event_id);           // Encuentro biblico -> GameScene::Dialogue
     void update_dialogue(f32 dt);               // Avance de lineas + eleccion
     void apply_event_choice(int event_id, int option);  // Efecto de la decision
+    // Etiquetas de consecuencia de una opcion, de la misma tabla que la aplica (events.h)
+    int  build_event_chips(int event_id, int option, struct EffectChip* out, int max) const;
     void open_item_choice(const char* title);      // Roll 3 item offers -> GameScene::Choice
     void open_miracle_choice(const char* title);   // Roll 3 miracle offers -> GameScene::Choice
     void update_item_choice(f32 dt);            // Navigation + confirm on the choice screen

@@ -4,6 +4,33 @@ Viene del `CLAUDE.md` de la raiz. Pertenece a **`src/game/`** (`events.h`, `lore
 caja de dialogo de **`src/ui/`**. El arte de los retratos y las vinetas lo genera
 `tools/blender/` (ver su `CLAUDE.md`).
 
+### Las consecuencias se VEN, y obedecer sube la fe (2026-09-24)
+
+Informe del usuario tras jugar el cap. 1: *"en la parte del arroyo, al seguir la voluntad de
+Dios deberia aumentar tu fe y no lo hace"* y *"se tiene que ver claro que consecuencia tiene
+cada dialogo"*. El motor SI sumaba +18 en «Quedarte donde te mandó», pero la caja solo
+pintaba un "coste" escrito a mano (`EventOption::cost`, "-12 HP") y callaba lo que se ganaba;
+ademas el goteo de fe por inactividad (-0,5/s a los 10 s sin atacar) se la comia enseguida.
+
+- **Una sola tabla**: `get_event_effect(id, opcion)` al final de `events.h` (fe, dolor, vida
+  maxima, dano, cura, escala del jefe, objeto y un `EventSpecial` para lo demas). La aplica
+  `Engine::apply_event_choice` y la pinta la caja: `Engine::build_event_chips` la convierte
+  en etiquetas de color ("+18 Fe" dorado, "-12 HP" rojo, lo que se gana en verde, un objeto
+  en azul) junto a CADA opcion y, tras decidir, bajo el texto del resultado. `EventOption`
+  perdio el campo `cost`: lo que se lee y lo que pasa ya no pueden divergir.
+- **La regla**: seguir la voluntad de Dios SUBE la fe, en todos los relatos. La opcion fiel
+  cuesta cuerpo (HP) y da fe; la mundana cuesta fe y da algo tangible (dano, vida, cura).
+  Se voltearon las doce opciones fieles que restaban fe (el milagro "gastaba" fe: verter los
+  cantaros del Carmelo, mandar a Naaman al Jordan, la harina en la olla, el palo en el
+  Jordan, orar por los ojos del criado...) y las que daban MAS fe al desobedecer (ayunar ante
+  el pan de los cuervos, no comer la torta del angel, parar el aceite, callar ante el rey).
+  La despedida de Eliseo y el aposento sunamita no tienen opcion desobediente y se quedan.
+- Decidir resetea la inactividad de la fe, y la escala del jefe usa `min` (Abdias ya no
+  deshace el altar del Carmelo).
+- El log dice lo mismo que la caja: `Event choice <id> opcion <n>: +18 Fe | -12 HP`.
+- La caja de opciones mide lo que necesita (minimo 54, como la de texto): las etiquetas van
+  a la derecha de la opcion si caben y, si no, en una segunda fila debajo.
+
 ### Espinas de los caps. 1, 2 y 4, y el jefe que responde al pozo (2026-09-10, noche)
 
 Veredicto del usuario al jugar el cap. 1: *el dialogo se repite con la cinematica*. Verificado:
