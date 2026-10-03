@@ -12,6 +12,8 @@
 //   --script <file>   drive the game from an autoplay script (see core/engine.h)
 //   --shots <dir>     directory for F12 / scripted screenshots (default: screenshots)
 //   --touch           force the mobile auto-aim on desktop (debug)
+//   --window WxH      force the window size (20:9 phone: 2400x1080, portrait: 540x960)
+//   --dpi N           pretend the screen has N dots per inch (touch control size by DPI)
 //
 // =============================================================================
 
@@ -21,6 +23,7 @@
 #include <SDL3/SDL_main.h>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 
 int main(int argc, char* argv[]) {
     // Estatico: con la zona continua un Room son ~15 KB (160x88 tiles) y el Engine lleva
@@ -35,6 +38,9 @@ int main(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "--touch") == 0) touch_mode = true;   // debug: mobile auto-aim on desktop
         // `--window 540x960`: ventana de proporcion forzada. Existe para poder probar la
         // orientacion VERTICAL del GDD 4.5 sin un telefono delante.
+        // `--dpi 420`: finge la densidad de un telefono para probar el tamaño de los
+        // controles tactiles por DPI en un escritorio (Engine::touch_dpi_scale).
+        else if (std::strcmp(argv[i], "--dpi") == 0 && i + 1 < argc) engine.forced_dpi = static_cast<f32>(std::atof(argv[++i]));
         else if (std::strcmp(argv[i], "--window") == 0 && i + 1 < argc) {
             int w = 0, h = 0;
             if (std::sscanf(argv[++i], "%dx%d", &w, &h) == 2 && w > 0 && h > 0) {

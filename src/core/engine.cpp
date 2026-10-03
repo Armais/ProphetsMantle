@@ -162,9 +162,9 @@ bool Engine::init(const char* title) {
 
     input.init();
     // El reparto de los botones tactiles depende de cuanta banda negra deje el letterbox,
-    // y eso solo se sabe con la ventana ya creada.
-    input.init_touch_layout(renderer.bottom_band_units());
-    input.set_touch_viewport(renderer.viewport_norm());
+    // de la zona segura y del tamaño fisico de la pantalla: solo se sabe con la ventana ya
+    // creada.
+    refresh_touch_area();
 
     if (!audio.init()) {
         SDL_Log("Failed to init audio (continuing without sound)");
@@ -379,10 +379,33 @@ void Engine::run() {
         // fps, cada `press confirm` pasaba dos o tres paginas (2026-09-09). Para el teclado
         // real no cambia nada: sus eventos entran antes del primer paso.
         accumulator += frame_time;
+        int steps = 0;
         while (accumulator >= Config::FIXED_DT) {
             update(Config::FIXED_DT);
             accumulator -= Config::FIXED_DT;
             input.consume_presses();
+            steps++;
+        }
+
+        // Ritmo de frames en movil (2026-10-03). El juego avanza a 60 pasos por segundo y no
+        // interpola: en una pantalla de 90 o 120 Hz, la mitad de los frames eran COPIAS del
+        // anterior, pintadas y presentadas para nada — bateria y calor a cambio de cero
+        // suavidad. Con reglas de movil solo se pinta cuando hay un estado NUEVO, y mientras
+        // tanto se DUERME hasta el paso siguiente en vez de girar. El "Ahorro de bateria" de
+        // Opciones pide dos pasos por frame: 30 fps de pantalla, el juego igual a 60 por dentro.
+        // En escritorio no cambia nada.
+        if (mobile_rules) {
+            steps_since_render += steps;
+            const int need = battery_saver ? 2 : 1;
+            if (steps_since_render < need && !force_render) {
+                const f32 wait = (Config::FIXED_DT - accumulator) +
+                                 Config::FIXED_DT * static_cast<f32>(need - steps_since_render - 1);
+                if (wait > 0.0015f)
+                    SDL_DelayNS(static_cast<Uint64>((wait - 0.001f) * 1e9f));
+                continue;
+            }
+            steps_since_render = 0;
+            force_render = false;
         }
 
         render();
@@ -407,10 +430,25 @@ void Engine::handle_events() {
             case SDL_EVENT_WINDOW_RESIZED:
             case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
                 renderer.handle_resize(event.window.data1, event.window.data2);
-                // Girar el telefono cambia cuanta banda negra hay, y con ella si los
-                // botones tactiles caben fuera del mundo o no.
-                input.init_touch_layout(renderer.bottom_band_units());
-                input.set_touch_viewport(renderer.viewport_norm());
+                // Girar el telefono cambia cuanta banda negra hay, y con ella donde caben
+                // los botones tactiles.
+                refresh_touch_area();
+                force_render = true;
+                break;
+
+            // El sistema ha perdido el contenido de la ventana (Android al recrear la
+            // superficie): se repinta YA, sin esperar al paso siguiente.
+            case SDL_EVENT_WINDOW_EXPOSED:
+            case SDL_EVENT_RENDER_TARGETS_RESET:
+            case SDL_EVENT_RENDER_DEVICE_RESET:
+                force_render = true;
+                break;
+
+            // El notch, la barra de gestos o el modo inmersivo cambian la zona segura sin
+            // cambiar el tamaño de la ventana (Android la manda al volver de segundo plano).
+            case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+                refresh_touch_area();
                 break;
 
             case SDL_EVENT_KEY_DOWN:
@@ -442,6 +480,7 @@ void Engine::handle_events() {
                 // frame de vuelta traeria un dt enorme.
                 last_time = SDL_GetPerformanceCounter();
                 input.release_touch();
+                force_render = true;
                 SDL_Log("Lifecycle: back in foreground");
                 break;
 
@@ -457,6 +496,46 @@ void Engine::handle_events() {
 
     input.post_update();
     input.mouse_game = renderer.window_to_game(input.mouse_pos);
+}
+
+// =============================================================================
+// Controles tactiles: zona segura y tamaño fisico (2026-10-03)
+// =============================================================================
+// La escala 1 de los botones (input.h, TOUCH_*_R) es la de un movil de 6,5" en 20:9, donde
+// una unidad de juego mide ~0,36 mm. En otra pantalla la misma unidad mide otra cosa: en
+// una tablet de 11" pasa de 0,7 mm y los botones salian del tamaño de una galleta; en un
+// 5,5" bajaban de los 7 mm que pide un pulgar. Esto devuelve el factor que los deja con el
+// tamaño FISICO de la referencia, acotado para que el grupo no se desmadre.
+f32 Engine::touch_dpi_scale() const {
+    f32 dpi = forced_dpi;
+    if (dpi <= 0.0f) {
+        if (!is_mobile() || !window) return 1.0f;
+        // En Android la escala de pantalla ES la densidad (dpi / 160): SDL la toma de
+        // DisplayMetrics.density. Es un valor por cubos (2,625, 2,75, 3...), a ±10% de los
+        // dpi reales, que para el tamaño de un boton sobra.
+        const f32 ds = SDL_GetWindowDisplayScale(window);
+        if (ds <= 0.0f) return 1.0f;
+        dpi = 160.0f * ds;
+    }
+    const f32 unit_px = renderer.viewport.w / static_cast<f32>(Config::GAME_WIDTH);
+    if (unit_px <= 0.0f) return 1.0f;
+    const f32 unit_mm = unit_px / dpi * 25.4f;
+    constexpr f32 REF_UNIT_MM = 0.36f;
+    return std::max(0.75f, std::min(1.4f, REF_UNIT_MM / unit_mm));
+}
+
+void Engine::refresh_touch_area() {
+    input.set_touch_viewport(renderer.viewport_norm());
+    const SDL_FRect vp = renderer.viewport;
+    const f32 s = vp.w > 0.0f ? vp.w / static_cast<f32>(Config::GAME_WIDTH) : 1.0f;
+    // La ventana ENTERA en unidades de juego (con sus pilares o bandas) y, encima, lo que
+    // el sistema reserve: el notch, la barra de gestos. SDL_GetWindowSafeArea viene en
+    // coordenadas de ventana, las mismas del viewport.
+    Rect area = {-vp.x / s, -vp.y / s, renderer.window_w / s, renderer.window_h / s};
+    SDL_Rect sa;
+    if (window && SDL_GetWindowSafeArea(window, &sa) && sa.w > 0 && sa.h > 0)
+        area = {(sa.x - vp.x) / s, (sa.y - vp.y) / s, sa.w / s, sa.h / s};
+    input.set_touch_area(area, touch_dpi_scale());
 }
 
 // Un toque en una pantalla de escena (prologo, intro de capitulo, carta de historia):
@@ -480,6 +559,7 @@ void Engine::update(f32 dt) {
     // se atiende ningun control tactil: un stick que no responde es peor que ninguno.
     input.touch_gameplay = (state.scene == GameScene::Playing && boss_approach_t <= 0.0f);
     menus.touch_hints = input.touch_ui;   // las lineas de ayuda hablan de teclas o de dedos
+    menus.touch_lefty = input.touch_params.lefty;
     menus.in_tutorial = tutorial.active;  // la ultima fila de la pausa es la salida del tutorial
     // Lo mismo para las dos pantallas de texto, que ademas pintan el boton de SALTAR:
     // sin esto anunciaban [ENTER] y [ESC] en un telefono.
@@ -517,6 +597,8 @@ void Engine::update(f32 dt) {
         offering_pop = std::max(0.0f, offering_pop - dt * 1.4f);
     if (room_fade > 0.0f)     room_fade = std::max(0.0f, room_fade - dt / 0.3f);
     if (scene_fade > 0.0f)    scene_fade = std::max(0.0f, scene_fade - dt / SCENE_FADE_TIME);
+    if (touch_preview_t > 0.0f) touch_preview_t = std::max(0.0f, touch_preview_t - dt);
+    if (exit_confirm_t > 0.0f)  exit_confirm_t  = std::max(0.0f, exit_confirm_t - dt);
     {
         const bool scripted = (state.scene == GameScene::Dialogue && (scene_step >= 0 || scene_walk_t > 0.0f)) ||
                               (state.scene == GameScene::Playing && boss_approach_t > 0.0f);
@@ -612,6 +694,21 @@ void Engine::update(f32 dt) {
                 }
             } else {
                 menus.update(input);
+                // El boton atras en el TITULO, que es la raiz de la app: en Android lo que
+                // espera cualquiera es salir, y aqui no hacia nada. Dos veces seguidas salen;
+                // la primera solo avisa, porque un gesto de atras se escapa sin querer.
+                if (mobile_rules && input.is_action_just_pressed(Action::Cancel)) {
+                    if (exit_confirm_t > 0.0f) {
+                        SDL_Log("Title: atras dos veces -> salir");
+#if defined(MANTLE_PLATFORM_ANDROID)
+                        SDL_SendAndroidBackButton();   // el "atras" de siempre del sistema
+#endif
+                        exit_confirm_t = 0.0f;
+                    } else {
+                        exit_confirm_t = 2.0f;
+                        SDL_Log("Title: atras -> aviso de salida");
+                    }
+                }
                 if (input.is_action_just_pressed(Action::Confirm)) {
                     switch (menus.selected_option) {
                         case 0:
@@ -844,6 +941,14 @@ void Engine::update(f32 dt) {
                 }
                 show_message(buf, 2.0f);
                 audio.play_sfx(SfxID::MenuBack, 0.5f);
+                // En tactil el boton que se ha negado TIEMBLA y el telefono da un toque
+                // corto: con el pulgar encima del boton el mensaje de abajo no se ve, y un
+                // boton que no responde sin decir nada se lee como "el tactil falla".
+                if (input.touch_ui) {
+                    for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++)
+                        if (player.miracle_slots[i].miracle == player.last_cast) { input.deny_miracle(i); break; }
+                    input.rumble(0.25f, 35);
+                }
             }
             player.last_event = Player::MiracleEvent::None;
 
@@ -1259,7 +1364,11 @@ void Engine::render() {
     story.skip_pressed     = skip_down;
     dialogue_skip_pressed  = skip_down;
 
-    auto render_world = [this]() {
+    // El HUD de este frame, para pintar los controles tactiles en la superposicion con el
+    // MISMO contexto (fe, mensajes, hora del latido) que el resto del HUD.
+    HUDContext touch_ctx;
+    bool touch_hud = false;
+    auto render_world = [this, &touch_ctx, &touch_hud]() {
         const BiomeStyle biome = get_biome_style(state.current_chapter);
         renderer.clear(biome.background);
 
@@ -1422,7 +1531,12 @@ void Engine::render() {
                                       {player.heal_zone_pos.x - r, player.heal_zone_pos.y - r * 0.62f, r * 2, r * 1.24f},
                                       {110, 200, 250, static_cast<u8>(70 + 45 * pulse)});
         }
+        if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement))
+            ctx.dash_cd = std::max(0.0f, std::min(1.0f, world.movements[player.entity].dash_cooldown /
+                                                       std::max(0.01f, Config::DASH_COOLDOWN * player.dash_cd_mult)));
         hud.render(renderer, player, world, faith, ctx);
+        touch_ctx = ctx;
+        touch_hud = true;
     };
 
     switch (state.scene) {
@@ -1432,6 +1546,15 @@ void Engine::render() {
 
         case GameScene::MainMenu:
             menus.render(renderer);
+            // Aviso del "atras otra vez para salir" (solo con reglas de movil, ver update)
+            if (exit_confirm_t > 0.0f && menus.current == MenuScreen::Title) {
+                const f32 a = std::min(1.0f, exit_confirm_t / 0.3f);
+                const char* t = tr("Pulsa atrás otra vez para salir", "Press back again to exit");
+                const f32 tw = renderer.measure_text(t, 0.75f);
+                const Rect r = {(Config::GAME_WIDTH - tw) * 0.5f - 7.0f, 160.0f, tw + 14.0f, 12.0f};
+                renderer.draw_panel(r, {14, 11, 18, static_cast<u8>(225 * a)}, 5.0f);
+                renderer.draw_text_centered(t, r.y + 2.5f, {245, 232, 205, static_cast<u8>(255 * a)}, 0.75f);
+            }
             break;
 
         case GameScene::Playing:
@@ -1563,17 +1686,21 @@ void Engine::render() {
 
     renderer.end_frame();
 
-    // Vertical (GDD 4.5): los controles tactiles se pintan DESPUES del letterbox, sobre la
-    // ventana entera, para poder caer en la banda negra de abajo. En apaisado no hay banda
-    // y se dibujan como siempre, dentro del HUD.
-    if (input.touch_ui && input.touch_band >= 62.0f) {
+    // Los controles tactiles se pintan DESPUES del letterbox, sobre la ventana entera: en un
+    // 20:9 el grupo de botones vive en el pilar negro de la derecha y en vertical en la
+    // banda de abajo, y el objetivo de 320x180 no llega a ninguno de los dos. Encima de
+    // todo, tambien del velo de un salto: un boton no se apaga con el fundido. Con el mapa
+    // grande abierto no: lo cierra cualquier toque y los botones solo lo taparian.
+    if (input.touch_ui && touch_hud && !touch_ctx.show_map && hud.visible) {
         renderer.begin_overlay();
-        HUDContext ctx;
-        ctx.tileset  = tileset_texture;
-        ctx.registry = &item_registry;
-        ctx.input    = &input;
-        hud.draw_touch_controls(renderer, player, ctx);
-        hud.draw_miracle_slots(renderer, player, ctx, faith);
+        hud.draw_miracle_slots(renderer, player, touch_ctx, faith);
+        hud.draw_touch_controls(renderer, player, touch_ctx);
+        renderer.end_overlay();
+    }
+    // Vista previa de los controles en Opciones (tamaño / opacidad / zurdo recien tocados)
+    if (input.touch_ui && touch_preview_t > 0.0f && menus.current == MenuScreen::Settings) {
+        renderer.begin_overlay();
+        hud.draw_touch_preview(renderer, input, touch_preview_t / 0.4f, tileset_texture, world.time);
         renderer.end_overlay();
     }
     // La captura va ANTES de present(): en vertical se lee la ventana, y despues de
@@ -2776,6 +2903,15 @@ void Engine::apply_settings_from_save() {
 
     input.rumble_enabled    = (save.data.settings_flags & SETTING_RUMBLE) != 0;
     input.touch_right_stick = (save.data.settings_flags & SETTING_TOUCH_RSTICK) != 0;
+    // Controles tactiles a la medida (2026-10-03). Cero en el guardado = de fabrica (100%).
+    {
+        const int size = save.data.touch_size_pct    ? static_cast<int>(save.data.touch_size_pct)    : 100;
+        const int opac = save.data.touch_opacity_pct ? static_cast<int>(save.data.touch_opacity_pct) : 100;
+        input.set_touch_prefs(std::max(70, std::min(150, size)) / 100.0f,
+                              std::max(30, std::min(100, opac)) / 100.0f,
+                              (save.data.settings_flags & SETTING_TOUCH_LEFTY) != 0);
+    }
+    battery_saver = (save.data.settings_flags & SETTING_BATTERY_SAVE) != 0;
     player.staff_skin       = save.data.skin_equipped;   // cosmetico: no toca ninguna cifra
 
     // El idioma acaba de escribirse arriba: lo que se tradujo una sola vez hay que volver a
@@ -3533,7 +3669,7 @@ void Engine::render_tutorial_card() {
 
     const bool touch = input.touch_ui;
     const TutorialText txt = tutorial.waiting_door ? tutorial_door_text()
-                                                   : tutorial_text(tutorial.current().goal, touch);
+                                                   : tutorial_text(tutorial.current().goal, touch, input.touch_params.lefty);
     if (!txt.head || !txt.head[0]) return;
 
     const bool done = tutorial.done_t > 0.0f;
@@ -5701,6 +5837,10 @@ void Engine::load_settings_mirror() {
     menus.settings_sensitivity = save.data.sensitivity;
     menus.settings_rumble      = (save.data.settings_flags & SETTING_RUMBLE) != 0;
     menus.settings_rstick      = (save.data.settings_flags & SETTING_TOUCH_RSTICK) != 0;
+    menus.settings_touch_size    = save.data.touch_size_pct    ? static_cast<int>(save.data.touch_size_pct)    : 100;
+    menus.settings_touch_opacity = save.data.touch_opacity_pct ? static_cast<int>(save.data.touch_opacity_pct) : 100;
+    menus.settings_lefty       = (save.data.settings_flags & SETTING_TOUCH_LEFTY) != 0;
+    menus.settings_battery     = (save.data.settings_flags & SETTING_BATTERY_SAVE) != 0;
     menus.settings_language    = save.data.language;
     menus.settings_skin        = static_cast<int>(save.data.skin_equipped);
     menus.settings_skins_mask  = save.data.skins_unlocked;
@@ -5722,6 +5862,12 @@ void Engine::commit_settings_from_mirror() {
     else                       save.data.settings_flags &= ~SETTING_RUMBLE;
     if (menus.settings_rstick) save.data.settings_flags |=  SETTING_TOUCH_RSTICK;
     else                       save.data.settings_flags &= ~SETTING_TOUCH_RSTICK;
+    save.data.touch_size_pct    = static_cast<u32>(menus.settings_touch_size);
+    save.data.touch_opacity_pct = static_cast<u32>(menus.settings_touch_opacity);
+    if (menus.settings_lefty)   save.data.settings_flags |=  SETTING_TOUCH_LEFTY;
+    else                        save.data.settings_flags &= ~SETTING_TOUCH_LEFTY;
+    if (menus.settings_battery) save.data.settings_flags |=  SETTING_BATTERY_SAVE;
+    else                        save.data.settings_flags &= ~SETTING_BATTERY_SAVE;
     apply_settings_from_save();
     save.save(false);
 }
@@ -5759,6 +5905,28 @@ void Engine::update_settings() {
             break;
         case MenuSystem::ROW_RSTICK:
             if (left || right || confirm) { menus.settings_rstick = !menus.settings_rstick; changed = true; }
+            break;
+        // Los tres que cambian COMO se ven los controles encienden la vista previa: sin ella
+        // se ajustaba a ciegas y habia que volver a la partida para ver el resultado.
+        case MenuSystem::ROW_TSIZE:
+            if (left)  { menus.settings_touch_size = std::max(70,  menus.settings_touch_size - 10); changed = true; }
+            if (right) { menus.settings_touch_size = std::min(150, menus.settings_touch_size + 10); changed = true; }
+            if (changed) touch_preview_t = TOUCH_PREVIEW_TIME;
+            break;
+        case MenuSystem::ROW_TOPACITY:
+            if (left)  { menus.settings_touch_opacity = std::max(30,  menus.settings_touch_opacity - 10); changed = true; }
+            if (right) { menus.settings_touch_opacity = std::min(100, menus.settings_touch_opacity + 10); changed = true; }
+            if (changed) touch_preview_t = TOUCH_PREVIEW_TIME;
+            break;
+        case MenuSystem::ROW_LEFTY:
+            if (left || right || confirm) {
+                menus.settings_lefty = !menus.settings_lefty;
+                changed = true;
+                touch_preview_t = TOUCH_PREVIEW_TIME;
+            }
+            break;
+        case MenuSystem::ROW_BATTERY:
+            if (left || right || confirm) { menus.settings_battery = !menus.settings_battery; changed = true; }
             break;
         case MenuSystem::ROW_SKIN: {
             // Solo cicla entre las DESBLOQUEADAS: pasar por una que no tienes y verla
@@ -5865,6 +6033,11 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "defaults") { }                       // ajustes de fabrica
         else if (c.op == "aimmode") { ss >> c.num; }           // 0 OFF / 1 Asistido / 2 ON
         else if (c.op == "rstick")  { ss >> c.num; }           // 0/1: segundo joystick tactil
+        else if (c.op == "touchprefs") { ss >> c.num >> c.num2 >> c.num3; }   // tamaño% opacidad% zurdo
+        else if (c.op == "battery") { ss >> c.num; }           // 0/1: ahorro de bateria (30 fps)
+        else if (c.op == "tbtn")    { ss >> c.arg >> c.num; }  // toca el CENTRO de un boton tactil
+        else if (c.op == "joylog")  { }                        // estado del stick tactil al log
+        else if (c.op == "fpsmark") { }                        // fps PINTADOS desde la marca anterior
         else if (c.op == "meta")    { ss >> c.num >> c.num2; }  // comprar una mejora de El Santuario [rango]
         else if (c.op == "offerings") { ss >> c.num; }          // fijar el banco de ofrendas
         else if (c.op == "dropcons")  { ss >> c.num; }          // soltar un consumible delante
@@ -5929,6 +6102,15 @@ void Engine::update_autoplay(f32 dt) {
                                     Action::Belt1, Action::Belt2, Action::Belt3, Action::Belt4,
                                     Action::BeltNext, Action::BeltPrev};
     for (Action a : driven) input.actions[static_cast<u32>(a)] = false;
+    // Lo que mantiene un DEDO sintetico (`touch`/`drag`) no lo gobierna el guion: en un
+    // telefono el dedo apoyado en la mitad de disparo mantiene el Ataque, y DASH / ARMA
+    // pulsados se quedan pulsados. Sin esto el reset de arriba los soltaba al tick siguiente
+    // y un toque mantenido de guion solo disparaba UNA vez — lo que hizo creer que apuntar
+    // y disparar con el mismo pulgar no funcionaba (2026-10-03).
+    if (input.touch_aim_active) input.actions[static_cast<u32>(Action::Attack)] = true;
+    for (const TouchButton& b : input.touch_buttons)
+        if (b.down && (b.action == Action::Dash || b.action == Action::AttackSecondary))
+            input.actions[static_cast<u32>(b.action)] = true;
 
     if (ap.timer > 0.0f) {
         ap.timer -= dt;
@@ -6220,6 +6402,55 @@ void Engine::update_autoplay(f32 dt) {
             // Depuracion: encender o apagar el segundo joystick virtual sin pasar por
             // Opciones (su fila solo existe en tactil, y la navegacion por indice de un
             // guion no puede contar con que este ahi).
+            // Depuracion: los ajustes de los controles tactiles sin pasar por Opciones (sus
+            // filas solo existen en tactil y un guion no puede contar con su indice).
+            if (c.op == "touchprefs") {
+                save.data.touch_size_pct    = static_cast<u32>(std::max(70.0f, std::min(150.0f, c.num)));
+                save.data.touch_opacity_pct = static_cast<u32>(std::max(30.0f, std::min(100.0f, c.num2)));
+                if (c.num3 > 0.5f) save.data.settings_flags |=  SETTING_TOUCH_LEFTY;
+                else               save.data.settings_flags &= ~SETTING_TOUCH_LEFTY;
+                apply_settings_from_save();
+                load_settings_mirror();
+                SDL_Log("touchprefs tamaño=%u%% opacidad=%u%% zurdo=%d", save.data.touch_size_pct,
+                        save.data.touch_opacity_pct, input.touch_params.lefty ? 1 : 0);
+                continue;
+            }
+            // El stick de movimiento: donde esta su base, donde el dedo y hacia donde empuja.
+            // Es la unica forma de comprobar desde un guion que la base SIGUE al dedo.
+            if (c.op == "joylog") {
+                const VirtualJoystick& j = input.joystick_move;
+                const Vec2 ax = j.get_axis();
+                SDL_Log("JOY activo=%d base=(%.1f,%.1f) dedo=(%.1f,%.1f) radio=%.1f eje=(%.2f,%.2f) reposo=(%.1f,%.1f)",
+                        j.active ? 1 : 0, j.origin.x, j.origin.y, j.current.x, j.current.y, j.radius,
+                        ax.x, ax.y, input.joy_rest.x, input.joy_rest.y);
+                // Y el dedo de DISPARAR: si apunta y hacia donde va el tiro de verdad
+                SDL_Log("AIM dedo=%d apuntando=%d ataque=%d aim_axis=(%.2f,%.2f)",
+                        input.touch_aim_active ? 1 : 0, input.joystick_aim.active ? 1 : 0,
+                        input.actions[static_cast<u32>(Action::Attack)] ? 1 : 0,
+                        input.aim_axis.x, input.aim_axis.y);
+                continue;
+            }
+            // Frames PINTADOS por segundo desde la marca anterior: la sonda del ritmo de frames
+            // con reglas de movil (60, o 30 con el ahorro de bateria). Sin vsync (el driver
+            // offscreen de los guiones) un escritorio pintaria cientos.
+            if (c.op == "fpsmark") {
+                const u64 now = SDL_GetPerformanceCounter();
+                if (fps_mark_time != 0) {
+                    const f64 secs = static_cast<f64>(now - fps_mark_time) / static_cast<f64>(SDL_GetPerformanceFrequency());
+                    SDL_Log("FPSMARK %.1f fps pintados en %.2f s (ahorro=%d)",
+                            secs > 0.0 ? (frame_count - fps_mark_frames) / secs : 0.0, secs, battery_saver ? 1 : 0);
+                }
+                fps_mark_time = now;
+                fps_mark_frames = frame_count;
+                continue;
+            }
+            if (c.op == "battery") {
+                if (c.num > 0.5f) save.data.settings_flags |=  SETTING_BATTERY_SAVE;
+                else              save.data.settings_flags &= ~SETTING_BATTERY_SAVE;
+                apply_settings_from_save();
+                SDL_Log("battery = %d", battery_saver ? 1 : 0);
+                continue;
+            }
             if (c.op == "rstick") {
                 if (c.num > 0.5f) save.data.settings_flags |=  SETTING_TOUCH_RSTICK;
                 else              save.data.settings_flags &= ~SETTING_TOUCH_RSTICK;
@@ -6249,6 +6480,8 @@ void Engine::update_autoplay(f32 dt) {
                 save.data.sensitivity    = fresh.sensitivity;
                 save.data.language       = fresh.language;
                 save.data.settings_flags = fresh.settings_flags;
+                save.data.touch_size_pct    = fresh.touch_size_pct;
+                save.data.touch_opacity_pct = fresh.touch_opacity_pct;
                 apply_settings_from_save();
                 load_settings_mirror();
                 save.save(false);
@@ -6321,6 +6554,11 @@ void Engine::update_autoplay(f32 dt) {
                         d.music_volume, d.sfx_volume, d.aim_assist, d.sensitivity, d.language,
                         d.settings_flags, d.items_unlocked, d.skins_unlocked, d.skin_equipped,
                         d.entitlements);
+                // Controles tactiles (holgura de la v12): 0 = de fabrica (100%)
+                SDL_Log("SAVEDUMP tactil tamano=%u opacidad=%u zurdo=%d ahorro=%d",
+                        d.touch_size_pct, d.touch_opacity_pct,
+                        (d.settings_flags & SETTING_TOUCH_LEFTY) ? 1 : 0,
+                        (d.settings_flags & SETTING_BATTERY_SAVE) ? 1 : 0);
                 // v9: estado de sala. `salas` lista indice:flags de las que guardan algo;
                 // `celdas` = total de celdas alteradas. Es el gate de guardado_check.
                 {
@@ -6343,6 +6581,26 @@ void Engine::update_autoplay(f32 dt) {
             }
             // Toque sintetico en coordenadas de juego (320x180). `dedo` (tercer numero,
             // 0 por defecto) permite dos dedos a la vez para el gesto de pausa.
+            // `tbtn <boton> <1|0>`: baja (1) o sube (0) un dedo en el CENTRO del boton tactil,
+            // donde este con el layout de ahora (tamaño, zurdo, pilares). Sin el, cada
+            // cambio de layout pudria las coordenadas de todos los guiones. Las sondas que
+            // tienen que cazar un desfase entre dibujo y toque siguen siendo touchpx.
+            if (c.op == "tbtn") {
+                static const char* const NAMES[TOUCH_BUTTON_COUNT] = {"dash", "usar", "m1", "m2", "m3", "arma", "orar", "pausa"};
+                int bi = -1;
+                for (int i = 0; i < TOUCH_BUTTON_COUNT; i++) if (c.arg == NAMES[i]) bi = i;
+                if (bi < 0) { SDL_Log("tbtn: boton desconocido '%s'", c.arg.c_str()); continue; }
+                const Vec2 p = input.touch_buttons[bi].center;
+                SDL_Event ev{};
+                ev.type = (c.num > 0.5f) ? SDL_EVENT_FINGER_DOWN : SDL_EVENT_FINGER_UP;
+                ev.tfinger.fingerID = static_cast<SDL_FingerID>(7);
+                const Rect vp = input.touch_vp;
+                ev.tfinger.x = vp.x + p.x / static_cast<f32>(Config::GAME_WIDTH)  * vp.w;
+                ev.tfinger.y = vp.y + p.y / static_cast<f32>(Config::GAME_HEIGHT) * vp.h;
+                input.process_event(ev);
+                SDL_Log("tbtn %s %s (%.0f,%.0f)", c.arg.c_str(), c.num > 0.5f ? "down" : "up", p.x, p.y);
+                continue;
+            }
             if (c.op == "touch" || c.op == "drag" || c.op == "untouch" ||
                 c.op == "touchpx" || c.op == "dragpx" || c.op == "untouchpx") {
                 bool px = (c.op.size() > 2 && c.op.compare(c.op.size() - 2, 2, "px") == 0);

@@ -138,8 +138,12 @@ struct Renderer {
     u32 panel_tex    = TEXTURE_NONE;   // PANEL_TEX_SIZE^2, esquina = PANEL_TEX_SIZE*PANEL_CORNER_FRAC
     static constexpr int PANEL_TEX_SIZE   = 48;
     static constexpr f32 PANEL_CORNER_FRAC = 14.0f / 48.0f;
-    u32 disc_tex = TEXTURE_NONE;   // 64x64 disco blanco lleno (draw_disc)
-    u32 ring_tex = TEXTURE_NONE;   // 64x64 aro blanco, grosor 22% del radio (draw_ring)
+    // A 128 px y no a 64 desde 2026-10-03: los botones tactiles se pintan sobre la VENTANA
+    // (superposicion), donde un boton de 32 unidades mide ~190 px en un movil, y un disco de
+    // 64 ampliado tres veces tenia el borde de mantequilla.
+    u32 disc_tex = TEXTURE_NONE;   // 128x128 disco blanco lleno (draw_disc)
+    u32 ring_tex = TEXTURE_NONE;   // 128x128 aro blanco, grosor 22% del radio (draw_ring)
+    u32 ring_thin_tex = TEXTURE_NONE;   // 128x128 aro FINO, grosor 9% del radio (draw_ring_thin)
 
     // Text: TTF atlases at two sizes (small for scale <= 1.25, large for titles). If the
     // font is missing, draw_text falls back to SDL_RenderDebugText (8x8 bitmap font).
@@ -223,6 +227,11 @@ struct Renderer {
     // unidades de juego.
     void draw_disc(Vec2 center, f32 radius, Color color);
     void draw_ring(Vec2 center, f32 radius, Color color);
+    void draw_ring_thin(Vec2 center, f32 radius, Color color);
+    // Sector circular relleno (el barrido de recarga de los botones tactiles). Empieza en
+    // `start` y cubre `frac` de la vuelta, en sentido horario y con 0 = las doce. Va por
+    // SDL_RenderGeometry: sin borde suavizado, asi que se tapa con un aro si se ve.
+    void draw_pie(Vec2 center, f32 radius, f32 start, f32 frac, Color color);
     // Text: (x, y) = top-left in game units, line height = TEXT_LINE_UNITS * scale
     void draw_text(const char* text, f32 x, f32 y, Color color, f32 scale = 1.0f);
     void draw_text_centered(const char* text, f32 y, Color color, f32 scale = 1.0f);
@@ -296,5 +305,8 @@ public:
     void begin_overlay();
     void end_overlay();
     bool in_overlay() const { return overlay_active; }
+    // Se ha pintado algo sobre la ventana en este frame: la captura lee entonces la VENTANA
+    // (con sus pilares o bandas), que es donde estan los controles tactiles desde 2026-10-03.
+    bool overlay_used = false;
 private:
 };

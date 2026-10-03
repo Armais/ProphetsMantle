@@ -28,8 +28,9 @@ bool Renderer::init(SDL_Renderer* renderer, SDL_Texture* render_target) {
     shadow_tex   = create_radial_texture("@shadow",   64, 32, 1.0f, 0.0f, 1.6f);
     vignette_tex = create_radial_texture("@vignette", 160, 90, 0.0f, 1.0f, 2.5f);
     panel_tex    = create_panel_texture("@panel", PANEL_TEX_SIZE, static_cast<int>(PANEL_TEX_SIZE * PANEL_CORNER_FRAC));
-    disc_tex     = create_disc_texture("@disc", 64, 0.0f);
-    ring_tex     = create_disc_texture("@ring", 64, 0.78f);
+    disc_tex      = create_disc_texture("@disc", 128, 0.0f);
+    ring_tex      = create_disc_texture("@ring", 128, 0.78f);
+    ring_thin_tex = create_disc_texture("@ring_thin", 128, 0.91f);
 
     // UI font (falls back to the debug bitmap font if missing)
     has_font = load_font("fonts/LilitaOne-Regular.ttf");
@@ -351,6 +352,39 @@ void Renderer::draw_ring(Vec2 center, f32 radius, Color color) {
                      {center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
 }
 
+void Renderer::draw_ring_thin(Vec2 center, f32 radius, Color color) {
+    if (radius <= 0.0f) return;
+    if (ring_thin_tex == TEXTURE_NONE) { draw_ring(center, radius, color); return; }
+    const TextureEntry* t = get_texture(ring_thin_tex);
+    const f32 tw = t ? static_cast<f32>(t->width) : 128.0f;
+    draw_sprite_rect(ring_thin_tex, {0.0f, 0.0f, tw, tw},
+                     {center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f}, color);
+}
+
+void Renderer::draw_pie(Vec2 center, f32 radius, f32 start, f32 frac, Color color) {
+    if (radius <= 0.0f || frac <= 0.0f) return;
+    if (frac > 1.0f) frac = 1.0f;
+    constexpr int MAX_SEGS = 48;
+    const int segs = std::max(3, std::min(MAX_SEGS, static_cast<int>(MAX_SEGS * frac) + 1));
+    const Vec2 c = world_to_screen(center);
+    const SDL_FColor fc = {color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f};
+    SDL_Vertex v[MAX_SEGS + 2];
+    int idx[MAX_SEGS * 3];
+    v[0] = {{c.x, c.y}, fc, {0.0f, 0.0f}};
+    const f32 TAU = 6.2831853f;
+    for (int i = 0; i <= segs; i++) {
+        // y hacia abajo: un angulo que crece gira en sentido horario; -90 grados = las doce
+        const f32 a = (start + frac * static_cast<f32>(i) / static_cast<f32>(segs)) * TAU - TAU * 0.25f;
+        v[i + 1] = {{c.x + std::cos(a) * radius, c.y + std::sin(a) * radius}, fc, {0.0f, 0.0f}};
+    }
+    for (int i = 0; i < segs; i++) {
+        idx[i * 3 + 0] = 0;
+        idx[i * 3 + 1] = i + 1;
+        idx[i * 3 + 2] = i + 2;
+    }
+    SDL_RenderGeometry(sdl, nullptr, v, segs + 2, idx, segs * 3);
+}
+
 void Renderer::shutdown() {
     for (auto& entry : textures) {
         if (entry.texture) {
@@ -513,6 +547,7 @@ void Renderer::end_target() {
     SDL_SetRenderTarget(sdl, target);
     const f32 rs = static_cast<f32>(Config::RENDER_SCALE);
     SDL_SetRenderScale(sdl, rs, rs);
+    overlay_used = false;
 }
 
 void Renderer::unload_texture(const char* path) {
@@ -631,9 +666,11 @@ bool Renderer::save_screenshot(const char* path, int scale) {
     // Normalmente se lee el objetivo interno (1280x720), que es lo que esperan todos los
     // guiones. En VERTICAL se lee la VENTANA entera: si no, la captura se quedaria con el
     // area de juego y sin las bandas negras, que es justamente donde estan los controles
-    // que se quieren comprobar. Hay que llamarla ANTES de present().
+    // que se quieren comprobar. Lo mismo si en este frame se ha pintado la superposicion:
+    // desde 2026-10-03 los controles tactiles van SIEMPRE ahi (en un 20:9, en los pilares).
+    // Hay que llamarla ANTES de present().
     SDL_Texture* prev = SDL_GetRenderTarget(sdl);
-    SDL_SetRenderTarget(sdl, is_portrait() ? nullptr : target);
+    SDL_SetRenderTarget(sdl, (is_portrait() || overlay_used) ? nullptr : target);
     SDL_Surface* surf = SDL_RenderReadPixels(sdl, nullptr);
     SDL_SetRenderTarget(sdl, prev);
     if (!surf) {
@@ -850,6 +887,7 @@ void Renderer::begin_overlay() {
     // es facil equivocarse, y esto es una suma.
     ui_offset = {viewport.x / s, viewport.y / s};
     overlay_active = true;
+    overlay_used = true;
     camera_offset = {0, 0};
     camera_shake  = {0, 0};
 }

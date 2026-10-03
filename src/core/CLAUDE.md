@@ -247,3 +247,29 @@ Guion: **`scripts/i18n_caliente_check.txt`**. Su gate es el `LOADOUT` de `stats`
 partida**: "Honda de David, Agua del Jordán" → `lang 1` → "David's Sling, Water of the Jordan"
 → `lang 0` → otra vez el primero, más una línea `i18n: registros re-traducidos (...)` por
 cambio. Las capturas cubren El Santuario y la barra del jefe.
+
+### Ritmo de frames en movil (2026-10-03)
+
+El bucle es de paso fijo a 60 Hz **sin interpolacion**: en una pantalla de 90/120 Hz la mitad
+de los frames eran copias exactas del anterior, pintadas y presentadas para nada (bateria y
+calor a cambio de cero suavidad). Con reglas de movil (`mobile_rules`: telefono o `--touch`)
+`Engine::run` **solo pinta cuando ha corrido un paso nuevo** y, si no, **duerme**
+(`SDL_DelayNS`) hasta el paso siguiente en vez de girar. El ajuste **Ahorro de bateria**
+(`SETTING_BATTERY_SAVE`, `Engine::battery_saver`) pide dos pasos por frame: 30 fps de pantalla
+con el juego a 60 por dentro (la entrada se sigue leyendo en cada vuelta del bucle).
+
+- `force_render` pinta aunque no haya paso: ventana redimensionada, `WINDOW_EXPOSED`,
+  `RENDER_TARGETS_RESET` / `RENDER_DEVICE_RESET` (Android al recrear la superficie) y la vuelta
+  de segundo plano.
+- En escritorio no cambia nada (ni la web, que tiene su propio bucle).
+- Sonda: comando `fpsmark` y `scripts/ritmo_check.txt` (en el contenedor Linux, el ahorro da
+  30,0 fps exactos; sin `--touch` el ahorro no toca nada).
+
+### Controles tactiles: zona segura, DPI y "atras" en el titulo (2026-10-03)
+
+`Engine::refresh_touch_area` / `touch_dpi_scale` (detalle en `src/input/CLAUDE.md`) se llaman
+al crear la ventana y en `WINDOW_RESIZED`, `PIXEL_SIZE_CHANGED`, `WINDOW_SAFE_AREA_CHANGED` y
+`WINDOW_DISPLAY_SCALE_CHANGED`. **`--dpi N`** (main.cpp, `Engine::forced_dpi`) finge una
+pantalla de N ppp en escritorio. En el **titulo**, con reglas de movil, `Cancel` (el atras de
+Android) avisa la primera vez (`exit_confirm_t`, 2 s, pastilla al pie) y la segunda llama a
+`SDL_SendAndroidBackButton` (solo Android; en `--touch` solo loguea).

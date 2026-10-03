@@ -71,8 +71,8 @@ wait 0.1
 
 # --- Equipar la skin 2 (Luz del Jordan): bajar a la fila "Cayado" y ciclar ---
 # Filas en escritorio con las skins ya compradas: 0 Musica, 1 Efectos, 2 Auto-mira,
-# 3 Sensibilidad, 4 Vibracion, 5 Cayado, 6 Idioma, 7 Volver. (No hay "Stick dcho.":
-# esa fila solo existe en tactil.)
+# 3 Sensibilidad, 4 Vibracion, 5 Cayado, 6 Idioma, 7 Volver. (No hay "Joystick de
+# apuntar" ni las demas filas de los controles: solo existen en tactil.)
 press down
 wait 0.15
 press down

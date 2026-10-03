@@ -46,19 +46,24 @@ const int TUTORIAL_STEP_COUNT = static_cast<int>(sizeof(TUTORIAL_STEPS) / sizeof
 // de pintarse, asi que lo que se pase de largo baja de escala en vez de desbordarse. Aun
 // asi, la instruccion se escribe corta a proposito: es lo que hay que leer de un vistazo
 // mientras un arquero te dispara.
-TutorialText tutorial_text(TutorialGoal goal, bool touch) {
+TutorialText tutorial_text(TutorialGoal goal, bool touch, bool lefty) {
     switch (goal) {
+        // Con el ajuste de zurdo las dos mitades se cambian (Input::in_move_half)
         case TutorialGoal::Move:
-            return {touch ? tr("Muévete: pulgar en la mitad izquierda",
-                               "Move: thumb on the left half")
+            return {touch ? (lefty ? tr("Muévete: pulgar en la mitad derecha",
+                                        "Move: thumb on the right half")
+                                   : tr("Muévete: pulgar en la mitad izquierda",
+                                        "Move: thumb on the left half"))
                           : tr("Muévete: W A S D o las flechas",
                                "Move: W A S D or the arrows"),
                     tr("Los pies del profeta conocen el desierto.",
                        "The prophet's feet know the wilderness.")};
 
         case TutorialGoal::Attack:
-            return {touch ? tr("Rompe dos tinajas: toca la mitad derecha",
-                               "Break two jars: tap the right half")
+            return {touch ? (lefty ? tr("Rompe dos tinajas: toca la mitad izquierda",
+                                        "Break two jars: tap the left half")
+                                   : tr("Rompe dos tinajas: toca la mitad derecha",
+                                        "Break two jars: tap the right half"))
                           : tr("Rompe dos tinajas: mantén K",
                                "Break two jars: hold K"),
                     tr("Disparas hacia donde caminas: el cayado sigue al paso.",
@@ -88,22 +93,22 @@ TutorialText tutorial_text(TutorialGoal goal, bool touch) {
                        "Eat and drink, for the road is long.")};
 
         case TutorialGoal::Miracle1:
-            return {touch ? tr("Lanza el primer milagro: su celda del HUD",
-                               "Cast the first miracle: its HUD cell")
+            return {touch ? tr("Lanza el primer milagro: su botón redondo",
+                               "Cast the first miracle: its round button")
                           : tr("Lanza el primer milagro: Q", "Cast the first miracle: Q"),
                     tr("Cada milagro cuesta fe, y su precio está escrito en la celda.",
                        "Every miracle costs faith, and its price is written on the cell.")};
 
         case TutorialGoal::Miracle2:
-            return {touch ? tr("Ahora el segundo: la celda de al lado",
-                               "Now the second: the next cell")
+            return {touch ? tr("Ahora el segundo: el botón de al lado",
+                               "Now the second: the next button")
                           : tr("Ahora el segundo: E", "Now the second: E"),
                     tr("Tres dones lleva el profeta, y no todos sirven para lo mismo.",
                        "Three gifts the prophet bears, and not all serve the same end.")};
 
         case TutorialGoal::Miracle3:
-            return {touch ? tr("Y el tercero: la tercera celda",
-                               "And the third: the third cell")
+            return {touch ? tr("Y el tercero: el botón de encima de DASH",
+                               "And the third: the button above DASH")
                           : tr("Y el tercero: F", "And the third: F"),
                     tr("El fuego del cielo pide fe alta: sin ella, la celda calla.",
                        "Fire from heaven asks for high faith: without it, the cell is silent.")};

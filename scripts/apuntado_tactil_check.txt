@@ -1,0 +1,101 @@
+# Verificacion: con el pulgar derecho se APUNTA y se DISPARA a la vez (2026-10-03)
+# Uso:  MANTLE.exe --touch --script scripts/apuntado_tactil_check.txt
+#
+# La pregunta del usuario: "¿me estas diciendo que con los dedos derechos vas a apuntar y
+# disparar a la vez?". Si: el dedo apoyado en la mitad de disparo mantiene el Ataque (rafaga
+# a la cadencia del cayado) y, si ARRASTRA, el tiro va hacia donde arrastra. Este guion lo
+# demuestra con la AUTO-MIRA APAGADA (`aimmode 0`), para que solo cuente el dedo.
+#
+# Geometria de scripts/mira_check.txt (mismo puesto de tiro, mismo camino para llegar: si se
+# llega desde otro sitio el `walk` se atasca 94 unidades a la izquierda y un arbol seco tapa
+# la linea, que es lo que hizo fallar la primera version de esta prueba): el profeta mira a
+# la DERECHA y el soldado aparece en (-20,-54), arriba y un poco a la izquierda. Disparar
+# "a donde miras" falla por 110 grados. El arrastre (-12,-32) apunta justo al soldado.
+#
+# GATES (log, linea FEEL de cada tramo):
+#   DEDO_hacia_el_enemigo     dano > 0   (medido: 3 tiros, 20 de dano, baja)
+#   DEDO_al_lado_contrario    dano = 0   (control: el arrastre manda de verdad)
+#   DEDO_corrige_sin_soltar   dano > 0   (empieza apuntando mal y gira SIN levantar el dedo)
+#   JOYSTICK_hacia_el_enemigo dano > 0   (lo mismo con "Joystick de apuntar" encendido)
+#   + "Touch aim ON (drag threshold)" x3 y "Touch aim ON (right stick)" x1
+#
+# Nota de diseño que deja ver: el PRIMER tiro sale al bajar el dedo, antes del arrastre, con
+# la direccion que hubiera (auto-mira si esta encendida; aqui, a la derecha). Por eso cada
+# tramo dispara un tiro de mas que no acierta.
+#
+# Requiere el arreglo del arnes de 2026-10-03: `update_autoplay` ya no suelta el Ataque que
+# mantiene un dedo sintetico. Antes un toque mantenido de guion disparaba UNA vez y parecia
+# que apuntar y disparar con el mismo pulgar no funcionaba.
+
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+faith 50
+aimmode 0
+rstick 0
+
+# ---- 1) Dedo derecho: toca y arrastra HACIA el soldado (arriba-izq) ----
+killall
+wait 0.5
+walks 536 200
+walks 536 312
+hold right 0.06
+spawn 0 1
+feel marca
+touch 220 90 1
+drag 208 58 1
+wait 0.7
+untouch 208 58 1
+feel DEDO_hacia_el_enemigo
+
+# ---- 2) Control: el mismo gesto arrastrando al lado CONTRARIO ----
+killall
+wait 0.5
+walks 536 200
+walks 536 312
+hold right 0.06
+spawn 0 1
+feel marca
+touch 220 90 1
+drag 232 122 1
+wait 0.7
+untouch 232 122 1
+feel DEDO_al_lado_contrario
+
+# ---- 3) Sin levantar el pulgar: empieza apuntando mal y CORRIGE en marcha ----
+killall
+wait 0.5
+walks 536 200
+walks 536 312
+hold right 0.06
+spawn 0 1
+feel marca
+touch 220 90 1
+drag 232 122 1
+wait 0.35
+drag 208 58 1
+wait 0.6
+untouch 208 58 1
+feel DEDO_corrige_sin_soltar
+
+# ---- 4) Lo mismo con el "Joystick de apuntar" encendido ----
+rstick 1
+killall
+wait 0.5
+walks 536 200
+walks 536 312
+hold right 0.06
+spawn 0 1
+feel marca
+touch 220 90 1
+drag 208 58 1
+wait 0.7
+untouch 208 58 1
+feel JOYSTICK_hacia_el_enemigo
+rstick 0
+quit

@@ -511,7 +511,9 @@ void MenuSystem::render_settings(Renderer& renderer) {
     // de todas las de abajo tanto al pintar como al ajustar (update_settings).
     option_count = 0;
     for (int r = 0; r < ROW_COUNT; r++) {
-        if (r == ROW_RSTICK && !settings_show_rstick) continue;
+        // Las filas de los controles tactiles (stick derecho, tamaño, opacidad, zurdo,
+        // ahorro de bateria) solo existen en tactil: con teclado serian ruido.
+        if (is_touch_row(r) && !settings_show_rstick) continue;
         // La fila del cayado solo aparece cuando hay MAS DE UNA skin desbloqueada: una
         // fila que solo ofrece lo que ya llevas puesto no es una opcion, es ruido.
         if (r == ROW_SKIN && (settings_skins_mask & ~1u) == 0) continue;
@@ -563,7 +565,14 @@ void MenuSystem::render_settings(Renderer& renderer) {
             row == ROW_AIM    ? tr("Auto-mira", "Auto-aim") :
             row == ROW_SENS   ? tr("Sensibilidad", "Sensitivity") :
             row == ROW_RUMBLE ? tr("Vibración", "Rumble") :
-            row == ROW_RSTICK ? tr("Stick dcho.", "Right stick") :
+            // "Joystick de apuntar" y no "Stick dcho." (jerga de mando) ni "Apuntado manual"
+            // (eso existe en todas las plataformas y lo decide la Auto-mira): nombra lo que
+            // aparece en pantalla, que solo existe en tactil. Decision del usuario, 2026-10-03.
+            row == ROW_RSTICK ? tr("Joystick de apuntar", "Aim joystick") :
+            row == ROW_TSIZE  ? tr("Tam. botones", "Button size") :
+            row == ROW_TOPACITY ? tr("Opacidad", "Opacity") :
+            row == ROW_LEFTY  ? tr("Zurdo", "Left-handed") :
+            row == ROW_BATTERY ? tr("Ahorro bat.", "Battery saver") :
             row == ROW_SKIN   ? tr("Cayado", "Staff") :
             row == ROW_LANG   ? tr("Idioma", "Language") :
                                 tr("Volver", "Back");
@@ -596,6 +605,21 @@ void MenuSystem::render_settings(Renderer& renderer) {
             snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, settings_rumble ? si : no);
         } else if (row == ROW_RSTICK) {
             snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, settings_rstick ? si : no);
+        } else if (row == ROW_TSIZE || row == ROW_TOPACITY) {
+            // Barra como la del volumen: 10 marcas sobre el recorrido del ajuste
+            const int v  = (row == ROW_TSIZE) ? settings_touch_size : settings_touch_opacity;
+            const int lo = (row == ROW_TSIZE) ? 70 : 30, hi = (row == ROW_TSIZE) ? 150 : 100;
+            const int filled = 1 + (v - lo) * 9 / std::max(1, hi - lo);
+            char bar[12];
+            for (int b = 0; b < 10; b++) bar[b] = (b < filled) ? '|' : '.';
+            bar[10] = '\0';
+            snprintf(buf, sizeof(buf), "%s%-12s [%s] %3d%%", prefix, label, bar, v);
+        } else if (row == ROW_LEFTY) {
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, settings_lefty ? si : no);
+        } else if (row == ROW_BATTERY) {
+            // Encendido dice lo que cuesta: la pantalla baja a 30 fps (el juego sigue a 60)
+            snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label,
+                     settings_battery ? tr(" SÍ · 30 FPS ", " ON · 30 FPS ") : no);
         } else if (row == ROW_SKIN) {
             StaffSkin sk = get_staff_skin(static_cast<u32>(settings_skin));
             snprintf(buf, sizeof(buf), "%s%-12s [%s]", prefix, label, tr(sk.name, sk.name_en));
@@ -660,19 +684,28 @@ void MenuSystem::render_controls(Renderer& renderer) {
     const bool down = press_active && btn.contains(press_pos);
 
     if (touch_hints) {
+        // Con el ajuste de zurdo las dos mitades se cambian (Input::in_move_half)
         renderer.draw_text_centered(tr("Moverse", "Move"), 38, label, 0.95f);
-        renderer.draw_text_centered(tr("Pulgar en la mitad izquierda: el stick nace ahí", "Left half: the stick appears under your thumb"), 48, value, 0.75f);
+        renderer.draw_text_centered(touch_lefty ? tr("Pulgar en la mitad derecha: el stick nace ahí y te sigue",
+                                                     "Right half: the stick appears under your thumb and follows it")
+                                                : tr("Pulgar en la mitad izquierda: el stick nace ahí y te sigue",
+                                                     "Left half: the stick appears under your thumb and follows it"),
+                                    48, value, 0.75f);
 
         renderer.draw_text_centered(tr("Atacar y apuntar", "Attack and aim"), 60, label, 0.95f);
-        renderer.draw_text_centered(tr("Toca la mitad derecha; mantén y arrastra para apuntar", "Tap the right half; hold and drag to aim"), 70, value, 0.75f);
+        renderer.draw_text_centered(touch_lefty ? tr("Toca la mitad izquierda; mantén y arrastra para apuntar", "Tap the left half; hold and drag to aim")
+                                                : tr("Toca la mitad derecha; mantén y arrastra para apuntar", "Tap the right half; hold and drag to aim"),
+                                    70, value, 0.75f);
 
         renderer.draw_text_centered(tr("Botones", "Buttons"), 82, label, 0.95f);
-        renderer.draw_text_centered(tr("DASH · USAR · ARMA · ORAR (solo los que apliquen)", "DASH · USE · WEAPON · PRAY (only those that apply)"), 92, value, 0.75f);
+        renderer.draw_text_centered(tr("DASH en la esquina; USAR · ARMA · ORAR alrededor (los que apliquen)",
+                                       "DASH in the corner; USE · WEAPON · PRAY around it (those that apply)"), 92, value, 0.75f);
 
         renderer.draw_text_centered(tr("Milagros", "Miracles"), 104, label, 0.95f);
-        renderer.draw_text_centered(tr("Toca su celda para lanzarlo; mantén para ver su ficha", "Tap its cell to cast; hold to read its card"), 114, value, 0.75f);
+        renderer.draw_text_centered(tr("Toca su botón para lanzarlo; mantén para ver su ficha", "Tap its button to cast; hold to read its card"), 114, value, 0.75f);
 
-        renderer.draw_text_centered(tr("Mapa: toca el minimapa     Pausa: II o el botón atrás", "Map: tap the minimap     Pause: II or the back button"), 128, value, 0.75f);
+        renderer.draw_text_centered(tr("Mapa: toca el minimapa  ·  Pausa: II o atrás  ·  Tamaño y zurdo: Opciones",
+                                       "Map: tap the minimap  ·  Pause: II or back  ·  Size and left-handed: Options"), 128, value, 0.7f);
         renderer.draw_text_centered(tr("Objetivo: explora, halla al JEFE y cruza su arco", "Goal: explore, find the BOSS, cross its arch"), 140, label, 0.72f);
 
         draw_menu_button(renderer, btn, play, down, false, 0.9f);

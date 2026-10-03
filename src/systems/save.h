@@ -73,6 +73,10 @@ constexpr u32 SETTING_TOUCH_RSTICK = 1u << 1;   // Segundo joystick virtual en t
 // guardado anterior a esto trae el bit a cero y ve el selector una vez, que es lo correcto:
 // nunca se le pregunto. `defaults` lo limpia, y por eso vuelve a salir tras un reset.
 constexpr u32 SETTING_LANG_CHOSEN  = 1u << 2;
+// Controles tactiles (2026-10-03). Zurdo: stick a la derecha y botones a la izquierda.
+// Ahorro de bateria: el movil pinta a 30 fps en vez de 60 (el juego sigue a 60 por dentro).
+constexpr u32 SETTING_TOUCH_LEFTY  = 1u << 3;
+constexpr u32 SETTING_BATTERY_SAVE = 1u << 4;
 
 // Bits de SaveData::tips_seen: avisos que se ensenan UNA vez en la vida del guardado (meta,
 // sobreviven a delete_save). Un bit nuevo no rompe el formato.
@@ -182,7 +186,13 @@ struct SaveData {
     int revives_left     = 0;   // Aliento de Vida
     int rerolls_left     = 0;   // Echar Suertes
     int prayers_left     = 0;   // Altar Portatil
-    u32 reserved_v12[8]  = {};  // holgura: lo siguiente no tiene por que subir la version
+    // Holgura de la v12 YA EN USO (2026-10-03): los dos ajustes de los controles tactiles
+    // que no caben en un bit. Ocupan los dos primeros huecos de `reserved_v12`, asi que el
+    // fichero mide lo mismo y no hay migracion; CERO = valor de fabrica, que es justo lo que
+    // traen los guardados v12 escritos antes de esto.
+    u32 touch_size_pct    = 0;   // "Tamaño de controles": 70..150 (%); 0 = 100
+    u32 touch_opacity_pct = 0;   // "Opacidad de controles": 30..100 (%); 0 = 100
+    u32 reserved_v12[6]  = {};  // holgura: lo siguiente no tiene por que subir la version
 };
 
 struct SaveSystem {

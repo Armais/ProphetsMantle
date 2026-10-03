@@ -455,3 +455,41 @@ logicos de usar". Buena parte era de esta capa: nada de eso se VEIA. Piezas nuev
   derrota tiene **El Santuario** como fila del medio. El titulo marca El Santuario con una
   moneda cuando hay algo comprable (`MenuSystem::sanctuary_ready`). El Santuario en si esta en
   `src/systems/CLAUDE.md`.
+
+## Los controles tactiles, redondos y en la superposicion (2026-10-03)
+
+El layout y por que esta en `src/input/CLAUDE.md` ("La pasada de móvil"). Lo de esta capa:
+
+- **En tactil, `HUD::render` ya no pinta ni las celdas de milagro ni los botones**: los pinta
+  `Engine::render` DESPUES del letterbox, dentro de `Renderer::begin_overlay`, con el MISMO
+  `HUDContext` del frame (`touch_ctx`). En un 20:9 el grupo vive en el pilar negro y el
+  objetivo de 320x180 no llega ahi. Van encima de todo (tambien del velo de un salto) salvo
+  con el mapa grande abierto, que lo cierra cualquier toque. En PC nada cambia: celdas
+  cuadradas con su Q/E/F.
+- **`draw_round_button`** (estatica en `hud.cpp`) es el unico dibujo de boton tactil:
+  sombra, placa, bisel, icono propio (o el del tileset), **barrido radial de recarga**
+  (`Renderer::draw_pie`, con los segundos que faltan si pasan de 1), candado si falta nivel de
+  fe, aro (oro que respira si se puede usar, rojo si se niega o esta cerrado, apagado si
+  recarga), **rotulo DENTRO, abajo** sobre una franja oscura, y una chapa arriba a la derecha
+  (coste en fe con su orbe, cargas de USAR, oraciones que quedan en ORAR). El rotulo va dentro
+  y la chapa dentro de la caja del boton porque en el arco el hueco entre bordes es de ~3
+  unidades: lo que se sale del circulo pisa al vecino. `RoundButtonLook` es lo que cada
+  boton (DASH, USAR, un milagro...) rellena; `draw_round_button` solo sabe de formas.
+- **Pulsado = se hunde** (radio x0,92, placa clara, aro blanco): es la confirmacion que da un
+  boton fisico y la unica que se ve con el pulgar encima. **Negado = tiembla** en rojo
+  (`TouchButton::deny_t`).
+- **Opacidad del jugador**: todo alfa del dibujo tactil pasa por `op_a(a, op)`.
+- **`HUD::draw_touch_preview`**: en Opciones, al tocar Tam. botones / Opacidad / Zurdo, todos
+  los botones del layout NUEVO salen 1,6 s encima de la pantalla (`Engine::touch_preview_t`)
+  con rotulos genericos (DASH, USAR, 1, 2, 3...). Sin ella se ajustaba a ciegas.
+- **El aviso del HUD sube en tactil** (`draw_message`, y = 180 - 64 en vez de 180 - 44): un
+  aviso largo quedaba con la cola debajo de USAR. Y por eso la **ficha del milagro** (mantener
+  pulsado) baja de y=96 a **y=58**, o se plantaba encima del aviso.
+- `HUDContext::dash_cd` (la recarga del dash que falta, 0..1) la rellena el Engine desde
+  `MovementComponent::dash_cooldown`: el HUD no ve el ECS por dentro.
+- **Opciones en tactil tiene 12 filas** (las cuatro de los controles: Tam. botones, Opacidad,
+  Zurdo, Ahorro bat., detras de Joystick de apuntar; `MenuSystem::is_touch_row`), y por eso
+  `MAX_ROW_RECTS` sube a 14. En PC siguen siendo las de siempre. La ventana de 6 filas que se
+  arrastra ya existia.
+- **Controles** (`render_controls`, tactil) describe el arco y dice que el tamaño y el zurdo
+  estan en Opciones; las mitades cambian con `MenuSystem::touch_lefty`.

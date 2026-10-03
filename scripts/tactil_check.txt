@@ -7,8 +7,15 @@
 # los comandos `touch x y [dedo]` / `drag x y [dedo]` / `untouch x y [dedo]`, en
 # coordenadas de juego (320x180).
 #
-# Botones:  DASH (303,123)  USAR (276,123)  ARMA (249,123)  ORAR (222,123)
-#           milagros Q (303,155) E (276,155) F (249,155)   pausa II (160,10)
+# Los botones de partida se tocan con `tbtn <boton> 1|0` (dash, usar, m1, m2, m3, arma,
+# orar, pausa), que baja/sube un dedo en el CENTRO del boton donde este con el layout de
+# ahora. Desde 2026-10-03 los botones son redondos, van en arco alrededor de DASH y su sitio
+# depende de la pantalla (pilares, notch, tamaño, zurdo): unas coordenadas fijas se
+# pudririan con cada cambio. En 16:9 y escala 1 quedan en
+#   DASH (299,159)  USAR (234,148)  ARMA (252,112)  ORAR (288,94)
+#   milagros 1 (261,159)  2 (272,132)  3 (299,121)   pausa II (160,12)
+# La sonda de extremo a extremo (pixeles de ventana contra lo dibujado) es
+# tactil_ancho_check.txt; esta comprueba la LOGICA de cada boton.
 
 wait 1.0
 press confirm
@@ -38,39 +45,39 @@ wait 0.1
 untouch 92 108
 wait 0.4
 
-# --- Botones en pantalla (dash + consumible sobre las celdas de milagro) ---
+# --- Botones en pantalla (DASH en la esquina, milagros y el resto en arco) ---
 shot 91_botones_tactiles
 wait 0.1
 
-touch 303 123
+tbtn dash 1
 wait 0.15
 shot 92_dash_pulsado
 wait 0.1
-untouch 303 123
+tbtn dash 0
 wait 0.6
 
 # --- Consumible (USAR, al SOLTAR el dedo): el Vino Nuevo se bebe ---
-touch 276 123
+tbtn usar 1
 wait 0.2
-untouch 276 123
+tbtn usar 0
 wait 0.5
 shot 93_consumible_usado
 wait 0.1
 
-# --- Tap corto sobre la celda Q: lanza el milagro ---
-touch 303 155
+# --- Tap corto sobre el milagro 1: lo lanza ---
+tbtn m1 1
 wait 0.15
-untouch 303 155
+tbtn m1 0
 wait 0.7
 shot 94_milagro_lanzado
 wait 0.1
 
-# --- Hold sobre la celda E: abre su ficha y NO lo lanza ---
-touch 276 155
+# --- Hold sobre el milagro 2: abre su ficha y NO lo lanza ---
+tbtn m2 1
 wait 0.9
 shot 95_ficha_milagro
 wait 0.1
-untouch 276 155
+tbtn m2 0
 wait 0.5
 
 # --- Apuntado manual: hold + drag en la mitad derecha ---
@@ -107,8 +114,9 @@ wait 0.4
 #
 # Ojo con DONDE se toca: la primera version de esta prueba caia sobre un altar del mapa
 # y el adorno del suelo se confundia con la mira. (232, 100) es suelo raso. Y sobre todo,
-# la sonda NO puede caer en la fila de accion (y 112..134): ahi esta ahora el boton ORAR
-# (x 211..233), que se comprueba antes que el "tap = ataque" y se comia el gesto entero.
+# la sonda NO puede caer encima de un boton (ni de su margen de dedo): se comprueban antes
+# que el "tap = ataque" y se comen el gesto entero. El mas cercano es ARMA, en (252,112)
+# con radio 11 + 4 de margen: (232,100) queda a 23 de su centro.
 # `rstick 0` explicito: la opcion vive en el guardado y sobrevive entre sesiones, asi que
 # sin esto el caso "sin stick" heredaba el ON de la vuelta anterior.
 rstick 0
@@ -133,43 +141,43 @@ wait 0.1
 untouch 233 100
 wait 0.4
 
-# El reparto de zona con los botones NO se ignora: un dedo que baja DENTRO de una celda
-# de milagro la pulsa y nunca se convierte en stick (los botones se comprueban antes y
+# El reparto de zona con los botones NO se ignora: un dedo que baja DENTRO de un boton
+# de milagro lo pulsa y nunca se convierte en stick (los botones se comprueban antes y
 # hacen return). Se comprueba lanzando el milagro con el stick derecho encendido.
-touch 303 155
+tbtn m1 1
 wait 0.15
-untouch 303 155
+tbtn m1 0
 wait 0.7
 shot 9A_boton_gana_al_stick
 wait 0.1
 rstick 0
 wait 0.2
 
-# --- ARMA y ORAR: los dos botones contextuales de la fila de accion ---
+# --- ARMA y ORAR: los dos botones contextuales del arco exterior ---
 # Solo existen si aplican (`give 0` pone la Honda de David, `meta 5` el Altar Portatil).
 # Gate del log, y por eso existe la linea `Touch button:` — dos iconos sin texto en una
 # captura de 320x180 no dicen cual de los dos respondio:
 #   Touch button: ARMA
 #   Touch button: ORAR   +   Portable altar: prayed in place (+10 faith)
-touch 249 123
+tbtn arma 1
 wait 0.2
-untouch 249 123
+tbtn arma 0
 wait 0.4
 shot 9B_boton_arma
 wait 0.1
-touch 222 123
+tbtn orar 1
 wait 0.2
-untouch 222 123
+tbtn orar 0
 wait 0.5
 shot 9C_boton_orar
 wait 0.2
 
-# --- Pausa: el boton II, arriba al centro ---
+# --- Pausa: el boton II, arriba (al centro en 16:9; en el pilar derecho en 20:9) ---
 # Sustituye al viejo swipe de dos dedos, que chocaba con la postura normal de juego
 # (un dedo en el stick + otro apuntando). Gate: la linea `Scene change: 2 -> 3`.
-touch 160 10
+tbtn pausa 1
 wait 0.15
-untouch 160 10
+tbtn pausa 0
 wait 0.5
 shot 97_pausa_por_boton
 wait 0.3

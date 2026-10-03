@@ -12,14 +12,17 @@ milagro porque **`Action::Interact` no la lee nadie** (el altar se activa al pis
 al dispararle), y sin este botón el tercer slot solo se alcanzaba por la cruceta.
 
 **Mobile (`ui/hud.cpp: draw_touch_controls` + `input/input.h: TouchButton`):** en un teléfono
-el HUD **es** el mando: las tres celdas de milagro del HUD son a la vez sus tres botones
-(mismos rects, definidos una sola vez en `Input::init_touch_layout`), y encima se apila la
-**fila de acción** — de derecha a izquierda **DASH**, **USAR**, **ARMA**, **ORAR** (y 22x14
-de **`II`** arriba al centro para la pausa). Joystick Izq virtual=Mover (nace donde baja el
-dedo), Tap zona derecha=Atacar (auto-aim), Hold+Drag ≥6 unidades en la mitad derecha=Apuntar
-manual (`joystick_aim` → `aim_axis`, que apaga el auto-aim por sí solo), Tap en un
-milagro=lanzarlo (al SOLTAR, no al pulsar) y Hold ≥0,4 s=su ficha, **tap en el minimapa=mapa
-grande** (y cualquier toque lo cierra).
+el HUD **es** el mando: los tres milagros son a la vez sus tres botones (mismos centros,
+definidos una sola vez en `Input::init_touch_layout`). Desde el 2026-10-03 los botones son
+**redondos y van en arco alrededor de DASH**, que va grande en la esquina inferior derecha
+(ver "La pasada de móvil", abajo): milagros 1-2-3 a 38 unidades (izquierda, diagonal, encima)
+y USAR · ARMA · ORAR en un arco exterior. La pausa (`II`) va arriba, en el pilar derecho si
+cabe. Joystick Izq virtual=Mover (nace donde baja el dedo y **le sigue**), Tap zona
+derecha=Atacar (auto-aim), Hold+Drag ≥6 unidades en la mitad derecha=Apuntar manual
+(`joystick_aim` → `aim_axis`, que apaga el auto-aim por sí solo), Tap en un milagro=lanzarlo
+(al SOLTAR, no al pulsar) y Hold ≥0,4 s=su ficha, **tap en el minimapa=mapa grande** (y
+cualquier toque lo cierra). Con el ajuste **Zurdo** todo se refleja: stick en la mitad
+derecha, botones a la izquierda.
 Todo esto vive tras `Input::touch_ui`, que **solo** se enciende en móvil o con `--touch`:
 `has_touch()` se descartó como criterio porque el portátil de desarrollo declara pantalla
 táctil y el HUD salía con botones de teléfono en una partida de teclado.
@@ -134,6 +137,11 @@ apunta desde el primer pixel**, y se dibuja en pantalla.
   convierte en stick. Verificado en el guion.
 - Usa la **Sensibilidad** del ajuste de usuario: divide el radio del joystick y el umbral
   de arrastre.
+- **Se llama "Joystick de apuntar"** ("Aim joystick") desde el 2026-10-03, decision del
+  usuario. Antes era "Stick dcho.", jerga de mando que no decia que hacia; se descarto
+  "Apuntado manual" porque apuntar a mano existe en TODAS las plataformas (es lo que hace la
+  Auto-mira en OFF, o arrastrar sin este ajuste) y el nombre tiene que decir lo que solo pasa
+  en tactil: que aparece un joystick en pantalla para apuntar.
 - **La fila de Opciones solo existe en tactil**, y por eso las filas de esa pantalla pasaron
   a montarse sobre una **tabla de ids** (`MenuSystem::SettingRow` + `settings_rows[]`) en
   vez de por indice fijo: sin ella, quitar una fila desplazaba el significado de todas las
@@ -154,10 +162,12 @@ lo que no se pinta).
 - **Pendiente (del usuario, no del agente)**: probar los controles táctiles en un **Android real**.
   Ya hay APK (`build_android.bat`, ver el `CLAUDE.md` de la raíz). Están verificados con eventos
   `SDL_EVENT_FINGER_*` sintéticos (`scripts/tactil_check.txt`, `tactil_ancho_check.txt`,
-  `menus_tactil_check.txt`), que cubren la lógica pero no el tamaño real del pulgar ni el DPI.
-  Lo que habrá que calibrar en la primera prueba: **tamaño y opacidad de los botones por DPI**
-  (22 unidades ≈ 8 mm en 6,5"), layout zurdo, `SDL_GetWindowSafeArea` (notch), si los botones
-  deberían salirse al pilar en 20:9, y el stick derecho por defecto en móvil.
+  `menus_tactil_check.txt`, `movil_check.txt`), que cubren la lógica pero no el pulgar real.
+  De la lista de calibración de la primera prueba quedan resueltos (2026-10-03) el tamaño por
+  DPI, la opacidad, el zurdo, la zona segura (notch/gestos) y el uso de los pilares del 20:9.
+  Queda abierto el **stick derecho por defecto en móvil** (sigue apagado) y comprobar en el
+  aparato que `SDL_GetWindowDisplayScale` da la densidad esperada: la línea
+  `Touch layout: ... escala X (dpi Y x Z)` del logcat lo dice.
 
 ### Pulido tras la primera prueba del APK (2026-09-11)
 
@@ -284,3 +294,102 @@ cada 0,4 s mientras siga apoyado); al soltar tras un mantener no se bebe nada
 (`TouchButton::hold_fired`). El boton lleva el icono y las cargas del ELEGIDO, y solo existe
 con algo en la alforja (`set_touch_enabled(belt_count() > 0, ...)`). ORAR solo existe con
 oraciones del Altar Portatil que gastar (`Engine::prayers_left`).
+
+### La pasada de móvil (2026-10-03): mando de juego móvil de verdad
+
+Petición del usuario: *"que la experiencia en la versión móvil sea profesional, cómoda,
+óptima"*. Lo que cambió, por qué, y dónde está cada cosa:
+
+**Botones redondos en arco alrededor de DASH** (`Input::init_touch_layout`,
+`TOUCH_OFFSETS` en `input.cpp`). La fila de 22x22 de antes ponía ORAR a 103 unidades del
+borde y todos a la misma distancia del suelo, con 5 de hueco: el pulgar derecho no descansa en
+una fila, pivota desde la esquina. Ahora DASH (radio 16, ~11,5 mm) está donde descansa el
+pulgar y el resto en dos arcos: milagros a 38 (180°, 135°, 90°) y USAR / ARMA / ORAR a ~66
+(170°, 135°, 100°), intercalados. El hueco más estrecho entre dos bordes es 3,2 unidades
+(comprobado a mano en el comentario de `TOUCH_OFFSETS`). Las posiciones siguen siendo FIJAS
+por botón: beberse el último consumible deja un hueco, no mueve a nadie.
+
+- **Hit-test circular con margen** (`TouchButton::edge_distance`, `Input::touch_button_at`):
+  un dedo cuenta hasta `TOUCH_HIT_SLOP` (4 u, ~1,4 mm) por fuera de lo dibujado, y si dos
+  márgenes se solapan gana el botón cuyo BORDE esté más cerca. Un dedo que ya pulsa un botón
+  se suelta solo al salirse el DOBLE de ese margen (el pulgar rueda al apoyarse). Un dedo que
+  cae en un botón que ya tiene otro dedo no dispara de propina.
+- **`TouchButton::rect` sigue existiendo** como caja envolvente (la de la pausa ES su forma),
+  `center` + `radius` es lo nuevo. El contrato de siempre aguanta: el HUD dibuja con los
+  mismos centros con los que se prueba el dedo.
+
+**El grupo se ancla a la ZONA SEGURA de la VENTANA, no al área de juego**
+(`TouchLayoutParams::safe`, que rellena `Engine::refresh_touch_area`). Es la ventana entera
+en unidades de juego (con sus pilares o bandas: en 20:9, x de -40 a 360) menos lo que el
+sistema reserva (`SDL_GetWindowSafeArea`: notch, barra y zonas de gestos). Consecuencias:
+
+- En un **20:9 el grupo vive en el pilar negro de la derecha**, que hasta ahora era espacio
+  muerto, y el stick puede nacer en el de la izquierda (un dedo en x < 0 es "mitad
+  izquierda"). El mundo queda mucho más despejado.
+- La **pausa** sube al pilar (si caben 32 unidades) en vez de estar arriba al centro.
+- En **vertical** (dormido) el grupo baja a la banda inferior por la misma regla, sin rama
+  especial: desaparece `touch_band` y su umbral de 62.
+- Se recalcula en `WINDOW_RESIZED` / `PIXEL_SIZE_CHANGED`, y además en
+  `WINDOW_SAFE_AREA_CHANGED` y `DISPLAY_SCALE_CHANGED`.
+
+**Tamaño por DPI** (`Engine::touch_dpi_scale`). La escala 1 es la de un 6,5" 20:9, donde una
+unidad mide ~0,36 mm. En Android `SDL_GetWindowDisplayScale` es la densidad (dpi/160), y de
+ahí sale lo que mide una unidad EN ESA pantalla; la escala lo devuelve al tamaño físico de la
+referencia, acotada a 0,75..1,4 (una tablet de 11" da 0,49 → 0,75: sin el suelo los botones
+saldrían diminutos en unidades, pero ya grandes en mm). En escritorio la escala es 1 salvo
+con **`--dpi N`** (main.cpp), que finge una pantalla para probarlo.
+
+**Ajustes del jugador** (Opciones, solo en táctil; `Input::set_touch_prefs`): **Tam. botones**
+70..150 %, **Opacidad** 30..100 %, **Zurdo**. La escala final (DPI × tamaño) se acota además
+para que el grupo quepa entre el centro de la zona segura y la esquina, y por debajo de y=58
+(el minimapa y el objetivo): al 150 % en 20:9 queda en 1,27. Cambiar el lado o el tamaño
+con un dedo puesto llama a `release_touch`, o el dedo se quedaría colgado de un botón que se
+ha movido.
+
+**Zurdo** = reflejo de todo el layout alrededor del centro de la zona segura (no del área de
+juego: con un notch a un lado los dos grupos quedan igual de lejos de su borde) y
+`Input::in_move_half`, que es lo que decide en `process_touch` qué mitad crea el stick.
+`tutorial_text` y la pantalla de Controles (`MenuSystem::touch_lefty`) cambian
+"izquierda"/"derecha" con él.
+
+**El stick de movimiento** (`VirtualJoystick`):
+
+- **Radio real = lo que se ve**: `joy_radius` = `TOUCH_JOY_R` (22 u, ~8 mm) × escala. Antes
+  el radio lógico era 40 y la base se dibujaba de 16 con el pomo moviéndose 13: hacía falta
+  arrastrar 14 mm para correr y el dibujo no decía la verdad. Ahora el pomo va 1:1 con el
+  dedo hasta el tope.
+- **La base sigue al dedo** (`VirtualJoystick::follow`) cuando este se pasa del radio. Sin
+  eso, con el dedo 60 unidades más allá del origen había que desandarlas para girarse.
+  Medido en `movil_check`: tras 100 u a la derecha la base queda a un radio exacto del dedo,
+  y 10 u por detrás de ella el eje ya es (-0,45, 0).
+- **Fantasma en reposo** (`Input::joy_rest`): base y pomo muy apagados en la esquina
+  contraria a DASH, a su altura. Dice "el pulgar va aquí" sin texto; el stick sigue naciendo
+  donde baje el dedo en toda la mitad.
+
+**El "no se puede" se SIENTE**: un milagro que se intenta sin fe o en recarga hace temblar su
+botón (`TouchButton::deny_t`, `TOUCH_DENY_TIME` 0,35 s, aro rojo) y da un toque corto de
+vibración (`Input::deny_miracle`, desde el mismo evento que pinta el mensaje). Con el pulgar
+encima, el mensaje de abajo no se ve; un botón que no responde sin decir nada se lee como "el
+táctil falla". Log: `Touch deny: milagro N`.
+
+**Atrás en el título sale de la app** (Android): la primera vez avisa ("Pulsa atrás otra vez
+para salir", 2 s) y la segunda llama a `SDL_SendAndroidBackButton`, que es el "atrás" del
+sistema (desde Android 12 manda la app al fondo). Antes no hacía nada en la raíz de la app.
+
+Logs: `Touch layout: area X,Y WxH  escala S (dpi D x U)[  ZURDO]  DASH (x,y) pausa (x,y)` en
+cada relayout. Guiones: **`movil_check.txt`** (`--touch --window 2400x1080`) y los
+re-pinneados `tactil_check` (ahora con `tbtn`), `tactil_ancho_check` (la sonda en píxeles,
+con el DASH en el pilar), `vertical_check` y `menus_tactil_check` (Opciones tiene 12 filas en
+táctil). Comandos nuevos en `scripts/CLAUDE.md`.
+
+### Apuntar y disparar con el mismo pulgar: comprobado (2026-10-03)
+
+El dedo apoyado en la mitad de disparo mantiene el Ataque (rafaga a la cadencia del cayado)
+y, si arrastra, el tiro sigue al arrastre: se apunta y se dispara a la vez, y se corrige sin
+levantar el dedo. Medido con la auto-mira apagada en `scripts/apuntado_tactil_check.txt`.
+
+**El primer tiro sale al BAJAR el dedo**, antes de que el arrastre exista, con la direccion
+que haya en ese instante: con la auto-mira encendida (lo normal en movil) va al objetivo de
+`pick_target`, que suele ser lo que se queria; con ella apagada, hacia donde mira el profeta.
+Si algun dia molesta, la alternativa conocida es la de Brawl Stars (apuntar y disparar al
+SOLTAR), pero cambia el tacto de todo el disparo tactil y no se ha tocado.

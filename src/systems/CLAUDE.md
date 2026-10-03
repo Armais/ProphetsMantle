@@ -251,3 +251,12 @@ tocar fila, tocar OFRECER, "< Volver" abajo. Los rects los apunta el dibujo y lo
 quedan N) -> <efecto>` y `Santuario tap: N`.
 
 Guion: **`scripts/santuario_check.txt`** (gates en su cabecera).
+
+### Ajustes de los controles tactiles en la holgura de la v12 (2026-10-03)
+
+`SaveData::touch_size_pct` y `touch_opacity_pct` ocupan los DOS PRIMEROS huecos de lo que era
+`reserved_v12[8]` (ahora `reserved_v12[6]`): el fichero mide lo mismo, el `static_assert` de la
+v12 no se mueve y **no hay migracion**. **Cero = valor de fabrica (100 %)**, que es justo lo que
+traen los guardados v12 escritos antes. Zurdo y ahorro de bateria son bits de
+`settings_flags` (`SETTING_TOUCH_LEFTY` = bit 3, `SETTING_BATTERY_SAVE` = bit 4). `defaults`
+los devuelve a fabrica; `SAVEDUMP tactil tamano=.. opacidad=.. zurdo=.. ahorro=..` los vuelca.

@@ -95,6 +95,8 @@ XDG_DATA_HOME=/tmp/run1 SDL_VIDEODRIVER=offscreen SDL_AUDIO_DRIVER=dummy \
 `XDG_DATA_HOME` aisla el guardado de cada pasada (se pueden correr varios guiones en
 paralelo). El renderer por software pinta igual que el de escritorio. **No sustituye a la
 build de Windows**: el `MANTLE.exe` se sigue compilando en la maquina del usuario.
+Para simular un movil: `--touch --window 2400x1080` (20:9) y `--dpi N` para el tamaño fisico
+de los botones (`scripts/movil_check.txt`; detalle en `src/input/CLAUDE.md`).
 
 ### Important: SDL3 API differences from SDL2
 
