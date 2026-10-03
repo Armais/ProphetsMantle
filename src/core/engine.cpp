@@ -489,10 +489,10 @@ void Engine::update(f32 dt) {
         if (input.touch_gameplay) {
             // Botones contextuales. Las condiciones son las MISMAS que usa el gameplay:
             // ORAR repite la del "Altar Portatil" (mejora 5), ARMA la del arma equipada.
-            input.set_touch_enabled(player.consumable_slot != UINT32_MAX,
+            input.set_touch_enabled(player.belt_count() > 0,
                                     player.active_slot_count,
                                     player.weapon_slot != UINT32_MAX,
-                                    progression.is_unlocked(5) && !portable_altar_used,
+                                    prayers_left > 0,
                                     true);
             input.touch_minimap = HUD::minimap_rect(floor_map);
             // El SALTAR del tutorial es el unico boton de pantalla que convive con el HUD:
@@ -512,6 +512,9 @@ void Engine::update(f32 dt) {
 
     if (banner_timer > 0.0f)  banner_timer  -= dt;
     if (message_timer > 0.0f) message_timer -= dt;
+    if (pickup_t > 0.0f)      pickup_t      -= dt;
+    if (offering_pop > 0.0f && state.scene != GameScene::Sanctuary)
+        offering_pop = std::max(0.0f, offering_pop - dt * 1.4f);
     if (room_fade > 0.0f)     room_fade = std::max(0.0f, room_fade - dt / 0.3f);
     if (scene_fade > 0.0f)    scene_fade = std::max(0.0f, scene_fade - dt / SCENE_FADE_TIME);
     {
@@ -624,9 +627,7 @@ void Engine::update(f32 dt) {
                             else                             continue_run();
                             break;
                         case 2:
-                            sanctuary_sel = 0;
-                            sanctuary_scroll = 0;
-                            change_scene(GameScene::Sanctuary);
+                            open_sanctuary(GameScene::MainMenu);
                             break;
                         case 3:
                             codex_return = GameScene::MainMenu;
@@ -661,6 +662,14 @@ void Engine::update(f32 dt) {
                 int s = pending_scene;
                 pending_scene = -1;
                 start_scene(s);
+                break;
+            }
+            // Primicias (El Santuario): la carta de objeto con la que se empieza. Aqui y no
+            // en start_new_run porque delante van la audiencia y la intro del capitulo.
+            if (primicias_pending && !tutorial.active) {
+                primicias_pending = false;
+                SDL_Log("Primicias: carta de objeto al empezar");
+                open_item_choice(tr("PRIMICIAS: ELIGE CON QUÉ EMPIEZAS", "FIRSTFRUITS: CHOOSE YOUR START"));
                 break;
             }
             // Impact freeze after a boss hit: keep rendering, stop the world for 3 frames
@@ -702,13 +711,41 @@ void Engine::update(f32 dt) {
             // existen: el capitulo es una zona continua.
             if (room_change_grace > 0.0f) room_change_grace -= dt;
 
+            // El equipo del profeta que toca el combate (combat.cpp no conoce al Player):
+            // se copia ANTES de mover el mundo y se lee de vuelta despues (el escudo).
+            world.mods.heart_drop_mult = player.heart_drop_mult;
+            world.mods.heart_heal_mult = player.heart_heal_mult;
+            world.mods.kill_faith      = player.kill_faith;
+            world.mods.burning_shots   = player.burning_shots;
+            world.mods.shield_up       = player.has_shield && player.shield_up;
+            world.mods.belt_stack      = 0;
+            world.mods.belt_free       = 0;
+            for (int i = 0; i < player.belt_cap && i < Player::BELT_MAX; i++) {
+                const auto& b = player.belt[i];
+                if (b.empty()) world.mods.belt_free++;
+                else if (b.charges < Player::BELT_STACK && b.id < 32) world.mods.belt_stack |= (1u << b.id);
+            }
+
             world.update(dt);
             update_enemy_ai(world, dt);
+            update_pickup_magnet(world, dt);
 
             system_collision(world, faith, combat_events);
             // Braseros prendidos: despues de las colisiones (usa fe/eventos) y antes de
             // update_room_state (sus bajas tienen que contar ya)
             update_death_fuses(world, faith, combat_events, dt);
+            // Antorcha del Altar: lo que arde, arde (mismas razones que las mechas)
+            update_burns(world, faith, combat_events, dt);
+            // Piedra del Memorial: si el mundo rompio el escudo, el Player se entera
+            if (world.mods.shield_broke) {
+                world.mods.shield_broke = false;
+                player.shield_up = false;
+                player.shield_timer = Player::SHIELD_RECHARGE;
+                audio.play_sfx(SfxID::CayadoHitEnemy, 1.0f);
+                renderer.shake_camera(Config::Feel::SHAKE_HIT);
+                show_message(tr("¡La piedra te cubre!", "The stone shields you!"), 1.2f);
+                SDL_Log("Shield: Piedra del Memorial absorbed a hit");
+            }
             // Peligros telegrafiados de los jefes (game/hazards.h): mismo sitio y mismas
             // razones que las mechas — usan fe y eventos, y sus bajas cuentan ya.
             update_hazards(world, faith, combat_events, dt);
@@ -799,7 +836,7 @@ void Engine::update(f32 dt) {
                         break;
                     case Player::MiracleEvent::NeedCost:
                         snprintf(buf, sizeof(buf), tr("%s: te faltan %.0f de fe", "%s: %.0f faith short"), md.name,
-                                 md.faith_cost - faith.current);
+                                 player.miracle_cost(player.last_cast) - faith.current);
                         break;
                     default:
                         snprintf(buf, sizeof(buf), tr("%s: en recarga", "%s: on cooldown"), md.name);
@@ -812,6 +849,8 @@ void Engine::update(f32 dt) {
 
             run_kills += combat_events.enemy_kills;
             player.kills += combat_events.enemy_kills;
+            tally.kills  += combat_events.enemy_kills;
+            tally.bosses += combat_events.boss_kills;
 
             // Cada evento con su curva de sacudida y su rumble (Config::Feel). Antes todo
             // compartia una magnitud suelta escrita aqui mismo, asi que conectar un tiro y
@@ -880,7 +919,7 @@ void Engine::update(f32 dt) {
             // — por eso los sitios que abren cosas apuntan la posicion en `loot_drops` en vez
             // de soltar la pieza ellos mismos.
             if (!world.loot_drops.empty()) {
-                int paid[3] = {0, 0, 0};   // ofrendas / fe / vida, para que el log diga QUE pago
+                int paid[4] = {0, 0, 0, 0};   // ofrendas / fe / vida / consumible, para que el log diga QUE pago
                 for (Vec2 at : world.loot_drops) {
                     // QUE paga el hallazgo se saca de SU POSICION, no de `randi_range`: asi la
                     // misma semilla reparte siempre lo mismo (igual que `tile_hides_loot`) y
@@ -893,16 +932,19 @@ void Engine::update(f32 dt) {
                     // cualquier enemigo, asi que si un secreto pagara sobre todo en eso no
                     // habria motivo para desviarse. Lo que hace que explorar de mas signifique
                     // algo es que pague en meta-progresion, o sea entre partidas.
-                    if (roll < 6)      { spawn_pickup(world, at, ItemComponent::Pickup::Offering, 3.0f); paid[0]++; }
-                    else if (roll < 8) { spawn_pickup(world, at, ItemComponent::Pickup::FaithOrb, 6.0f); paid[1]++; }
-                    else               { spawn_pickup(world, at, ItemComponent::Pickup::Heart, 10.0f);   paid[2]++; }
+                    // 1 de cada 10 secretos guarda un CONSUMIBLE para la alforja (cual, tambien
+                    // por la posicion: la misma tinaja paga siempre lo mismo).
+                    if (roll < 5)      { spawn_pickup(world, at, ItemComponent::Pickup::Offering, 3.0f); paid[0]++; }
+                    else if (roll < 7) { spawn_pickup(world, at, ItemComponent::Pickup::FaithOrb, 6.0f); paid[1]++; }
+                    else if (roll < 9) { spawn_pickup(world, at, ItemComponent::Pickup::Heart, 10.0f);   paid[2]++; }
+                    else               { spawn_consumable_at(at, static_cast<f32>((h >> 8) % 1000u) / 1000.0f); paid[3]++; }
                     spawn_fx(world, at, FxID::Holy, {255, 226, 150, 220}, 22.0f, 0.35f, 5);
                 }
                 // Se loguea la CAIDA y no solo la recogida: entre las dos hay que caminar
                 // hasta la pieza, y un guion que solo mirara la recogida no sabria distinguir
                 // "el secreto no pago nada" de "el bot no paso por encima".
-                SDL_Log("Secret loot: %d hallazgo(s) en el suelo (%d ofrenda, %d fe, %d vida)",
-                        static_cast<int>(world.loot_drops.size()), paid[0], paid[1], paid[2]);
+                SDL_Log("Secret loot: %d hallazgo(s) en el suelo (%d ofrenda, %d fe, %d vida, %d consumible)",
+                        static_cast<int>(world.loot_drops.size()), paid[0], paid[1], paid[2], paid[3]);
                 world.loot_drops.clear();
                 audio.play_sfx(SfxID::Notification, 0.55f);
             }
@@ -917,16 +959,18 @@ void Engine::update(f32 dt) {
                 world.offerings_found = 0;
                 audio.play_sfx(SfxID::FaithGain, 0.7f);
             } else if (world.offerings_found > 0) {
-                progression.add_offerings(static_cast<int>(world.offerings_found));
-                char buf[48];
-                snprintf(buf, sizeof(buf), tr("+%u ofrendas", "+%u offerings"), world.offerings_found);
-                show_message(buf, 1.4f);
-                SDL_Log("Secret offerings: +%u (total %d)", world.offerings_found, progression.offerings);
+                // El contador del HUD salta y dice "+N": ya no hace falta un mensaje que tape
+                // el centro de la pantalla. La primera vez, el cartel que explica que es.
+                const int got = static_cast<int>(world.offerings_found);
                 world.offerings_found = 0;
-                save.data.offerings = progression.offerings;
-                save.save(false);
+                bank_offerings(got, true);
+                SDL_Log("Secret offerings: +%d (total %d)", got, progression.offerings);
                 audio.play_sfx(SfxID::FaithGain, 0.7f);
             }
+            // Consumibles: los que alguien solto (enemigo raro, jefe) y los recogidos
+            for (Vec2 at : world.consumable_drops) spawn_consumable_at(at, randf());
+            world.consumable_drops.clear();
+            update_belt();
             // El buzon se vacia AQUI, justo despues de vaciarlo de verdad, y no antes de
             // llenarlo. La diferencia importa: lo que escribe fuera de esta ventana —el
             // `killall` del autoplay, que corre antes en el mismo frame— sobrevive hasta
@@ -981,26 +1025,22 @@ void Engine::update(f32 dt) {
                 }
             }
 
-            // "Altar Portátil" (El Santuario): una oración por capítulo sin necesitar altar
-            if (input.is_action_just_pressed(Action::Pray) &&
-                progression.is_unlocked(5) && !portable_altar_used) {
-                portable_altar_used = true;
+            // "Altar Portátil" (El Santuario): oraciones por capitulo sin necesitar altar
+            if (input.is_action_just_pressed(Action::Pray) && prayers_left > 0 &&
+                player.entity != ENTITY_NONE) {
+                prayers_left--;
                 faith.on_pray();
-                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health))
-                    world.healths[player.entity].heal(10.0f);
-                SDL_Log("Portable altar: prayed in place (+10 faith)");
-                show_message(tr("Oras donde estás  +10 Fe", "You pray where you stand  +10 Faith"), 2.0f);
+                if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(10.0f);
+                const Vec2 pp = world.transforms[player.entity].position;
+                spawn_fx(world, pp, FxID::Holy, {255, 235, 170, 235}, 40.0f, 0.6f, 11);
+                spawn_particles(world, pp, {255, 240, 190, 255}, 12, 50.0f, 0.6f);
+                SDL_Log("Portable altar: prayed in place (+10 faith), quedan %d", prayers_left);
+                char pb[96];
+                snprintf(pb, sizeof(pb), tr("Oras donde estás  +10 fe  +10 vida  (quedan %d)",
+                                            "You pray where you stand  +10 faith  +10 health  (%d left)"),
+                         prayers_left);
+                show_message(pb, 2.2f);
                 audio.play_sfx(SfxID::FaithGain);
-            }
-
-            // Consumable (R): the Engine owns the registry, so the key is handled here
-            if (input.is_action_just_pressed(Action::Consumable)) {
-                u32 held = player.consumable_slot;
-                if (player.use_consumable(world, faith, item_registry)) {
-                    const ItemDef* d = item_registry.get(held);
-                    show_message(d ? d->name : tr("Consumible usado", "Consumable used"), 1.5f);
-                    audio.play_sfx(SfxID::ItemPickup, 0.9f);
-                }
             }
 
             update_cells();
@@ -1029,7 +1069,28 @@ void Engine::update(f32 dt) {
                 !world.healths[player.entity].is_alive()) {
                 const bool relic_saves = !has_revive && relic_revive_ready &&
                                          player.relic_slot == 20;
-                if (has_revive || relic_saves) {
+                // Aliento de Vida (El Santuario): el ULTIMO en saltar, porque es el que se
+                // rellena menos a menudo (por intento) y es el que el jugador compro.
+                const bool breath_saves = !has_revive && !relic_saves && revives_left > 0;
+                if (breath_saves) {
+                    revives_left--;
+                    auto& h = world.healths[player.entity];
+                    h.current = h.max * 0.5f;
+                    h.iframes_timer = 2.5f;
+                    faith.modify(10.0f);
+                    world_flash = std::max(world_flash, 0.6f);
+                    renderer.shake_camera(Config::Feel::SHAKE_BOSS_KILL);
+                    const Vec2 pp = world.transforms[player.entity].position;
+                    spawn_fx(world, pp, FxID::Holy, {255, 245, 210, 240}, 56.0f, 0.8f, 11);
+                    spawn_fx(world, pp, FxID::Ring, {255, 230, 160, 230}, 70.0f, 0.6f, 11);
+                    SDL_Log("Revive used: Aliento de Vida (El Santuario), quedan %d", revives_left);
+                    char sub[96];
+                    snprintf(sub, sizeof(sub), tr("El Santuario te levanta  ·  quedan %d", "The Sanctuary raises you  ·  %d left"),
+                             revives_left);
+                    show_banner(tr("ALIENTO DE VIDA", "BREATH OF LIFE"), sub, 3.5f);
+                    audio.play_sfx(SfxID::LevelUp);
+                    audio.play_sfx(SfxID::MiracleHeal, 0.8f);
+                } else if (has_revive || relic_saves) {
                     // El aposento sunamita (2 Reyes 4:35): el niño estornudó siete veces
                     if (relic_saves) relic_revive_ready = false;
                     else             has_revive = false;
@@ -1054,6 +1115,7 @@ void Engine::update(f32 dt) {
                     award_offerings(false);
                     save_after_defeat();
                     change_scene(GameScene::GameOver);
+                    summary.t = 0.0f;
                 }
             }
             break;
@@ -1065,7 +1127,9 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Paused:
-            if (menus.current == MenuScreen::Settings) {
+            if (equipment_open) {
+                update_equipment();
+            } else if (menus.current == MenuScreen::Settings) {
                 update_settings();
             } else {
                 menus.update(input);
@@ -1073,17 +1137,24 @@ void Engine::update(f32 dt) {
                     switch (menus.selected_option) {
                         case 0: change_scene(GameScene::Playing); break;
                         case 1:
+                            // Equipo: que llevas y que hace cada cosa, con las cifras
+                            equipment_open = true;
+                            equipment_scroll = 0;
+                            SDL_Log("Equipo abierto (%d objetos, %d en la alforja)",
+                                    static_cast<int>(player.items.size()), player.belt_count());
+                            break;
+                        case 2:
                             codex_return = GameScene::Paused;
                             codex = CodexScreen{};
                             change_scene(GameScene::Codex);
                             break;
-                        case 2:
+                        case 3:
                             menus.settings_origin = MenuScreen::PauseMenu;
                             load_settings_mirror();
                             menus.current = MenuScreen::Settings;
                             menus.selected_option = 0;
                             break;
-                        case 3:
+                        case 4:
                             // En el tutorial esta fila es la salida (en PC no hay boton de
                             // SALTAR, y ESC ya es la pausa que el paso 14 enseña).
                             if (tutorial.active) { finish_tutorial(false); break; }
@@ -1093,7 +1164,7 @@ void Engine::update(f32 dt) {
                             break;
                     }
                 }
-                if (input.is_action_just_pressed(Action::Pause)) {
+                if (input.is_action_just_pressed(Action::Pause) && !equipment_open) {
                     change_scene(GameScene::Playing);
                 }
             }
@@ -1122,11 +1193,19 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::GameOver:
+            summary.t += dt;
             menus.update(input);
             // [R] sigue siendo atajo directo; la opcion 0 del menu hace lo mismo
             if (input.is_action_just_pressed(Action::Consumable) ||
                 (input.is_action_just_pressed(Action::Confirm) && menus.selected_option == 0)) {
                 retry_chapter();
+                break;
+            }
+            // El Santuario DESDE la derrota: gastar lo que acabas de ganar y volver aqui a
+            // reintentar con ello puesto. Es el bucle que no se entendia.
+            if (input.is_action_just_pressed(Action::Confirm) && menus.selected_option == 1) {
+                open_sanctuary(GameScene::GameOver);
+                summary.t = 99.0f;   // al volver, la cuenta ya esta hecha
                 break;
             }
             if (input.is_action_just_pressed(Action::Confirm)) {
@@ -1137,6 +1216,7 @@ void Engine::update(f32 dt) {
             break;
 
         case GameScene::Victory:
+            summary.t += dt;
             menus.update(input);   // en tactil, un toque en cualquier sitio confirma
             if (input.is_action_just_pressed(Action::Confirm)) {
                 save.delete_save();
@@ -1217,15 +1297,31 @@ void Engine::render() {
             current_room_data.render_event_markers(renderer, world.time, view, pp);
         }
 
-        // Floating damage numbers: rise and fade over the enemy that was hit
+        // Piedra del Memorial: mientras el escudo esta arriba, un aro de piedra a los pies del
+        // profeta. Un objeto que protege tiene que VERSE protegiendo.
+        if (player.has_shield && player.shield_up && player.entity != ENTITY_NONE &&
+            world.has(player.entity, Component::Transform)) {
+            const Vec2 pp = world.transforms[player.entity].position;
+            const f32 k = 0.5f + 0.5f * std::sin(world.time * 2.6f);
+            renderer.draw_ring({pp.x, pp.y + 3.0f}, 11.5f + k, {215, 210, 196, static_cast<u8>(90 + 60 * k)});
+        }
+
+        // Floating numbers: dano (blanco / oro de jefe), curacion (verde, "+N"), fe (oro,
+        // "+N") y quemadura (naranja). Suben y se apagan sobre quien los causa.
         for (const auto& p : world.popups) {
             f32 k = 1.0f - p.life / 0.7f;
             f32 scale = p.boss ? 0.85f : 0.65f;
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%d", static_cast<int>(p.amount + 0.5f));
-            f32 w = renderer.measure_text(buf, scale);
+            char buf[16];
+            const int v = static_cast<int>(p.amount + 0.5f);
             u8 a = static_cast<u8>(255.0f * (k > 0.6f ? 1.0f : k / 0.6f));
             Color c = p.boss ? Color{255, 220, 120, a} : Color{250, 240, 220, a};
+            switch (p.kind) {
+                case ECSWorld::DamagePopup::Heal:  snprintf(buf, sizeof(buf), "+%d", v); c = {130, 245, 140, a}; scale = 0.75f; break;
+                case ECSWorld::DamagePopup::Faith: snprintf(buf, sizeof(buf), tr("+%d fe", "+%d faith"), v); c = {255, 222, 120, a}; scale = 0.6f; break;
+                case ECSWorld::DamagePopup::Burn:  snprintf(buf, sizeof(buf), "%d", v); c = {255, 150, 70, a}; scale = 0.55f; break;
+                default:                           snprintf(buf, sizeof(buf), "%d", v); break;
+            }
+            f32 w = renderer.measure_text(buf, scale);
             renderer.draw_text(buf, p.pos.x - w * 0.5f, p.pos.y - 10.0f - 14.0f * p.life, c, scale);
         }
         renderer.end_world();
@@ -1299,6 +1395,23 @@ void Engine::render() {
         ctx.tileset = tileset_texture;
         ctx.registry = &item_registry;
         ctx.input    = &input;   // controles tactiles (solo si Input::touch_ui)
+        // Ofrendas y dones del Santuario: lo comprado y lo ganado, a la vista
+        ctx.offerings = tutorial.active ? -1 : progression.offerings;
+        ctx.offering_pop = offering_pop;
+        ctx.offering_pop_amount = offering_pop_amount;
+        ctx.revives = revives_left;
+        ctx.prayers = prayers_left;
+        ctx.shield  = player.has_shield ? (player.shield_up ? 1 : 0) : -1;
+        ctx.shield_recharge = player.has_shield && !player.shield_up
+                            ? std::max(0.0f, std::min(1.0f, player.shield_timer / Player::SHIELD_RECHARGE)) : 0.0f;
+        if (pickup_t > 0.0f) {
+            ctx.pickup_icon  = pickup_icon;
+            ctx.pickup_name  = pickup_name.c_str();
+            ctx.pickup_desc  = pickup_desc.empty() ? nullptr : pickup_desc.c_str();
+            ctx.pickup_hint  = pickup_hint.empty() ? nullptr : pickup_hint.c_str();
+            ctx.pickup_color = pickup_color;
+            ctx.pickup_t     = pickup_t;
+        }
 
         // Sanar Aguas: disco en el suelo. El efecto es circular (distancia < 34), asi que
         // se pinta con la elipse suave de las sombras en vez del rectangulo que habia.
@@ -1328,7 +1441,8 @@ void Engine::render() {
 
         case GameScene::Paused:
             render_world();
-            menus.render(renderer);  // Pause overlay on top
+            if (equipment_open) render_equipment();
+            else                menus.render(renderer);  // Pause overlay on top
             break;
 
         case GameScene::Choice: {
@@ -1350,6 +1464,22 @@ void Engine::render() {
                 draw_item_choice(renderer, choice.title, defs, choice.count, choice.selected,
                                  tileset_texture, state.current_act == Act::Act_I,
                                  held ? held->name : nullptr, input.touch_ui);
+                // Echar Suertes (El Santuario): "otras tres" con su contador. Una placa bajo
+                // las cartas, que se toca en el movil y anuncia su tecla en el PC.
+                choice_reroll_rect = {0, 0, 0, 0};
+                if (rerolls_left > 0) {
+                    char lab[64];
+                    snprintf(lab, sizeof(lab), input.touch_ui ? tr("Echar suertes (%d)", "Cast lots (%d)")
+                                                              : tr("[R] Echar suertes (%d)", "[R] Cast lots (%d)"),
+                             rerolls_left);
+                    const f32 w = renderer.measure_text(lab, 0.65f) + 14.0f;
+                    const Rect r = {(static_cast<f32>(Config::GAME_WIDTH) - w) * 0.5f, 136.0f, w, 12.0f};
+                    Vec2 pp;
+                    const bool down = input.touch_ui && input.ui_press(pp) && r.contains(pp);
+                    renderer.draw_panel(r, down ? Color{120, 96, 52, 245} : Color{64, 52, 40, 235}, 3.5f);
+                    renderer.draw_text(lab, r.x + 7.0f, r.y + 2.5f, {250, 226, 170, 255}, 0.65f);
+                    choice_reroll_rect = r;
+                }
             }
             break;
         }
@@ -1416,10 +1546,12 @@ void Engine::render() {
 
         case GameScene::GameOver:
             menus.render(renderer);
+            render_run_summary(38.0f);
             break;
 
         case GameScene::Victory:
             menus.render(renderer);
+            render_run_summary(44.0f);
             break;
     }
 
@@ -1474,7 +1606,8 @@ void Engine::change_scene(GameScene new_scene) {
         case GameScene::Paused:     menus.current = MenuScreen::PauseMenu; break;
         case GameScene::GameOver:
             menus.current = MenuScreen::GameOver;
-            menus.option_count = 2;   // render_game_over lo confirma; aqui evita el frame de mas
+            menus.option_count = 3;   // render_game_over lo confirma; aqui evita el frame de mas
+            menus.sanctuary_ready = progression.cheapest_affordable() != nullptr;
             break;
         case GameScene::Victory:    menus.current = MenuScreen::Victory;   break;
         default: break;
@@ -1503,6 +1636,14 @@ void Engine::start_new_run() {
     player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
 
     apply_meta_upgrades();   // lo comprado en El Santuario entra antes de la primera sala
+    // Fe Renovada: la fe de arranque (solo al empezar de cero; Continuar trae la suya)
+    if (progression.rank_of(Meta::FE) > 0) {
+        faith.current = std::max(faith.current, meta_start_faith(progression.rank_of(Meta::FE)));
+        faith.modify(0.0f);
+    }
+    refill_attempt_gifts();
+    // Primicias: la carta de objeto espera a que se juegue (tras la audiencia y la intro)
+    primicias_pending = progression.is_unlocked(Meta::PRIMICIAS);
 
     // El mundo queda listo detras y lo primero que se ve es la audiencia con Acab
     // (1 R 17:1-4, guionizada sobre el palacio, game/scenes.h); al cerrarse, finish_scene lanza la
@@ -1567,7 +1708,10 @@ void Engine::start_tutorial(TutorialThen then) {
     scene_id = scene_step = -1;
     boss_approach_t = 0.0f;
     scene_walk_t    = 0.0f;
-    portable_altar_used = false;
+    prayers_left = 0;
+    revives_left = 0;
+    rerolls_left = 0;
+    primicias_pending = false;
     god_mode = false;
     miracle_hint_shown = true;   // la pista suelta del cap. 1 sobra: aqui hay un paso entero
 
@@ -1642,7 +1786,8 @@ void Engine::tutorial_enter_room(int index) {
 void Engine::tutorial_probe() {
     tutorial.prev_secondary_cd = player.secondary_cd;
     for (int i = 0; i < 3; i++) tutorial.prev_cooldown[i] = player.miracle_slots[i].cooldown_remaining;
-    tutorial.prev_charges = player.consumable_charges;
+    tutorial.prev_charges = 0;
+    for (int i = 0; i < Player::BELT_MAX; i++) tutorial.prev_charges += player.belt[i].empty() ? 0 : player.belt[i].charges;
 }
 
 bool Engine::tutorial_goal_done(TutorialGoal goal, f32 dt) {
@@ -1674,7 +1819,11 @@ bool Engine::tutorial_goal_done(TutorialGoal goal, f32 dt) {
             return has_player && world.has(player.entity, Component::Movement) &&
                    world.movements[player.entity].is_dashing;
         case TutorialGoal::Consumable:
-            return player.consumable_charges < tutorial.prev_charges;
+        {
+            int now = 0;
+            for (int i = 0; i < Player::BELT_MAX; i++) now += player.belt[i].empty() ? 0 : player.belt[i].charges;
+            return now < tutorial.prev_charges;
+        }
         case TutorialGoal::Miracle1:
         case TutorialGoal::Miracle2:
         case TutorialGoal::Miracle3: {
@@ -1740,7 +1889,7 @@ void Engine::tutorial_setup_step() {
     // La pocion del paso del consumible, por lo mismo: solo hay una carga, se da al arrancar
     // y quien se la bebio antes de que se la pidieran dejaba el paso sin nada que usar. La
     // guarda evita apilar una segunda carga a quien todavia la lleve.
-    if (goal == TutorialGoal::Consumable && player.consumable_slot == UINT32_MAX) {
+    if (goal == TutorialGoal::Consumable && player.belt_count() == 0) {
         if (const ItemDef* d = item_registry.get(9)) player.grant_item(world, faith, *d, false);
     }
 
@@ -1881,7 +2030,6 @@ void Engine::finish_tutorial(bool completed) {
 void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
     state.current_chapter = chapter;
     boss_hp_scale = 1.0f;   // el encuentro de cada capitulo se gana de nuevo
-    portable_altar_used = false;
     relic_revive_ready = true;   // el Reloj de Acaz perdona una muerte POR capitulo — se
                                  // re-arma aqui para cubrir tambien avanzar y Continuar
     player.map_revealed = false;   // "Ojos Abiertos" revela ESTE capitulo, no los siguientes
@@ -1901,6 +2049,9 @@ void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
         auto& h = world.healths[player.entity];
         h.heal(h.max * 0.15f);
     }
+    // Re-sorteos, oraciones sin altar y el agua de la tinaja: por capitulo. (Continuar los
+    // pisa despues con lo que quedaba al guardar.)
+    refill_chapter_gifts();
 
     // Mundo FIJO (2026-08-27): la semilla es una CONSTANTE por capitulo, no un sorteo por
     // partida. `pending_seed` (Continuar una partida guardada con su semilla de entonces) y
@@ -2016,8 +2167,9 @@ void Engine::retry_chapter() {
     // Se guarda por id y se vuelve a otorgar: asi los bonus de HP/dano/velocidad/fe se
     // reaplican sobre el profeta recien creado en vez de perderse con el Player anterior.
     std::vector<u32> kept_items   = player.items;
-    u32 kept_consumable           = player.consumable_slot;
-    u8  kept_charges              = player.consumable_charges;
+    Player::BeltSlot kept_belt[Player::BELT_MAX];
+    for (int i = 0; i < Player::BELT_MAX; i++) kept_belt[i] = player.belt[i];
+    const int kept_sel = player.belt_sel;
     MiracleID kept_miracles[Config::MAX_MIRACLE_SLOTS];
     for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) kept_miracles[s] = player.miracle_slots[s].miracle;
 
@@ -2029,6 +2181,11 @@ void Engine::retry_chapter() {
     if (ch == CharacterType::Elias) player.init_as_elias(world, character_textures[static_cast<u32>(CharacterType::Elias)]);
     else                            player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
     apply_meta_upgrades();
+    if (progression.rank_of(Meta::FE) > 0) {
+        faith.current = std::max(faith.current, meta_start_faith(progression.rank_of(Meta::FE)));
+        faith.modify(0.0f);
+    }
+    refill_attempt_gifts();   // un intento nuevo: el Aliento de Vida vuelve entero
 
     for (u32 id : kept_items) {
         const ItemDef* d = item_registry.get(id);
@@ -2039,9 +2196,10 @@ void Engine::retry_chapter() {
     // la fe NO se reinicia — sin esto, un Elias con las Tablas dejaba a Eliseo con el
     // suelo de fe en 25 para siempre, sin llevar la reliquia.
     player.apply_relic_effects(faith);
-    // grant_item repone el consumible con 1 carga: mandan las que llevaba al morir
-    player.consumable_slot    = kept_consumable;
-    player.consumable_charges = (kept_consumable == UINT32_MAX) ? 0 : kept_charges;
+    // La alforja sobrevive al reintento, como el resto del equipo
+    for (int i = 0; i < Player::BELT_MAX; i++) player.belt[i] = kept_belt[i];
+    player.belt_sel = kept_sel;
+    player.belt_fix_selection();
     for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++)
         if (kept_miracles[s] != MiracleID::COUNT) player.miracle_slots[s].equip(kept_miracles[s]);
 
@@ -2348,7 +2506,7 @@ void Engine::finish_ascension() {
     award(AchievementID::Ascension);
     // Inheritance: half the faith (floored so Eliseo starts usable), miracles, mantle.
     // "Herencia Ampliada" (El Santuario) sube la porción heredada al 60%.
-    f32 ratio = progression.is_unlocked(4) ? 0.60f : Config::INHERITANCE_FAITH_RATIO;
+    f32 ratio = meta_inherit_ratio(progression.rank_of(Meta::HERENCIA));   // 50 / 60 / 70 %
     // Cada vez que te quedaste atras en el camino, un 10% menos. Seguirle las TRES veces —que
     // es lo que hace Eliseo en el pasaje— deja la herencia EXACTAMENTE como estaba antes de
     // que el Ascenso fuera jugable: eso era la condicion del track.
@@ -2359,6 +2517,9 @@ void Engine::finish_ascension() {
     Vec2 pos = {Config::GAME_WIDTH * 0.5f, Config::GAME_HEIGHT * 0.5f};
     int rooms_cleared = player.rooms_cleared;
     int kills = player.kills;
+    // La alforja cruza el Jordan con el manto: lo que Elias llevaba encima lo recoge Eliseo
+    Player::BeltSlot kept_belt[Player::BELT_MAX];
+    for (int i = 0; i < Player::BELT_MAX; i++) kept_belt[i] = player.belt[i];
     // Heredable items travel with the mantle; everything else is left behind with Elias
     std::vector<u32> inherited;
     for (u32 id : player.items) {
@@ -2386,9 +2547,15 @@ void Engine::finish_ascension() {
     world.gap_crosser = ENTITY_NONE;
     player = Player{};
     player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
-    player.staff_skin = save.data.skin_equipped;   // cosmetico: sobrevive a la Ascension
+    // Lo comprado en El Santuario vale tambien para Eliseo (antes se perdia en el Ascenso:
+    // ni la vida, ni el dano, ni la velocidad le llegaban)
+    apply_meta_upgrades();
+    for (int i = 0; i < Player::BELT_MAX; i++) player.belt[i] = kept_belt[i];
+    player.belt_fix_selection();
     player.rooms_cleared = rooms_cleared;
     player.kills = kills;
+    // Primicias rango 2: otra carta al empezar el Acto II
+    primicias_pending = progression.rank_of(Meta::PRIMICIAS) >= 2;
     for (u32 id : inherited) {
         const ItemDef* d = item_registry.get(id);
         if (d) player.grant_item(world, faith, *d);
@@ -2654,8 +2821,14 @@ void Engine::relocalize() {
 
 void Engine::sync_progression_from_save() {
     progression.offerings = save.data.offerings;
-    for (auto& u : progression.upgrades)
-        u.unlocked = (save.data.upgrades_bought >> u.id) & 1u;
+    for (auto& u : progression.upgrades) {
+        int r = (u.id < static_cast<u32>(SAVE_MAX_UPGRADES)) ? save.data.upgrade_ranks[u.id] : 0;
+        // Un bit de `upgrades_bought` sin rango (un guion viejo que solo pone el bit) es rango 1
+        if (r == 0 && ((save.data.upgrades_bought >> u.id) & 1u)) r = 1;
+        u.rank     = std::max(0, std::min(r, u.max_rank));
+        u.unlocked = u.rank > 0;
+        u.cost     = u.next_cost();
+    }
     achievements.unlocked = save.data.achievements;
     apply_meta_unlocks();
 }
@@ -2738,119 +2911,604 @@ void Engine::sync_progression_to_save() {
     save.data.achievements = achievements.unlocked;
     save.data.offerings = progression.offerings;
     save.data.upgrades_bought = 0;
-    for (const auto& u : progression.upgrades)
-        if (u.unlocked) save.data.upgrades_bought |= (1u << u.id);
+    for (const auto& u : progression.upgrades) {
+        if (u.rank > 0) save.data.upgrades_bought |= (1u << u.id);
+        if (u.id < static_cast<u32>(SAVE_MAX_UPGRADES))
+            save.data.upgrade_ranks[u.id] = static_cast<u8>(u.rank);
+    }
     apply_meta_unlocks();
 }
 
-// Se aplican al crear al profeta, antes de la primera sala.
+// Lo comprado en El Santuario que va EN EL CUERPO del profeta. Se llama cada vez que se
+// CREA al profeta: partida nueva, reintento, Continuar y Ascension. Hasta el 2026-10-03 solo
+// lo llamaban la partida nueva y el reintento, asi que al Continuar y al pasar a Eliseo se
+// perdian la vida, el dano y la velocidad comprados — y el jugador no notaba lo que pagaba.
+// La fe inicial NO va aqui (Continuar trae la suya y el Ascenso la hereda): ver
+// apply_meta_start_faith en start_new_run / retry_chapter.
 void Engine::apply_meta_upgrades() {
     if (player.entity == ENTITY_NONE) return;
     // La skin del cayado vive en el guardado, pero el Player se REHACE al empezar una
     // partida (`player = Player{}`), asi que hay que volver a ponersela aqui. Es lo unico
     // cosmetico de esta funcion: no toca ninguna cifra.
     player.staff_skin = save.data.skin_equipped;
-    if (progression.is_unlocked(0) && world.has(player.entity, Component::Health)) {
-        world.healths[player.entity].max += 10.0f;
-        world.healths[player.entity].current += 10.0f;
+    const int r_hp  = progression.rank_of(Meta::VIDA);
+    const int r_dmg = progression.rank_of(Meta::DANO);
+    const int r_spd = progression.rank_of(Meta::VELOCIDAD);
+    if (r_hp > 0 && world.has(player.entity, Component::Health)) {
+        world.healths[player.entity].max     += meta_hp(r_hp);
+        world.healths[player.entity].current += meta_hp(r_hp);
     }
-    if (progression.is_unlocked(1) && world.has(player.entity, Component::Combat))
-        world.combats[player.entity].damage += 2.0f;
-    if (progression.is_unlocked(2) && world.has(player.entity, Component::Movement))
-        world.movements[player.entity].speed *= 1.10f;
-    if (progression.is_unlocked(3)) { faith.current = std::max(faith.current, 60.0f); faith.modify(0.0f); }
-    if (progression.is_unlocked(6) && player.character == CharacterType::Eliseo)
+    if (r_dmg > 0 && world.has(player.entity, Component::Combat))
+        world.combats[player.entity].damage += meta_damage(r_dmg);
+    if (r_spd > 0 && world.has(player.entity, Component::Movement))
+        world.movements[player.entity].speed *= meta_speed_mult(r_spd);
+    if (progression.is_unlocked(Meta::DOBLE) && player.character == CharacterType::Eliseo)
         player.active_slot_count = Config::MAX_MIRACLE_SLOTS;   // Q / E / F
-    portable_altar_used = false;
+    player.belt_cap = std::min(Player::BELT_MAX, meta_belt_slots(progression.rank_of(Meta::ALFORJA)));
+    SDL_Log("Meta upgrades applied: +%.0f HP, +%.0f dmg, x%.2f speed, alforja %d",
+            meta_hp(r_hp), meta_damage(r_dmg), meta_speed_mult(r_spd), player.belt_cap);
 }
 
-// Al morir o al ganar. La partida se paga: capitulo alcanzado, bajas y salas limpias.
+// Los dones que se gastan, rellenos. Por INTENTO: levantarse (Aliento de Vida).
+void Engine::refill_attempt_gifts() {
+    revives_left = meta_revives(progression.rank_of(Meta::ALIENTO));
+    tally = RunTally{};
+}
+
+// Por CAPITULO: re-sorteos, oraciones sin altar y el agua de la tinaja.
+void Engine::refill_chapter_gifts() {
+    rerolls_left = meta_rerolls(progression.rank_of(Meta::SUERTES));
+    prayers_left = meta_altar_prayers(progression.rank_of(Meta::ALTAR));
+    const int water = meta_jar_water(progression.rank_of(Meta::TINAJA));
+    if (water > 0 && player.entity != ENTITY_NONE && !tutorial.active) {
+        // La tinaja llena el hueco del agua hasta `water` cargas, sin pasarse ni robar sitio
+        // a otro tipo si la alforja va llena (entonces no cabe, y no se fuerza).
+        const int have = player.belt_slot_of(9) >= 0 ? player.belt[player.belt_slot_of(9)].charges : 0;
+        if (have < water) player.belt_add(9, water - have);
+        SDL_Log("Tinaja de Sarepta: %d Agua(s) del Jordan en la alforja", water);
+    }
+}
+
+// Ingresa ofrendas en el banco, guarda y anima el contador del HUD. `from_pickup` = un
+// hallazgo del suelo (cuenta para el desglose del final como "ya ingresado").
+void Engine::bank_offerings(int amount, bool from_pickup) {
+    if (amount <= 0) return;
+    progression.add_offerings(amount);
+    if (from_pickup) tally.found += amount;
+    save.data.offerings = progression.offerings;
+    save.save(false);
+    offering_pop = 1.0f;
+    offering_pop_amount = amount;
+    // La PRIMERA ofrenda de la vida del guardado explica que es: la queja del usuario era
+    // literalmente "el tema de las ofrendas no se entiende".
+    show_tip_once(TIP_OFFERINGS, tr("OFRENDAS", "OFFERINGS"),
+                  tr("No se pierden al morir. Gástalas en El Santuario para empezar cada partida más fuerte.",
+                     "You keep them when you die. Spend them in the Sanctuary to start every run stronger."),
+                  6.0f);
+}
+
+// =============================================================================
+// La alforja (2026-10-03)
+// =============================================================================
+void Engine::spawn_consumable_at(Vec2 pos, f32 roll) {
+    const u32 id = ItemRegistry::roll_consumable(roll, save.data.items_unlocked);
+    spawn_pickup(world, pos, ItemComponent::Pickup::Consumable, static_cast<f32>(id));
+    spawn_fx(world, pos, FxID::Holy, {190, 230, 255, 220}, 22.0f, 0.4f, 5);
+    const ItemDef* d = item_registry.get(id);
+    SDL_Log("Consumable dropped: %s at (%.0f,%.0f)", d ? d->name : "?", pos.x, pos.y);
+}
+
+// Una vez por frame en Playing: lo recogido entra, y las teclas de la alforja.
+void Engine::update_belt() {
+    if (belt_full_cd > 0.0f) belt_full_cd -= delta_time;
+    for (u32 id : world.consumables_found) {
+        const ItemDef* d = item_registry.get(id);
+        if (!d || !player.belt_add(id, 1)) continue;
+        codex_see_item(save.data, id);
+        const int slot = player.belt_slot_of(id);
+        char hint[96];
+        // Dice QUE es, QUE hace y COMO se usa: el usuario no veia logico usar los objetos
+        if (input.touch_ui)
+            snprintf(hint, sizeof(hint), "%s", tr("A la alforja: botón USAR (mantén para cambiar)",
+                                                  "To your satchel: USE button (hold to switch)"));
+        else
+            snprintf(hint, sizeof(hint), tr("A la alforja: pulsa [%d] para usarlo", "To your satchel: press [%d] to use it"),
+                     slot + 1);
+        announce_item(*d, hint);
+        audio.play_sfx(SfxID::ItemPickup, 0.9f);
+        SDL_Log("Belt: +1 %s (hueco %d, %d cargas)", d->name, slot,
+                slot >= 0 ? static_cast<int>(player.belt[slot].charges) : 0);
+        show_tip_once(TIP_BELT, tr("LA ALFORJA", "THE SATCHEL"),
+                      input.touch_ui ? tr("Toca USAR para usar el consumible elegido; mantenlo para cambiar de uno a otro.",
+                                          "Tap USE to use the chosen consumable; hold it to switch between them.")
+                                     : tr("[1]-[4] usan cada hueco  ·  [R] el elegido  ·  rueda o [C] para cambiar.",
+                                          "[1]-[4] use each slot  ·  [R] the chosen one  ·  wheel or [C] to switch."),
+                      6.0f);
+    }
+    world.consumables_found.clear();
+    if (world.mods.belt_full_touch) {
+        world.mods.belt_full_touch = false;
+        if (belt_full_cd <= 0.0f) {
+            belt_full_cd = 3.0f;
+            SDL_Log("Belt full: el consumible se queda en el suelo");
+            show_message(tr("Alforja llena: usa algo para hacer sitio", "Satchel full: use something to make room"), 2.0f);
+            audio.play_sfx(SfxID::MenuBack, 0.5f);
+        }
+    }
+
+    // Teclas: 1-4 usan ese hueco, R / X / USAR el elegido; rueda, C y cruceta cambian.
+    static const Action SLOT_KEYS[Player::BELT_MAX] = {Action::Belt1, Action::Belt2, Action::Belt3, Action::Belt4};
+    for (int i = 0; i < Player::BELT_MAX; i++)
+        if (input.is_action_just_pressed(SLOT_KEYS[i])) use_belt_slot(i);
+    if (input.is_action_just_pressed(Action::Consumable)) use_belt_slot(-1);
+    const bool next = input.is_action_just_pressed(Action::BeltNext);
+    const bool prev = input.is_action_just_pressed(Action::BeltPrev);
+    if ((next || prev) && player.belt_count() > 0) {
+        const int before = player.belt_sel;
+        player.belt_cycle(next ? 1 : -1);
+        if (player.belt_sel != before || player.belt_count() == 1) {
+            const ItemDef* d = item_registry.get(player.belt[player.belt_sel].id);
+            if (d) {
+                char msg[128];
+                snprintf(msg, sizeof(msg), "%s  ·  %s", d->name, d->description);
+                show_message(msg, 1.8f);
+            }
+            audio.play_sfx(SfxID::MenuSelect, 0.6f);
+            input.rumble(Config::Feel::RUMBLE_HIT, 30);
+        }
+    }
+}
+
+void Engine::use_belt_slot(int slot) {
+    char fx[96];
+    const int used_slot = slot < 0 ? player.belt_sel : slot;
+    const u32 id = player.use_belt(slot, world, faith, item_registry, fx, sizeof(fx));
+    if (id == UINT32_MAX) {
+        // No se ha gastado: decir por que (la vida ya llena), o que la alforja esta vacia
+        // (antes la R sin nada no hacia NADA)
+        if (fx[0]) show_message(fx, 1.6f);
+        else if (player.belt_count() == 0)
+            show_message(tr("La alforja está vacía: los consumibles se encuentran por el mundo",
+                            "Your satchel is empty: consumables are found around the world"), 2.0f);
+        audio.play_sfx(SfxID::MenuBack, 0.4f);
+        return;
+    }
+    const ItemDef* d = item_registry.get(id);
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s  ·  %s", d ? d->name : "?", fx);
+    show_message(msg, 2.0f);
+    audio.play_sfx(SfxID::ItemPickup, 0.9f);
+    if (id == 9 || id == 17) audio.play_sfx(SfxID::MiracleHeal, 0.6f);
+    if (id == 18)            audio.play_sfx(SfxID::FaithGain, 0.8f);
+    input.rumble(Config::Feel::RUMBLE_HIT, 50);
+    SDL_Log("Belt used: %s (hueco %d) -> %s", d ? d->name : "?", used_slot, fx);
+}
+
+// =============================================================================
+// Pantalla de fin: el desglose de ofrendas
+// =============================================================================
+// Lo que faltaba para que "las ofrendas" se entendieran: DE DONDE salen (capitulo, bajas,
+// grupos, jefes, el diezmo), CUANTAS entran ahora, cuantas tienes, y QUE puedes hacer con
+// ellas ya ("Ya puedes ofrecer: X" o "Te faltan N para X"). La cuenta sube linea a linea,
+// con su tic, como en los roguelikes que se entienden a la primera.
+void Engine::render_run_summary(f32 top) {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 PW = 220.0f, PX = (W - PW) * 0.5f;
+    const int n = summary.count;
+    const f32 LINE = 7.2f;
+    const f32 PH = 15.0f + n * LINE + 22.0f;
+    renderer.draw_panel({PX, top + 1.5f, PW, PH}, {0, 0, 0, 120}, 4.5f);
+    renderer.draw_panel({PX, top, PW, PH}, {28, 22, 30, 238}, 4.5f);
+    renderer.draw_text(tr("OFRENDAS GANADAS", "OFFERINGS EARNED"), PX + 8.0f, top + 4.0f, {245, 214, 140, 255}, 0.7f);
+
+    // Linea a linea: una cada 0,22 s, y el total cuenta hacia arriba al final
+    const f32 t = summary.t;
+    static int last_shown = -1;
+    int shown = std::min(n, static_cast<int>(t / 0.22f));
+    if (shown != last_shown && shown > 0 && shown <= n && t < 10.0f) audio.play_sfx(SfxID::MenuSelect, 0.35f);
+    last_shown = shown;
+    f32 y = top + 14.0f;
+    for (int i = 0; i < n; i++) {
+        if (i >= shown) break;
+        const OfferingLine& l = summary.lines[i];
+        const bool found = (i == n - 1) && std::strstr(l.label, tr("Hallazgos", "Finds")) == l.label;
+        renderer.draw_text(l.label, PX + 10.0f, y, found ? Color{150, 140, 125, 220} : Color{210, 200, 186, 240}, 0.58f);
+        char v[16];
+        snprintf(v, sizeof(v), "+%d", l.value);
+        renderer.draw_text(v, PX + PW - 10.0f - renderer.measure_text(v, 0.58f), y,
+                           found ? Color{150, 140, 125, 220} : Color{255, 214, 110, 250}, 0.58f);
+        y += LINE;
+    }
+    // Total que entra ahora (los hallazgos ya entraron al recogerse)
+    const f32 tt = std::max(0.0f, t - n * 0.22f);
+    const f32 k = std::min(1.0f, tt / 0.8f);
+    const int total_now = static_cast<int>(summary.total * k + 0.5f);
+    y = top + 14.0f + n * LINE + 1.0f;
+    renderer.draw_rect({PX + 8.0f, y - 1.5f, PW - 16.0f, 0.75f}, {255, 220, 150, 90});
+    char tot[48];
+    snprintf(tot, sizeof(tot), "+%d", total_now);
+    renderer.draw_text(tr("Total", "Total"), PX + 10.0f, y + 1.0f, {255, 236, 190, 255}, 0.75f);
+    renderer.draw_text(tot, PX + PW - 10.0f - renderer.measure_text(tot, 0.85f), y, {255, 214, 110, 255}, 0.85f);
+    // El banco y lo que ya se puede hacer con el
+    char bank[96];
+    const int bank_now = summary.bank - summary.total + total_now;
+    snprintf(bank, sizeof(bank), tr("Tienes %d ofrendas: no se pierden al morir", "You have %d offerings: they survive death"),
+             bank_now);
+    renderer.draw_text(bank, PX + 10.0f, y + 9.0f, {175, 165, 150, 230}, 0.52f);
+    if (k >= 1.0f) {
+        char next[128];
+        const MetaUpgrade* a = progression.cheapest_affordable();
+        const MetaUpgrade* p = progression.cheapest_pending();
+        if (a)      snprintf(next, sizeof(next), tr("Ya puedes ofrecer en El Santuario: %s", "Now you can offer in the Sanctuary: %s"), a->name);
+        else if (p) snprintf(next, sizeof(next), tr("Te faltan %d para: %s", "%d more for: %s"), p->next_cost() - progression.offerings, p->name);
+        else        snprintf(next, sizeof(next), "%s", tr("El Santuario está completo", "The Sanctuary is complete"));
+        const f32 pulse = a ? 0.5f + 0.5f * std::sin(world.time * 5.0f) : 0.0f;
+        renderer.draw_text(next, PX + 10.0f, y + 15.5f,
+                           a ? Color{255, static_cast<u8>(210 + 30 * pulse), 120, 255} : Color{200, 150, 130, 230}, 0.52f);
+    }
+}
+
+// =============================================================================
+// Equipo (pausa)
+// =============================================================================
+// Que llevas y que hace cada cosa. Antes la unica forma de saberlo era una fila de iconos
+// de 9 unidades sin nombre.
+void Engine::update_equipment() {
+    const int n = static_cast<int>(player.items.size());
+    if (input.is_action_just_pressed(Action::MoveUp))   equipment_scroll--;
+    if (input.is_action_just_pressed(Action::MoveDown)) equipment_scroll++;
+    equipment_scroll = std::max(0, std::min(equipment_scroll, std::max(0, n - 6)));
+    Vec2 tp;
+    const bool tapped = input.take_tap(tp);
+    if (input.is_action_just_pressed(Action::Cancel) || input.is_action_just_pressed(Action::Confirm) ||
+        input.is_action_just_pressed(Action::Pause) || (tapped && tp.y > 160.0f)) {
+        equipment_open = false;
+        menus.selected_option = 1;
+        audio.play_sfx(SfxID::MenuBack, 0.6f);
+    }
+}
+
+void Engine::render_equipment() {
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
+    renderer.draw_rect({0, 0, W, H}, {10, 8, 14, 242});
+    renderer.draw_text(tr("EQUIPO", "EQUIPMENT"), 10.0f, 5.0f, {240, 215, 150, 255}, 1.1f);
+    const char* who = player.character == CharacterType::Elias ? tr("Elías", "Elijah") : tr("Eliseo", "Elisha");
+    renderer.draw_text(who, 10.0f + renderer.measure_text(tr("EQUIPO", "EQUIPMENT"), 1.1f) + 6.0f, 9.0f, {180, 165, 140, 230}, 0.65f);
+
+    // --- Columna izquierda: cifras y dones -----------------------------------------
+    const f32 LX = 10.0f;
+    f32 y = 24.0f;
+    auto stat = [&](const char* label, const char* value, Color c) {
+        renderer.draw_text(label, LX, y, {165, 155, 140, 230}, 0.55f);
+        renderer.draw_text(value, LX + 52.0f, y, c, 0.55f);
+        y += 7.0f;
+    };
+    char v[64];
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Health)) {
+        const auto& h = world.healths[player.entity];
+        snprintf(v, sizeof(v), "%.0f / %.0f", h.current, h.max);
+        stat(tr("Vida", "Health"), v, {150, 230, 150, 250});
+    }
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat)) {
+        const auto& c = world.combats[player.entity];
+        snprintf(v, sizeof(v), "%.0f  (x%.2f fe)", c.damage, faith.get_damage_multiplier());
+        stat(tr("Daño", "Damage"), v, {255, 200, 140, 250});
+        snprintf(v, sizeof(v), tr("%.1f disparos/s", "%.1f shots/s"), 1.0f / std::max(0.05f, c.attack_speed));
+        stat(tr("Cadencia", "Fire rate"), v, {230, 220, 200, 240});
+    }
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement)) {
+        snprintf(v, sizeof(v), "%.0f", world.movements[player.entity].speed);
+        stat(tr("Velocidad", "Speed"), v, {230, 220, 200, 240});
+    }
+    snprintf(v, sizeof(v), "%.0f  (%s)", faith.current, faith.get_level_name());
+    stat(tr("Fe", "Faith"), v, {160, 210, 250, 250});
+    if (player.relic_slot != UINT32_MAX) {
+        const ItemDef* d = item_registry.get(player.relic_slot);
+        stat(tr("Reliquia", "Relic"), d ? d->name : "?", {245, 205, 90, 250});
+    }
+    if (player.weapon_slot != UINT32_MAX) {
+        const ItemDef* d = item_registry.get(player.weapon_slot);
+        stat(tr("Arma", "Weapon"), d ? d->name : "?", {230, 220, 200, 240});
+    }
+    y += 3.0f;
+    renderer.draw_text(tr("DONES DEL SANTUARIO", "SANCTUARY GIFTS"), LX, y, {240, 215, 150, 230}, 0.55f);
+    y += 8.0f;
+    bool any_gift = false;
+    auto gift = [&](const char* txt) { renderer.draw_text(txt, LX, y, {215, 205, 190, 235}, 0.52f); y += 6.5f; any_gift = true; };
+    if (progression.is_unlocked(Meta::ALIENTO)) {
+        snprintf(v, sizeof(v), tr("Aliento de Vida: %d", "Breath of Life: %d"), revives_left); gift(v);
+    }
+    if (progression.is_unlocked(Meta::SUERTES)) {
+        snprintf(v, sizeof(v), tr("Echar Suertes: %d", "Casting Lots: %d"), rerolls_left); gift(v);
+    }
+    if (progression.is_unlocked(Meta::ALTAR)) {
+        snprintf(v, sizeof(v), tr("Altar Portátil: %d", "Portable Altar: %d"), prayers_left); gift(v);
+    }
+    for (u32 id : {Meta::VIDA, Meta::DANO, Meta::VELOCIDAD, Meta::DIEZMO}) {
+        const MetaUpgrade* u = progression.get(id);
+        if (!u || u->rank <= 0) continue;
+        char t[64];
+        meta_rank_text(*u, u->rank, t, sizeof(t));
+        gift(t);
+    }
+    if (!any_gift) gift(tr("Ninguno: El Santuario espera", "None yet: the Sanctuary awaits"));
+
+    // --- Columna derecha: la alforja y los objetos -----------------------------------
+    const f32 RX = 128.0f, RW = W - RX - 8.0f;
+    f32 ry = 24.0f;
+    renderer.draw_text(tr("ALFORJA", "SATCHEL"), RX, ry, {240, 215, 150, 230}, 0.55f);
+    for (int i = 0; i < player.belt_cap && i < Player::BELT_MAX; i++) {
+        const Rect r = {RX + 38.0f + i * 15.0f, ry - 3.0f, 12.0f, 12.0f};
+        const auto& b = player.belt[i];
+        renderer.draw_rect({r.x - 1, r.y - 1, r.w + 2, r.h + 2}, (!b.empty() && i == player.belt_sel) ? Color{245, 205, 90, 240} : Color{90, 84, 90, 200});
+        renderer.draw_rect(r, {24, 19, 28, 230});
+        if (!b.empty()) {
+            draw_icon(renderer, Icon::item(b.id), r);
+            if (b.charges > 1) {
+                char c[6];
+                snprintf(c, sizeof(c), "%u", static_cast<unsigned>(b.charges));
+                renderer.draw_text(c, r.right() - 3.0f, r.bottom() - 5.0f, {255, 238, 190, 255}, 0.5f);
+            }
+        }
+    }
+    ry += 14.0f;
+    renderer.draw_text(tr("OBJETOS", "ITEMS"), RX, ry, {240, 215, 150, 230}, 0.55f);
+    ry += 8.0f;
+    const int n = static_cast<int>(player.items.size());
+    if (n == 0)
+        renderer.draw_text(tr("Aún nada: elites, cofres y jefes dan a elegir", "Nothing yet: elites, chests and bosses offer choices"),
+                           RX, ry, {150, 140, 125, 220}, 0.52f);
+    const int first = std::max(0, std::min(equipment_scroll, std::max(0, n - 6)));
+    for (int i = first; i < n && i < first + 6; i++) {
+        const ItemDef* d = item_registry.get(player.items[i]);
+        if (!d) continue;
+        const Rect ic = {RX, ry, 14.0f, 14.0f};
+        renderer.draw_rect({ic.x - 1, ic.y - 1, ic.w + 2, ic.h + 2}, item_rarity_color(d->rarity));
+        renderer.draw_rect(ic, {24, 19, 28, 230});
+        draw_icon(renderer, Icon::item(d->id), ic);
+        renderer.draw_text(d->name, RX + 18.0f, ry, item_rarity_color(d->rarity), 0.58f);
+        std::string dl[2];
+        const int dn = renderer.wrap_text(d->description, RW - 20.0f, 0.48f, dl, 2);
+        for (int k = 0; k < dn; k++)
+            renderer.draw_text(dl[k].c_str(), RX + 18.0f, ry + 6.5f + k * 5.5f, {200, 192, 180, 230}, 0.48f);
+        ry += 21.0f;
+    }
+    if (first > 0)         renderer.draw_text("^", W - 10.0f, 46.0f, {200, 180, 130, 220}, 0.6f);
+    if (first + 6 < n)     renderer.draw_text("v", W - 10.0f, H - 22.0f, {200, 180, 130, 220}, 0.6f);
+    renderer.draw_text_centered(input.touch_ui ? tr("Toca abajo para volver", "Tap below to go back")
+                                               : tr("[W/S] recorrer   [ESC] volver", "[W/S] scroll   [ESC] back"),
+                                H - 9.0f, {140, 130, 118, 210}, 0.55f);
+}
+
+void Engine::announce_item(const ItemDef& d, const char* hint) {
+    pickup_icon  = Icon::item(d.id);
+    pickup_name  = d.name;
+    pickup_desc  = d.description;
+    pickup_hint  = hint ? hint : "";
+    pickup_color = item_rarity_color(d.rarity);
+    pickup_t     = 4.0f;
+}
+
+void Engine::show_tip_once(u32 bit, const char* title, const char* body, f32 seconds) {
+    if (save.data.tips_seen & bit) return;
+    if (tutorial.active || autoplay.active) {
+        // Bajo autoplay no se tapa la pantalla de los guiones de siempre, pero SI se apunta
+        // el bit y se loguea: es el gate de santuario_check.
+        save.data.tips_seen |= bit;
+        SDL_Log("Tip shown: %s", title);
+        return;
+    }
+    save.data.tips_seen |= bit;
+    save.save(false);
+    show_banner(title, body, seconds);
+    SDL_Log("Tip shown: %s", title);
+}
+
+// Al morir o al ganar. Se paga lo hecho en ESTE INTENTO (desde el ultimo cobro): el
+// capitulo alcanzado, las bajas, los grupos vencidos y los jefes, con el Diezmo encima. Los
+// hallazgos del suelo ya entraron al recogerse y se listan aparte, sin volver a sumarse.
 void Engine::award_offerings(bool victory) {
-    int earned = state.current_chapter * 12 + run_kills + player.rooms_cleared * 4;
-    if (victory) earned *= 2;
+    summary = OfferingSummary{};
+    summary.victory = victory;
+    auto add_line = [this](const char* label, int value) {
+        if (summary.count >= 7) return;
+        OfferingLine& l = summary.lines[summary.count++];
+        snprintf(l.label, sizeof(l.label), "%s", label);
+        l.value = value;
+    };
+    char buf[48];
+    const int ch = state.current_chapter;
+    int earned = 0;
+    snprintf(buf, sizeof(buf), tr("Capítulo %d alcanzado", "Reached chapter %d"), ch);
+    add_line(buf, ch * 12);                         earned += ch * 12;
+    if (tally.kills > 0) {
+        if (tally.kills == 1) snprintf(buf, sizeof(buf), "%s", tr("1 enemigo abatido", "1 enemy struck down"));
+        else snprintf(buf, sizeof(buf), tr("%d enemigos abatidos", "%d enemies struck down"), tally.kills);
+        add_line(buf, tally.kills);                 earned += tally.kills;
+    }
+    if (tally.cells > 0) {
+        if (tally.cells == 1) snprintf(buf, sizeof(buf), "%s", tr("1 grupo vencido", "1 group defeated"));
+        else snprintf(buf, sizeof(buf), tr("%d grupos vencidos", "%d groups defeated"), tally.cells);
+        add_line(buf, tally.cells * 4);             earned += tally.cells * 4;
+    }
+    if (tally.bosses > 0) {
+        if (tally.bosses == 1) snprintf(buf, sizeof(buf), "%s", tr("1 jefe derrotado", "1 boss defeated"));
+        else snprintf(buf, sizeof(buf), tr("%d jefes derrotados", "%d bosses defeated"), tally.bosses);
+        add_line(buf, tally.bosses * 25);           earned += tally.bosses * 25;
+    }
+    if (victory) {
+        add_line(tr("Victoria (x2)", "Victory (x2)"), earned);
+        earned *= 2;
+    }
+    const int r_tithe = progression.rank_of(Meta::DIEZMO);
+    if (r_tithe > 0) {
+        const int extra = static_cast<int>(earned * (meta_offering_mult(r_tithe) - 1.0f) + 0.5f);
+        snprintf(buf, sizeof(buf), tr("Diezmo +%.0f%%", "Tithe +%.0f%%"), (meta_offering_mult(r_tithe) - 1.0f) * 100.0f);
+        add_line(buf, extra);
+        earned += extra;
+    }
+    if (tally.found > 0) {
+        snprintf(buf, sizeof(buf), "%s", tr("Hallazgos (ya guardados)", "Finds (already banked)"));
+        add_line(buf, tally.found);
+    }
+    summary.total = earned;
     progression.add_offerings(earned);
     sync_progression_to_save();
     save.data.total_runs++;
-    char buf[64];
-    snprintf(buf, sizeof(buf), tr("+%d ofrendas", "+%d offerings"), earned);
-    show_message(buf, 4.0f);
-    SDL_Log("Run over: +%d offerings (total %d)", earned, progression.offerings);
+    summary.bank = progression.offerings;
+    SDL_Log("Run over: +%d offerings (total %d) [cap %d, %d bajas, %d grupos, %d jefes, %d hallazgos, diezmo %d]",
+            earned, progression.offerings, ch, tally.kills, tally.cells, tally.bosses, tally.found, r_tithe);
+    tally = RunTally{};   // lo cobrado no se vuelve a cobrar en la siguiente derrota
+    // La pantalla de fin ya explica que son (render_run_summary): el aviso queda visto.
+    save.data.tips_seen |= TIP_OFFERINGS;
 }
 
-// Filas visibles a la vez: `Engine::sanctuary_rows()`. En escritorio 7 x 14,5 = 101,5
-// unidades desde y=48 acaban en 149,5, y eso deja "Volver" en 156 y la ayuda de teclas en
-// 170 sin que se toquen (con 8 filas "Volver" caia justo encima de la ayuda). En tactil
-// son 5 x 20 = 100, que da lo mismo de alto con filas que se pueden tocar.
+// =============================================================================
+// El Santuario (rediseno 2026-10-03)
+// =============================================================================
+// Pestanas por categoria (El Profeta / Dones / Eliseo / Tesoro / Aspecto), una lista con
+// rangos a la izquierda y, a la derecha, el DETALLE de la elegida: que da ahora, que dara
+// el siguiente rango y cuanto cuesta. La queja era doble —"no se entiende" y "lo que compras
+// no afecta"— y la respuesta tambien: cada fila dice su efecto con la cifra exacta, y las
+// mejoras nuevas cambian la partida (levantarse, re-sortear, empezar con un objeto...).
+//
+// Se abre desde el titulo y desde la pantalla de DERROTA (sanctuary_return): lo que acabas
+// de ganar se gasta en el acto y el reintento ya sale con ello puesto.
+
+// Las mejoras de una pestana, en el orden del catalogo (progression.cpp).
+static int sanctuary_tab_items(const ProgressionSystem& p, int tab, int* out, int cap) {
+    int n = 0;
+    for (int i = 0; i < static_cast<int>(p.upgrades.size()) && n < cap; i++)
+        if (static_cast<int>(p.upgrades[i].category) == tab) out[n++] = i;
+    return n;
+}
+
+static const char* sanctuary_tab_name(int tab) {
+    switch (static_cast<MetaCategory>(tab)) {
+        case MetaCategory::Prophet:  return tr("El Profeta", "The Prophet");
+        case MetaCategory::Gifts:    return tr("Dones", "Gifts");
+        case MetaCategory::Elisha:   return tr("Eliseo", "Elisha");
+        case MetaCategory::Treasure: return tr("Tesoro", "Treasure");
+        default:                     return tr("Aspecto", "Looks");
+    }
+}
+
+void Engine::open_sanctuary(GameScene back_to) {
+    sanctuary_return = back_to;
+    sanctuary_tab = 0;
+    sanctuary_sel = 0;
+    sanctuary_scroll = 0;
+    sanctuary_flash = 0.0f;
+    change_scene(GameScene::Sanctuary);
+    save.data.tips_seen |= TIP_SANCTUARY;
+}
 
 void Engine::update_sanctuary() {
-    const int n = static_cast<int>(progression.upgrades.size());
-    if (n <= 0) { change_scene(GameScene::MainMenu); return; }
+    const int TABS = static_cast<int>(MetaCategory::COUNT);
+    int idx[24];
+    int n = sanctuary_tab_items(progression, sanctuary_tab, idx, 24);
     const int rows = sanctuary_rows();
-    // En tactil arrastrar mueve la VENTANA, no el cursor: alli no hay cursor pintado, y
-    // moverlo a ciegas dejaria la compra apuntando a una mejora que no se ve.
-    if (input.touch_ui) {
-        if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_scroll--;
-        if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_scroll++;
-    } else {
-        if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_sel = (sanctuary_sel - 1 + n + 1) % (n + 1);
-        if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_sel = (sanctuary_sel + 1) % (n + 1);
-        // La ventana sigue a la seleccion, igual que en el Codice. "Volver" (indice n) no
-        // scrollea: se pinta siempre debajo de la lista.
-        if (sanctuary_sel < sanctuary_scroll) sanctuary_scroll = sanctuary_sel;
-        if (sanctuary_sel < n && sanctuary_sel >= sanctuary_scroll + rows)
-            sanctuary_scroll = sanctuary_sel - rows + 1;
-    }
-    sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
+    if (sanctuary_flash > 0.0f) sanctuary_flash = std::max(0.0f, sanctuary_flash - delta_time * 1.6f);
+    if (offering_pop > 0.0f)    offering_pop    = std::max(0.0f, offering_pop - delta_time * 1.2f);
 
-    // Toque: la fila que se toca se elige Y se compra. Los rects los apunta
-    // render_sanctuary al pintar, no se recalculan aqui.
+    auto set_tab = [&](int t) {
+        sanctuary_tab = (t % TABS + TABS) % TABS;
+        sanctuary_sel = 0;
+        sanctuary_scroll = 0;
+        n = sanctuary_tab_items(progression, sanctuary_tab, idx, 24);
+        audio.play_sfx(SfxID::MenuSelect, 0.6f);
+    };
+    auto go_back = [&]() {
+        save.save(false);
+        change_scene(sanctuary_return);
+    };
+
+    bool buy = false;
+    if (input.is_action_just_pressed(Action::MoveLeft))  set_tab(sanctuary_tab - 1);
+    if (input.is_action_just_pressed(Action::MoveRight)) set_tab(sanctuary_tab + 1);
+    if (input.is_action_just_pressed(Action::Miracle1))  set_tab(sanctuary_tab - 1);   // Q / E tambien
+    if (input.is_action_just_pressed(Action::Miracle2))  set_tab(sanctuary_tab + 1);
+    if (n > 0) {
+        if (input.touch_ui) {
+            // En tactil arrastrar mueve la VENTANA, no la seleccion
+            if (input.is_action_just_pressed(Action::MoveUp))   sanctuary_scroll--;
+            if (input.is_action_just_pressed(Action::MoveDown)) sanctuary_scroll++;
+        } else {
+            if (input.is_action_just_pressed(Action::MoveUp))   { sanctuary_sel = (sanctuary_sel - 1 + n) % n; audio.play_sfx(SfxID::MenuSelect, 0.45f); }
+            if (input.is_action_just_pressed(Action::MoveDown)) { sanctuary_sel = (sanctuary_sel + 1) % n;     audio.play_sfx(SfxID::MenuSelect, 0.45f); }
+            if (sanctuary_sel < sanctuary_scroll) sanctuary_scroll = sanctuary_sel;
+            if (sanctuary_sel >= sanctuary_scroll + rows) sanctuary_scroll = sanctuary_sel - rows + 1;
+        }
+        sanctuary_sel    = std::max(0, std::min(sanctuary_sel, n - 1));
+        sanctuary_scroll = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
+    }
+
+    // Toque: pestana = cambiar; fila = elegirla; OFRECER = comprar; volver = salir. Los rects
+    // los apunta render_sanctuary al pintar: una sola formula para el dibujo y el dedo.
     Vec2 tp;
     if (input.take_tap(tp)) {
-        bool hit = false;
-        int  row = -1;
-        for (int k = 0; k < sanctuary_row_count; k++) {
-            if (!sanctuary_row_rects[k].contains(tp)) continue;
-            const int i = sanctuary_row_first + k;
-            if (i >= n) break;
-            sanctuary_sel = i;
-            row = i;
-            hit = true;
-            break;
+        int hit = -1;
+        for (int t = 0; t < TABS; t++)
+            if (sanctuary_tab_rects[t].w > 0.0f && sanctuary_tab_rects[t].contains(tp)) { set_tab(t); hit = 100 + t; break; }
+        if (hit < 0) {
+            for (int k = 0; k < sanctuary_row_count; k++) {
+                if (!sanctuary_row_rects[k].contains(tp)) continue;
+                const int i = sanctuary_row_first + k;
+                if (i >= n) break;
+                if (sanctuary_sel != i) audio.play_sfx(SfxID::MenuSelect, 0.45f);
+                sanctuary_sel = i;
+                hit = i;
+                break;
+            }
         }
-        if (!hit && sanctuary_back_rect.w > 0.0f && sanctuary_back_rect.contains(tp)) {
-            sanctuary_sel = n;   // "Volver"
-            row = n;
-            hit = true;
-        }
-        SDL_Log("Santuario tap: fila=%d (%.0f,%.0f)", row, tp.x, tp.y);
-        if (hit) input.pulse(Action::Confirm);
+        if (hit < 0 && sanctuary_buy_rect.w > 0.0f && sanctuary_buy_rect.contains(tp)) { buy = true; hit = 50; }
+        if (hit < 0 && sanctuary_back_rect.w > 0.0f && sanctuary_back_rect.contains(tp)) { go_back(); SDL_Log("Santuario tap: volver"); return; }
+        SDL_Log("Santuario tap: %d (%.0f,%.0f)", hit, tp.x, tp.y);
     }
 
-    if (input.is_action_just_pressed(Action::Cancel)) { change_scene(GameScene::MainMenu); return; }
-    if (!input.is_action_just_pressed(Action::Confirm)) return;
+    if (input.is_action_just_pressed(Action::Cancel)) { go_back(); return; }
+    if (input.is_action_just_pressed(Action::Confirm)) buy = true;
+    if (!buy || n <= 0) return;
 
-    if (sanctuary_sel >= n) { change_scene(GameScene::MainMenu); return; }   // "Volver"
-    const MetaUpgrade& u = progression.upgrades[sanctuary_sel];
-    if (u.unlocked) { show_message(tr("Ya es tuyo", "Already yours"), 1.2f); return; }
-    if (progression.offerings < u.cost) {
-        show_message(tr("No tienes ofrendas suficientes", "Not enough offerings"), 1.6f);
+    MetaUpgrade& u = progression.upgrades[idx[sanctuary_sel]];
+    if (u.maxed()) {
+        show_message(tr("Ya está al máximo", "Already at its peak"), 1.2f);
         audio.play_sfx(SfxID::MenuSelect, 0.5f);
         return;
     }
+    if (progression.offerings < u.next_cost()) {
+        char msg[80];
+        snprintf(msg, sizeof(msg), tr("Te faltan %d ofrendas", "You need %d more offerings"),
+                 u.next_cost() - progression.offerings);
+        show_message(msg, 1.6f);
+        audio.play_sfx(SfxID::MenuSelect, 0.5f);
+        return;
+    }
+    const int paid = u.next_cost();
     const u32 unlocks = u.unlocks_item;
     progression.purchase(u.id);
     sync_progression_to_save();   // llama a apply_meta_unlocks
-    save.save();
+    save.save(false);
     audio.play_sfx(SfxID::LevelUp, 0.9f);
+    sanctuary_flash = 1.0f;
+    sanctuary_flash_id = u.id;
+    offering_pop = 1.0f;
+    offering_pop_amount = -paid;
+    char rank_txt[64];
+    meta_rank_text(u, u.rank, rank_txt, sizeof(rank_txt));
+    SDL_Log("Santuario: %s rango %d/%d (-%d, quedan %d) -> %s", u.name, u.rank, u.max_rank, paid,
+            progression.offerings, rank_txt);
+    char msg[128];
     if (unlocks != MetaUpgrade::NO_ITEM) {
         const ItemDef* d = item_registry.get(unlocks);
-        char msg[96];
-        snprintf(msg, sizeof(msg), tr("%s ya puede salir en las cartas",
-                                      "%s can now appear in the cards"),
-                 d ? d->name : "?");
-        show_message(msg, 2.5f);
+        snprintf(msg, sizeof(msg), "%s", d ? d->name : "?");
         SDL_Log("Meta unlock: item %u (%s)", unlocks, d ? d->name : "?");
+        snprintf(msg, sizeof(msg), tr("%s ya está en juego", "%s is now in play"), d ? d->name : "?");
+    } else {
+        snprintf(msg, sizeof(msg), "%s: %s", u.name, rank_txt);
     }
+    show_message(msg, 2.5f);
 }
 
 // El Santuario: las ocho mejoras de progression.cpp con su coste y estado.
@@ -2909,89 +3567,254 @@ void Engine::render_tutorial_card() {
     }
 }
 
+// Icono de una mejora: su celda de icons.png; las skins, tenidas de su color.
+static void draw_upgrade_icon(Renderer& r, const MetaUpgrade& u, Rect dst, bool dim) {
+    Color tint = dim ? Color{150, 145, 140, 220} : Color::white();
+    if (u.unlocks_skin != MetaUpgrade::NO_ITEM) {
+        StaffSkin sk = get_staff_skin(u.unlocks_skin);
+        tint = {sk.shot.r, sk.shot.g, sk.shot.b, static_cast<u8>(dim ? 200 : 255)};
+    }
+    if (!draw_icon(r, u.icon, dst, tint))
+        r.draw_disc({dst.x + dst.w * 0.5f, dst.y + dst.h * 0.5f}, dst.w * 0.35f, {245, 205, 90, 220});
+}
+
+// La moneda: un disco dorado con brillo. Es el mismo color que la ofrenda del suelo.
+static void draw_offering_coin(Renderer& r, f32 cx, f32 cy, f32 rad) {
+    r.draw_disc({cx, cy + rad * 0.18f}, rad, {120, 80, 20, 200});
+    r.draw_disc({cx, cy}, rad, {255, 206, 90, 255});
+    r.draw_disc({cx - rad * 0.3f, cy - rad * 0.3f}, rad * 0.35f, {255, 245, 200, 230});
+}
+
 void Engine::render_sanctuary() {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
-    renderer.clear({14, 11, 18, 255});
-    if (renderer.vignette_tex != TEXTURE_NONE)
-        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 150});
-
-    renderer.draw_text_centered(tr("EL SANTUARIO", "THE SANCTUARY"), 10, {240, 215, 150, 255}, 1.4f);
-    renderer.draw_text_centered(tr("«Traed todos los diezmos al alfolí»", "«Bring all the tithes into the storehouse»"),
-                                26, {150, 132, 100, 220}, 0.65f);
-
-    char buf[64];
-    snprintf(buf, sizeof(buf), tr("%d ofrendas", "%d offerings"), progression.offerings);
-    renderer.draw_text_centered(buf, 38, {245, 205, 90, 255}, 0.9f);
-
-    const int n = static_cast<int>(progression.upgrades.size());
-    // Con 8 mejoras el paso de 16 unidades se salia por abajo: 14,5 deja sitio para
-    // "Volver" y para la ayuda de teclas en las 180 unidades de alto. Con 12 ya no caben
-    // ni asi, de modo que se pinta una VENTANA de sanctuary_rows() filas. En tactil la
-    // fila sube a 20 (7,4 mm de dedo, y no baja de ahi porque lleva nombre y descripcion)
-    // y por eso solo caben cinco.
     const bool touch = input.touch_ui;
-    const int  rows  = sanctuary_rows();
-    const f32  PITCH = touch ? 20.0f : 14.5f;
-    const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
-    const int last  = std::min(n, first + rows);
-    f32 y = 48.0f;
-    // Las flechas de scroll van en el MARGEN IZQUIERDO, no centradas: centradas, la de
-    // arriba caia justo sobre la linea de "N ofrendas".
-    if (first > 0) renderer.draw_text("^", 5.0f, y + 1.0f, {180, 160, 120, 210}, 0.7f);
+    renderer.clear({16, 12, 20, 255});
+    if (renderer.vignette_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {-8, -8, W + 16, H + 16}, {0, 0, 0, 160});
 
-    // Las zonas se apuntan aqui y las lee update_sanctuary: una sola formula para el
-    // dibujo y el dedo.
-    Vec2 pp;
-    const bool pressing = touch && input.ui_press(pp);
-    sanctuary_row_first = first;
-    sanctuary_row_count = last - first;
-    for (int i = first; i < last; i++) {
-        const MetaUpgrade& u = progression.upgrades[i];
-        const Rect row_rect = {12.0f, y - 1.5f, W - 24.0f, PITCH};
-        sanctuary_row_rects[i - first] = row_rect;
-        // El cursor no existe en movil: alli se toca la mejora que se quiere comprar. Lo
-        // que SI se marca siempre es el estado (comprada, y si llegan las ofrendas).
-        bool on  = !touch && (i == sanctuary_sel);
-        bool lit = on || (pressing && row_rect.contains(pp));
-        bool afford = progression.offerings >= u.cost;
-        if (lit) renderer.draw_rect(row_rect, {58, 46, 30, 225});
-
-        Color name_c = u.unlocked ? Color{130, 205, 130, 245}
-                                  : (lit ? Color{250, 228, 170, 255} : Color{200, 190, 176, 235});
-        renderer.draw_text(on ? ">" : " ", 14.0f, y, name_c, 0.8f);
-        renderer.draw_text(u.name, 22.0f, y, name_c, 0.8f);
-        renderer.draw_text(u.description, 22.0f, y + 7.0f, {150, 142, 132, 225}, 0.6f);
-
-        const char* right = u.unlocked ? tr("COMPRADO", "BOUGHT") : nullptr;
-        char cost[24];
-        if (!right) { snprintf(cost, sizeof(cost), "%d", u.cost); right = cost; }
-        Color cc = u.unlocked ? Color{120, 195, 120, 235}
-                              : (afford ? Color{245, 205, 90, 245} : Color{150, 90, 80, 220});
-        f32 rw = renderer.measure_text(right, 0.75f);
-        renderer.draw_text(right, W - 14.0f - rw, y + 2.0f, cc, 0.75f);
-        y += PITCH;
+    // --- Cabecera: titulo, que es esto, y el banco ---------------------------------------
+    renderer.draw_text(tr("EL SANTUARIO", "THE SANCTUARY"), 10.0f, 4.0f, {240, 215, 150, 255}, 1.15f);
+    renderer.draw_text(tr("Lo que ofreces aquí es para siempre: se nota en cada partida.",
+                          "What you offer here is forever: you feel it in every run."),
+                       10.0f, 18.0f, {170, 152, 120, 225}, 0.55f);
+    {
+        char bank[24];
+        snprintf(bank, sizeof(bank), "%d", progression.offerings);
+        const f32 sc = 1.0f;
+        const f32 bw = renderer.measure_text(bank, sc);
+        const f32 bx = W - 10.0f - bw;
+        draw_offering_coin(renderer, bx - 7.0f, 9.5f, 4.2f);
+        renderer.draw_text(bank, bx, 4.0f, {255, 214, 110, 255}, sc);
+        // Lo que acaba de entrar o salir, flotando bajo el banco
+        if (offering_pop > 0.0f && offering_pop_amount != 0) {
+            char d[16];
+            snprintf(d, sizeof(d), "%+d", offering_pop_amount);
+            const u8 a = static_cast<u8>(255.0f * std::min(1.0f, offering_pop * 1.5f));
+            renderer.draw_text(d, W - 10.0f - renderer.measure_text(d, 0.7f), 15.0f + (1.0f - offering_pop) * 6.0f,
+                               offering_pop_amount > 0 ? Color{150, 240, 150, a} : Color{255, 150, 120, a}, 0.7f);
+        }
+        char prog[40];
+        snprintf(prog, sizeof(prog), tr("Bendiciones %d/%d", "Blessings %d/%d"),
+                 progression.ranks_bought(), progression.ranks_total());
+        renderer.draw_text(prog, W - 10.0f - renderer.measure_text(prog, 0.5f), 24.0f, {150, 140, 125, 210}, 0.5f);
     }
 
-    if (last < n) renderer.draw_text("v", 5.0f, y - 9.0f, {180, 160, 120, 210}, 0.7f);
-    bool back_on = !touch && (sanctuary_sel >= n);
-    // En tactil "Volver" es una placa que se toca, no una linea de texto con ">".
-    sanctuary_back_rect = touch ? Rect{110.0f, 152.0f, 100.0f, 16.0f}
-                                : Rect{100.0f, 150.0f, 120.0f, 14.0f};
-    if (touch)
-        renderer.draw_rect(sanctuary_back_rect,
-                           (pressing && sanctuary_back_rect.contains(pp)) ? Color{96, 74, 40, 240}
-                                                                          : Color{58, 46, 30, 225});
-    renderer.draw_text_centered(back_on ? tr("> Volver", "> Back") : tr("  Volver", "  Back"),
-                                touch ? 156.0f : 156.0f,
-                                back_on ? Color::elias_gold() : Color{200, 186, 160, 240}, 0.85f);
-    renderer.draw_text_centered(input.touch_ui
-                                    ? tr("Toca una mejora para comprarla   ·   arrastra para recorrer",
-                                         "Tap an upgrade to buy it   ·   drag to scroll")
-                                    : tr("[W/S] mover   [ENTER] comprar   [ESC] volver",
-                                         "[W/S] move   [ENTER] buy   [ESC] back"), 170.0f,
-                                {130, 122, 112, 200}, 0.65f);
-    (void)H;
+    // --- Pestanas --------------------------------------------------------------------
+    const int TABS = static_cast<int>(MetaCategory::COUNT);
+    {
+        f32 widths[8];
+        f32 total = 0.0f;
+        for (int t = 0; t < TABS; t++) {
+            // Anchos y x ENTEROS: con fracciones el panel de 9 trozos dejaba una costura
+            // oscura vertical en el borde derecho de algunas pestanas.
+            widths[t] = std::ceil(renderer.measure_text(sanctuary_tab_name(t), 0.62f) + 12.0f);
+            total += widths[t] + 3.0f;
+        }
+        f32 x = std::floor((W - total + 3.0f) * 0.5f);
+        Vec2 pp;
+        const bool pressing = touch && input.ui_press(pp);
+        for (int t = 0; t < TABS; t++) {
+            const bool on = (t == sanctuary_tab);
+            const Rect r = {x, 32.0f, widths[t], 11.0f};
+            sanctuary_tab_rects[t] = {r.x, r.y - 3.0f, r.w, r.h + 6.0f};
+            // ¿Hay algo comprable en esta pestana? Un punto dorado lo dice desde fuera.
+            int idx[24];
+            const int n = sanctuary_tab_items(progression, t, idx, 24);
+            bool can = false;
+            for (int k = 0; k < n; k++) {
+                const MetaUpgrade& u = progression.upgrades[idx[k]];
+                if (!u.maxed() && u.next_cost() <= progression.offerings) { can = true; break; }
+            }
+            Color fill = on ? Color{150, 112, 44, 245} : Color{48, 40, 44, 230};
+            if (!on && pressing && sanctuary_tab_rects[t].contains(pp)) fill = {80, 64, 48, 240};
+            renderer.draw_panel(r, fill, 3.5f);
+            renderer.draw_text(sanctuary_tab_name(t), r.x + 6.0f, r.y + 1.5f,
+                               on ? Color{255, 244, 214, 255} : Color{200, 186, 165, 235}, 0.62f);
+            if (can) renderer.draw_disc({r.x + r.w - 2.5f, r.y + 1.5f}, 2.2f, {255, 206, 90, 255});
+            x += widths[t] + 3.0f;
+        }
+        for (int t = TABS; t < 8; t++) sanctuary_tab_rects[t] = {0, 0, 0, 0};
+    }
+
+    // --- Lista ------------------------------------------------------------------------
+    int idx[24];
+    const int n = sanctuary_tab_items(progression, sanctuary_tab, idx, 24);
+    const int rows  = sanctuary_rows();
+    const f32 PITCH = touch ? 20.0f : 16.0f;
+    const f32 LX = 8.0f, LW = 168.0f, LY = 48.0f;
+    const int first = std::max(0, std::min(sanctuary_scroll, std::max(0, n - rows)));
+    const int last  = std::min(n, first + rows);
+    sanctuary_row_first = first;
+    sanctuary_row_count = last - first;
+    Vec2 pp;
+    const bool pressing = touch && input.ui_press(pp);
+    renderer.draw_panel({LX - 2.0f, LY - 3.0f, LW + 4.0f, PITCH * rows + 5.0f}, {24, 19, 26, 200}, 4.0f);
+    if (first > 0) renderer.draw_text("^", LX + LW - 6.0f, LY - 3.0f, {200, 180, 130, 220}, 0.6f);
+    if (last < n)  renderer.draw_text("v", LX + LW - 6.0f, LY + PITCH * rows - 6.0f, {200, 180, 130, 220}, 0.6f);
+    for (int i = first; i < last; i++) {
+        const MetaUpgrade& u = progression.upgrades[idx[i]];
+        const f32 y = LY + (i - first) * PITCH;
+        const Rect row = {LX, y, LW, PITCH - 1.0f};
+        sanctuary_row_rects[i - first] = row;
+        const bool sel = (i == sanctuary_sel);
+        const bool afford = !u.maxed() && progression.offerings >= u.next_cost();
+        if (sel) renderer.draw_panel(row, {92, 70, 38, 235}, 3.0f);
+        else if (pressing && row.contains(pp)) renderer.draw_panel(row, {60, 48, 36, 220}, 3.0f);
+        if (sanctuary_flash > 0.0f && u.id == sanctuary_flash_id)
+            renderer.draw_panel(row, {255, 230, 150, static_cast<u8>(150.0f * sanctuary_flash)}, 3.0f);
+
+        const f32 is = PITCH - 4.0f;
+        draw_upgrade_icon(renderer, u, {LX + 2.0f, y + 1.0f, is, is}, u.rank == 0 && !afford);
+        Color name_c = u.maxed() ? Color{150, 220, 150, 250}
+                     : sel       ? Color{255, 240, 205, 255}
+                                 : Color{214, 202, 184, 240};
+        renderer.draw_text(u.name, LX + is + 6.0f, y + 1.0f, name_c, 0.66f);
+        // Rango: pepitas llenas = compradas
+        if (u.max_rank > 1) {
+            for (int k = 0; k < u.max_rank; k++) {
+                const Rect pip = {LX + is + 6.5f + k * 5.0f, y + PITCH - 6.5f, 3.5f, 3.0f};
+                renderer.draw_rect(pip, k < u.rank ? Color{255, 206, 90, 255} : Color{70, 62, 66, 230});
+            }
+        } else if (u.rank > 0) {
+            renderer.draw_text(tr("tuyo", "yours"), LX + is + 6.5f, y + PITCH - 8.5f, {150, 210, 150, 220}, 0.48f);
+        }
+        // Coste del siguiente rango, o MAX
+        char right[24];
+        Color rc;
+        if (u.maxed()) { snprintf(right, sizeof(right), "%s", tr("MAX", "MAX")); rc = {150, 220, 150, 240}; }
+        else           { snprintf(right, sizeof(right), "%d", u.next_cost()); rc = afford ? Color{255, 214, 110, 250} : Color{170, 100, 90, 230}; }
+        const f32 rw = renderer.measure_text(right, 0.62f);
+        renderer.draw_text(right, LX + LW - 4.0f - rw, y + (PITCH - 8.0f) * 0.5f, rc, 0.62f);
+        if (!u.maxed()) draw_offering_coin(renderer, LX + LW - 8.0f - rw, y + PITCH * 0.5f - 0.5f, 2.4f);
+    }
+
+    // --- Detalle ----------------------------------------------------------------------
+    sanctuary_buy_rect = {0, 0, 0, 0};
+    f32 detail_free_y = 0.0f;
+    const f32 DX = 182.0f, DW = W - DX - 8.0f, DY = 45.0f, DH = PITCH * rows + 5.0f + (LY - 3.0f - DY);
+    renderer.draw_panel({DX, DY, DW, DH}, {30, 24, 32, 225}, 4.0f);
+    if (n > 0) {
+        const MetaUpgrade& u = progression.upgrades[idx[std::max(0, std::min(sanctuary_sel, n - 1))]];
+        const f32 cx = DX + DW * 0.5f;
+        const f32 big = 30.0f;
+        if (renderer.shadow_tex != TEXTURE_NONE)
+            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {cx - 17.0f, DY + 27.0f, 34.0f, 8.0f}, {0, 0, 0, 150});
+        if (sanctuary_flash > 0.0f && u.id == sanctuary_flash_id)
+            renderer.draw_ring({cx, DY + 18.0f}, 12.0f + 16.0f * (1.0f - sanctuary_flash),
+                               {255, 225, 140, static_cast<u8>(230.0f * sanctuary_flash)});
+        draw_upgrade_icon(renderer, u, {cx - big * 0.5f, DY + 3.0f, big, big}, false);
+        f32 y = DY + 35.0f;
+        std::string lines[4];
+        int ln = renderer.wrap_text(u.name, DW - 8.0f, 0.75f, lines, 2);
+        for (int k = 0; k < ln; k++) {
+            renderer.draw_text(lines[k].c_str(), cx - renderer.measure_text(lines[k].c_str(), 0.75f) * 0.5f, y, {255, 236, 190, 255}, 0.75f);
+            y += 8.0f;
+        }
+        ln = renderer.wrap_text(u.description, DW - 8.0f, 0.55f, lines, 3);
+        for (int k = 0; k < ln; k++) {
+            renderer.draw_text(lines[k].c_str(), cx - renderer.measure_text(lines[k].c_str(), 0.55f) * 0.5f, y + 1.0f, {205, 195, 180, 240}, 0.55f);
+            y += 6.5f;
+        }
+        y += 3.0f;
+        // Un desbloqueo de objeto dice QUE objeto y QUE hace, con su color de rareza
+        if (u.unlocks_item != MetaUpgrade::NO_ITEM) {
+            if (const ItemDef* it = item_registry.get(u.unlocks_item)) {
+                renderer.draw_text(it->name, DX + 5.0f, y, item_rarity_color(it->rarity), 0.55f);
+                y += 6.5f;
+                std::string il[2];
+                const int in = renderer.wrap_text(it->description, DW - 10.0f, 0.5f, il, 2);
+                for (int k = 0; k < in; k++) { renderer.draw_text(il[k].c_str(), DX + 5.0f, y, {195, 186, 172, 230}, 0.5f); y += 6.0f; }
+                y += 2.0f;
+            }
+        }
+        char now_t[64], next_t[64];
+        meta_rank_text(u, u.rank, now_t, sizeof(now_t));
+        renderer.draw_text(tr("Ahora:", "Now:"), DX + 5.0f, y, {150, 140, 128, 230}, 0.52f);
+        renderer.draw_text(now_t, DX + 5.0f + renderer.measure_text(tr("Ahora:", "Now:"), 0.52f) + 3.0f, y,
+                           u.rank > 0 ? Color{170, 230, 170, 245} : Color{180, 170, 160, 220}, 0.52f);
+        y += 7.0f;
+        if (!u.maxed()) {
+            meta_rank_text(u, u.rank + 1, next_t, sizeof(next_t));
+            const char* lab = (u.max_rank > 1) ? tr("Siguiente:", "Next:") : tr("Al ofrecer:", "Once offered:");
+            renderer.draw_text(lab, DX + 5.0f, y, {150, 140, 128, 230}, 0.52f);
+            renderer.draw_text(next_t, DX + 5.0f + renderer.measure_text(lab, 0.52f) + 3.0f, y, {255, 222, 140, 250}, 0.52f);
+        }
+        detail_free_y = y + 9.0f;   // aqui cabe el aviso de la compra (ver abajo)
+        // La cita, abajo y apagada: sabor, no instruccion
+        ln = renderer.wrap_text(u.quote, DW - 10.0f, 0.48f, lines, 2);
+        const f32 qy = DY + DH - 26.0f - ln * 5.5f;
+        for (int k = 0; k < ln; k++)
+            renderer.draw_text(lines[k].c_str(), cx - renderer.measure_text(lines[k].c_str(), 0.48f) * 0.5f, qy + k * 5.5f,
+                               {150, 132, 104, 200}, 0.48f);
+        // El boton de OFRECER (o lo que falta)
+        const Rect btn = {DX + 6.0f, DY + DH - 17.0f, DW - 12.0f, 13.0f};
+        char label[48];
+        Color fill, txt;
+        if (u.maxed()) {
+            snprintf(label, sizeof(label), "%s", tr("COMPLETO", "COMPLETE"));
+            fill = {44, 70, 48, 235}; txt = {170, 235, 170, 255};
+        } else if (progression.offerings >= u.next_cost()) {
+            snprintf(label, sizeof(label), tr("OFRECER  %d", "OFFER  %d"), u.next_cost());
+            const f32 pulse = 0.5f + 0.5f * std::sin(world.time * 5.0f);
+            fill = {static_cast<u8>(170 + 30 * pulse), static_cast<u8>(124 + 20 * pulse), 44, 245};
+            if (pressing && btn.contains(pp)) fill = {220, 170, 70, 255};
+            txt = {255, 248, 228, 255};
+        } else {
+            snprintf(label, sizeof(label), tr("Te faltan %d", "You need %d more"), u.next_cost() - progression.offerings);
+            fill = {58, 38, 38, 230}; txt = {220, 150, 130, 240};
+        }
+        renderer.draw_panel(btn, fill, 3.5f);
+        renderer.draw_text(label, btn.x + (btn.w - renderer.measure_text(label, 0.66f)) * 0.5f, btn.y + 2.5f, txt, 0.66f);
+        sanctuary_buy_rect = btn;
+    }
+
+    // --- Pie: volver y teclas -----------------------------------------------------------
+    sanctuary_back_rect = touch ? Rect{8.0f, H - 15.0f, 52.0f, 13.0f} : Rect{0, 0, 0, 0};
+    if (touch) {
+        renderer.draw_panel(sanctuary_back_rect,
+                            (pressing && sanctuary_back_rect.contains(pp)) ? Color{96, 74, 40, 240} : Color{58, 46, 30, 225}, 3.5f);
+        renderer.draw_text(tr("< Volver", "< Back"), sanctuary_back_rect.x + 6.0f, sanctuary_back_rect.y + 2.5f,
+                           {240, 226, 196, 250}, 0.66f);
+        renderer.draw_text(tr("Toca una mejora y luego OFRECER", "Tap an upgrade, then OFFER"),
+                           70.0f, H - 12.0f, {140, 130, 118, 210}, 0.55f);
+    } else {
+        renderer.draw_text_centered(tr("[A/D] pestaña   [W/S] elegir   [ENTER] ofrecer   [ESC] volver",
+                                       "[A/D] tab   [W/S] choose   [ENTER] offer   [ESC] back"),
+                                    H - 11.0f, {140, 130, 118, 210}, 0.55f);
+    }
+    // El aviso de la compra ("Fuego Interior: +4 de dano por disparo"), DENTRO del panel de
+    // detalle, justo bajo las cifras: habla de la mejora que se ve ahi.
+    if (message_timer > 0.0f && !message_text.empty() && detail_free_y > 0.0f) {
+        const f32 a = std::min(1.0f, message_timer / 0.4f);
+        std::string ml[2];
+        const int mn = renderer.wrap_text(message_text.c_str(), DW - 16.0f, 0.58f, ml, 2);
+        const Rect m = {DX + 6.0f, detail_free_y, DW - 12.0f, 6.0f + mn * 6.8f};
+        renderer.draw_panel(m, {46, 64, 44, static_cast<u8>(235 * a)}, 3.5f);
+        for (int k = 0; k < mn; k++)
+            renderer.draw_text(ml[k].c_str(), m.x + (m.w - renderer.measure_text(ml[k].c_str(), 0.58f)) * 0.5f,
+                               m.y + 2.5f + k * 6.8f, {210, 250, 200, static_cast<u8>(255 * a)}, 0.58f);
+    }
 }
 
 // =============================================================================
@@ -3063,8 +3886,17 @@ void Engine::populate_save_data() {
         if (save.data.item_count >= static_cast<int>(sizeof(save.data.item_ids) / sizeof(u32))) break;
         save.data.item_ids[save.data.item_count++] = id;
     }
-    save.data.consumable_id = player.consumable_slot;
-    save.data.consumable_uses = player.consumable_charges;
+    // v12: la alforja (y el campo viejo con el elegido, por si alguien lee v11)
+    for (int i = 0; i < SAVE_BELT_SLOTS && i < Player::BELT_MAX; i++) {
+        save.data.belt_ids[i]     = player.belt[i].empty() ? UINT32_MAX : player.belt[i].id;
+        save.data.belt_charges[i] = player.belt[i].empty() ? 0 : player.belt[i].charges;
+    }
+    save.data.belt_selected   = player.belt_sel;
+    save.data.consumable_id   = player.belt[player.belt_sel].empty() ? UINT32_MAX : player.belt[player.belt_sel].id;
+    save.data.consumable_uses = player.belt[player.belt_sel].empty() ? 0 : player.belt[player.belt_sel].charges;
+    save.data.revives_left    = revives_left;
+    save.data.rerolls_left    = rerolls_left;
+    save.data.prayers_left    = prayers_left;
     save.data.active_slots  = player.active_slot_count;
     for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++)
         save.data.miracle_ids[s] = static_cast<u32>(player.miracle_slots[s].miracle);
@@ -3381,7 +4213,11 @@ void Engine::save_after_defeat() {
     // Fe de arranque + lo que aporten los objetos conservados: continue_run() reaplica los
     // items pero luego fija la fe a este valor, asi que el bonus tiene que venir ya sumado
     // (si no, "Continuar" y "Reintentar" salian del mismo sitio con distinta fe)
-    save.data.faith        = Config::FAITH_INITIAL;
+    save.data.faith        = meta_start_faith(progression.rank_of(Meta::FE));   // Fe Renovada incluida
+    // El capitulo y el intento empiezan de nuevo: los dones vuelven enteros al Continuar
+    save.data.revives_left = -1;
+    save.data.rerolls_left = -1;
+    save.data.prayers_left = -1;
     for (int i = 0; i < save.data.item_count; i++) {
         const ItemDef* d = item_registry.get(save.data.item_ids[i]);
         if (d) save.data.faith += d->faith_bonus;
@@ -3396,6 +4232,7 @@ void Engine::refresh_continue_state() {
     menus.continue_expired    = menus.has_continue && mobile_rules && save.is_run_expired();
     menus.abandoned_offerings = menus.continue_expired ? save.get_abandoned_offerings() : 0;
     menus.offerings           = progression.offerings;
+    menus.sanctuary_ready     = progression.cheapest_affordable() != nullptr;
     if (menus.continue_expired)
         SDL_Log("Abandoned run (chapter %d): %d offerings on the table",
                 save.data.current_chapter, menus.abandoned_offerings);
@@ -3446,6 +4283,11 @@ void Engine::continue_run() {
     } else {
         player.init_as_eliseo(world, character_textures[static_cast<u32>(CharacterType::Eliseo)]);
     }
+    // Lo comprado en El Santuario: hasta el 2026-10-03 el Continuar NO lo aplicaba y la vida,
+    // el dano y la velocidad comprados desaparecian al volver a la partida.
+    apply_meta_upgrades();
+    tally = RunTally{};
+    primicias_pending = false;
 
     // Same chapter layout as when the run was saved (the seed is stored), then jump straight
     // to the saved room. Con el estado de sala persistido (v9), las salas despejadas siguen
@@ -3458,18 +4300,29 @@ void Engine::continue_run() {
     // Loadout: re-applying the items restores max HP / damage / speed / cadence
     for (int i = 0; i < save.data.item_count; i++) {
         const ItemDef* d = item_registry.get(save.data.item_ids[i]);
-        if (d) player.grant_item(world, faith, *d);
+        // Un guardado viejo traia el consumible tambien en la lista: ahora vive en la alforja
+        if (d && d->category != ItemCategory::Consumable) player.grant_item(world, faith, *d);
     }
     // Recalcular la reliquia SIEMPRE al rehacer el equipo: sus efectos no viven en el
     // Player sino en FaithSystem::floor_value y Player::miracle_power, y en la Ascension
     // la fe NO se reinicia — sin esto, un Elias con las Tablas dejaba a Eliseo con el
     // suelo de fe en 25 para siempre, sin llevar la reliquia.
     player.apply_relic_effects(faith);
-    player.consumable_slot = save.data.consumable_id;
-    // grant_item ya dejo 1 carga al reponer el consumible: la guardada manda
-    player.consumable_charges = (player.consumable_slot == UINT32_MAX)
-                              ? 0
-                              : static_cast<u8>(std::max(1u, std::min(9u, save.data.consumable_uses)));
+    // La alforja tal cual se guardo (pisa el agua que start_chapter acaba de poner)
+    for (int i = 0; i < Player::BELT_MAX && i < SAVE_BELT_SLOTS; i++) {
+        player.belt[i] = Player::BeltSlot{};
+        if (save.data.belt_ids[i] != UINT32_MAX && save.data.belt_charges[i] > 0) {
+            player.belt[i].id = save.data.belt_ids[i];
+            player.belt[i].charges = std::min<u8>(9, save.data.belt_charges[i]);
+        }
+    }
+    player.belt_sel = save.data.belt_selected;
+    player.belt_fix_selection();
+    // Los dones gastados: lo que quedaba al guardar (-1 = el intento empieza de nuevo)
+    if (save.data.revives_left >= 0) revives_left = save.data.revives_left;
+    else                             refill_attempt_gifts();
+    if (save.data.rerolls_left >= 0) rerolls_left = save.data.rerolls_left;
+    if (save.data.prayers_left >= 0) prayers_left = save.data.prayers_left;
     player.active_slot_count = std::max(1, std::min(Config::MAX_MIRACLE_SLOTS, save.data.active_slots));
     for (int s = 0; s < Config::MAX_MIRACLE_SLOTS; s++) {
         if (save.data.miracle_ids[s] < static_cast<u32>(MiracleID::COUNT))
@@ -3562,7 +4415,7 @@ void Engine::place_player(Vec2 spawn_pos) {
     // "La Escuela de Profetas" (mejora meta 7): Eliseo entra acompanado. El discipulo se
     // vuelve a presentar en cada carga (el mundo se vacia), que es lo que el jugador
     // percibe como "permanente".
-    if (progression.is_unlocked(7) && player.character == CharacterType::Eliseo) {
+    if (progression.is_unlocked(Meta::ESCUELA) && player.character == CharacterType::Eliseo) {
         spawn_disciple(world, spawn_pos + Vec2{18.0f, 6.0f},
                        enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)],
                        0.0f, 40.0f, 10.0f);
@@ -4218,6 +5071,17 @@ void Engine::update_room_state() {
             cs.cleared = true;
             cs.active = false;
             player.rooms_cleared++;
+            tally.cells++;
+            // Pan de Cada Dia: vencer a un grupo da de comer
+            if (player.clear_heal > 0.0f && player.entity != ENTITY_NONE &&
+                world.has(player.entity, Component::Health)) {
+                auto& ph = world.healths[player.entity];
+                const f32 before = ph.current;
+                ph.heal(player.clear_heal);
+                if (ph.current - before >= 1.0f && world.popups.size() < 24)
+                    world.popups.push_back({world.transforms[player.entity].position, ph.current - before,
+                                            0.0f, false, ECSWorld::DamagePopup::Heal});
+            }
 
             if (node.type == RoomType::Boss) {
                 room.arena_sealed = false;
@@ -4244,6 +5108,8 @@ void Engine::update_room_state() {
                 spawn_pickup(world, c + Vec2{-12, 0}, ItemComponent::Pickup::Heart, 15.0f);
                 spawn_pickup(world, c + Vec2{12, 0}, ItemComponent::Pickup::FaithOrb, 8.0f);
                 spawn_pickup(world, c + Vec2{0, 12}, ItemComponent::Pickup::Heart, 15.0f);
+                // ...y un consumible para la alforja: la elite es donde se va a buscarlos
+                spawn_consumable_at(c + Vec2{0, -12}, randf());
             }
             SDL_Log("Cell %d cleared (%s)", i, room_type_name(node.type));
 
@@ -4311,6 +5177,8 @@ void Engine::update_room_state() {
                 room.tiles[ty][tx] = TileType::Path;
                 if (world.has(player.entity, Component::Health)) world.healths[player.entity].heal(15.0f);
                 faith.modify(5.0f);
+                // El cofre trae tambien algo para la alforja, junto al cofre
+                if (!tutorial.active) spawn_consumable_at(room.tile_to_world(tx, ty) + Vec2{0, 14}, randf());
                 // En el tutorial la carta se explica MIENTRAS esta abierta: el cartel de
                 // despues llegaba con la carta ya cerrada y nada que hacer.
                 open_item_choice(tutorial.active ? tutorial_choice_title()
@@ -4590,12 +5458,10 @@ void Engine::apply_event_choice(int event_id, int option) {
             break;
         case EventSpecial::LoseConsumable:
             // Sale tambien de la fila de objetos, como cuando se gasta la ultima carga
-            if (player.consumable_slot != UINT32_MAX) {
-                auto it = std::find(player.items.begin(), player.items.end(), player.consumable_slot);
-                if (it != player.items.end()) player.items.erase(it);
-            }
-            player.consumable_slot = UINT32_MAX;
-            player.consumable_charges = 0;
+            // Con la alforja: se pierde el consumible ELEGIDO, entero
+            player.belt_fix_selection();
+            player.belt[player.belt_sel] = Player::BeltSlot{};
+            player.belt_fix_selection();
             break;
         case EventSpecial::Revive:
             has_revive = true;
@@ -4725,10 +5591,39 @@ void Engine::update_item_choice(f32 dt) {
         audio.play_sfx(SfxID::MenuSelect, 0.6f);
     }
 
+    // Echar Suertes: tres cartas nuevas (sin repetir las que habia, si hay de donde sacar)
+    bool reroll = !choice.miracles && rerolls_left > 0 && input.is_action_just_pressed(Action::Consumable);
+    Vec2 tp;
+    const bool tapped = input.take_tap(tp);
+    if (tapped && !choice.miracles && rerolls_left > 0 && choice_reroll_rect.w > 0.0f &&
+        choice_reroll_rect.contains(tp)) reroll = true;
+    if (reroll) {
+        std::vector<u32> owned = player.items;
+        for (int i = 0; i < choice.count; i++) owned.push_back(choice.ids[i]);
+        std::vector<u32> ids = item_registry.roll_choices(owned, 3, save.data.items_unlocked);
+        if (ids.empty()) ids = item_registry.roll_choices(player.items, 3, save.data.items_unlocked);
+        if (!ids.empty()) {
+            rerolls_left--;
+            choice.count = static_cast<int>(ids.size());
+            for (int i = 0; i < choice.count; i++) choice.ids[i] = ids[i];
+            choice.selected = 0;
+            std::string offered;
+            for (u32 id : ids) {
+                const ItemDef* d = item_registry.get(id);
+                offered += offered.empty() ? "" : " / ";
+                offered += d ? d->name : "?";
+            }
+            SDL_Log("Echar suertes (quedan %d): %s", rerolls_left, offered.c_str());
+            audio.play_sfx(SfxID::Notification, 0.9f);
+            renderer.shake_camera(Config::Feel::SHAKE_HIT);
+            if (autoplay.active) choice.auto_timer = 0.7f;
+        }
+        return;
+    }
+
     // Toque: dos toques. El primero elige la carta, el segundo la toma. Una carta es una
     // decision de partida entera; tomarla con un dedo resbalado no puede pasar.
-    Vec2 tp;
-    if (input.take_tap(tp)) {
+    if (tapped) {
         for (int i = 0; i < choice.count; i++) {
             if (!choice_card_rect(i, choice.count).contains(tp)) continue;
             if (i == choice.selected) take = true;
@@ -4761,8 +5656,9 @@ void Engine::update_item_choice(f32 dt) {
                 SDL_Log("Item taken: %s (%s)", def->name, def->description);
                 // Las armas traen tecla: sin decirlo, el jugador recoge la Honda y no la usa jamas
                 if (def->category == ItemCategory::Weapon)
-                    snprintf(buf, sizeof(buf), tr("%s: pulsa [I] para usarla",
-                                                  "%s: press [I] to use it"), def->name);
+                    snprintf(buf, sizeof(buf), "%s", input.touch_ui
+                             ? tr("Arma nueva: botón ARMA para usarla", "New weapon: WEAPON button to use it")
+                             : tr("Arma nueva: [I] o clic derecho para usarla", "New weapon: [I] or right click to use it"));
                 else if (def->category == ItemCategory::Relic &&
                          player.relic_replaced != UINT32_MAX &&
                          player.relic_replaced != def->id) {
@@ -4772,8 +5668,10 @@ void Engine::update_item_choice(f32 dt) {
                     snprintf(buf, sizeof(buf), tr("%s sustituye a %s", "%s replaces %s"),
                              def->name, old ? old->name : "?");
                 } else
-                    snprintf(buf, sizeof(buf), "%s: %s", def->name, def->description);
-                show_message(buf, 3.5f);
+                    buf[0] = '\0';
+                // La ficha de "objeto obtenido": icono, nombre, que hace y como se usa. El
+                // aviso de abajo queda para lo que hay que DECIR (tecla, reliquia que sale).
+                announce_item(*def, buf[0] ? buf : nullptr);
                 audio.play_sfx(SfxID::MenuConfirm, 0.9f);
             }
         }
@@ -4951,12 +5849,15 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "agesave") { ss >> c.num; }            // envejecer el guardado N horas
         else if (c.op == "unlocks") { ss >> c.num; }            // fijar SaveData::unlocks
         else if (c.op == "savedump") { }                       // volcar el guardado al log
+        else if (c.op == "savenow")  { }                       // guardar la partida AHORA (como al limpiar una celda)
         else if (c.op == "lang")    { ss >> c.num; }            // 0 = ES, 1 = EN
         else if (c.op == "langmenu") { }                       // abrir el selector de idioma
         else if (c.op == "defaults") { }                       // ajustes de fabrica
         else if (c.op == "aimmode") { ss >> c.num; }           // 0 OFF / 1 Asistido / 2 ON
         else if (c.op == "rstick")  { ss >> c.num; }           // 0/1: segundo joystick tactil
-        else if (c.op == "meta")    { ss >> c.num; }            // desbloquear una mejora de El Santuario
+        else if (c.op == "meta")    { ss >> c.num >> c.num2; }  // comprar una mejora de El Santuario [rango]
+        else if (c.op == "offerings") { ss >> c.num; }          // fijar el banco de ofrendas
+        else if (c.op == "dropcons")  { ss >> c.num; }          // soltar un consumible delante
         else if (c.op == "metareset") { }                      // volver a bloquear TODA la meta
         else if (c.op == "pit")     { }                        // colocarse al borde de un hueco
         else if (c.op == "door")    { }                        // plantarse sobre la puerta de la sala
@@ -4997,6 +5898,13 @@ static Action action_from_name(const std::string& n) {
     if (n == "pause")   return Action::Pause;
     if (n == "map")     return Action::Map;
     if (n == "use")     return Action::Consumable;
+    if (n == "pray")    return Action::Pray;
+    if (n == "belt1")   return Action::Belt1;
+    if (n == "belt2")   return Action::Belt2;
+    if (n == "belt3")   return Action::Belt3;
+    if (n == "belt4")   return Action::Belt4;
+    if (n == "beltnext") return Action::BeltNext;
+    if (n == "beltprev") return Action::BeltPrev;
     return Action::COUNT;
 }
 
@@ -5007,7 +5915,9 @@ void Engine::update_autoplay(f32 dt) {
                                     Action::Attack, Action::Dash, Action::Miracle1, Action::Miracle2,
                                     Action::Miracle3,
                                     Action::Confirm, Action::Cancel, Action::Pause, Action::Map, Action::Consumable,
-                                    Action::AttackSecondary};
+                                    Action::AttackSecondary, Action::Pray,
+                                    Action::Belt1, Action::Belt2, Action::Belt3, Action::Belt4,
+                                    Action::BeltNext, Action::BeltPrev};
     for (Action a : driven) input.actions[static_cast<u32>(a)] = false;
 
     if (ap.timer > 0.0f) {
@@ -5236,9 +6146,11 @@ void Engine::update_autoplay(f32 dt) {
             // entre partidas (esa es justamente su gracia) y en la segunda vuelta ya
             // estaba todo desbloqueado. Misma razon que `defaults` para los ajustes.
             if (c.op == "metareset") {
-                for (auto& u : progression.upgrades) u.unlocked = false;
+                for (auto& u : progression.upgrades) { u.unlocked = false; u.rank = 0; u.cost = u.next_cost(); }
                 save.data.items_unlocked = 0;
                 save.data.upgrades_bought = 0;
+                for (int i = 0; i < SAVE_MAX_UPGRADES; i++) save.data.upgrade_ranks[i] = 0;
+                save.data.tips_seen = 0;
                 save.data.skins_unlocked = 1;   // la 0 es la de siempre y no se compra
                 save.data.skin_equipped  = 0;
                 // Los LOGROS tambien son meta y tambien hay que poder rebobinarlos: sin
@@ -5253,11 +6165,46 @@ void Engine::update_autoplay(f32 dt) {
                 continue;
             }
             // Depuracion: comprar una mejora de El Santuario sin pasar por las ofrendas
+            // `meta <id> [rango]`: sin rango, el maximo de esa mejora.
             if (c.op == "meta") {
                 u32 id = static_cast<u32>(std::max(0.0f, c.num));
-                for (auto& u : progression.upgrades) if (u.id == id) u.unlocked = true;
+                for (auto& u : progression.upgrades) {
+                    if (u.id != id) continue;
+                    const int r = c.num2 > 0.5f ? static_cast<int>(c.num2) : u.max_rank;
+                    u.rank = std::max(0, std::min(r, u.max_rank));
+                    u.unlocked = u.rank > 0;
+                    u.cost = u.next_cost();
+                }
                 sync_progression_to_save();
-                SDL_Log("meta upgrade %u unlocked", id);
+                save.save(false);
+                // En plena partida, los dones que se gastan se rellenan YA (en el juego real
+                // se rellenan al empezar intento / capitulo): un guion que compra a mitad de
+                // partida tiene que poder probarlos sin reiniciar.
+                if (state.scene == GameScene::Playing || state.scene == GameScene::Paused) {
+                    const int r = progression.rank_of(id);
+                    if (id == Meta::ALTAR)   prayers_left = std::max(prayers_left, meta_altar_prayers(r));
+                    if (id == Meta::SUERTES) rerolls_left = std::max(rerolls_left, meta_rerolls(r));
+                    if (id == Meta::ALIENTO) revives_left = std::max(revives_left, meta_revives(r));
+                    if (id == Meta::ALFORJA) player.belt_cap = std::min(Player::BELT_MAX, meta_belt_slots(r));
+                }
+                SDL_Log("meta upgrade %u unlocked (rango %d)", id, progression.rank_of(id));
+                continue;
+            }
+            // `offerings <n>`: fija el banco de ofrendas (para probar compras sin jugar)
+            if (c.op == "offerings") {
+                progression.offerings = static_cast<int>(std::max(0.0f, c.num));
+                sync_progression_to_save();
+                save.save(false);
+                SDL_Log("offerings = %d", progression.offerings);
+                continue;
+            }
+            // `dropcons <id>`: suelta un consumible delante del profeta (la alforja)
+            if (c.op == "dropcons") {
+                if (player.entity != ENTITY_NONE) {
+                    const Vec2 at = world.transforms[player.entity].position + Vec2{0, 22};
+                    spawn_pickup(world, at, ItemComponent::Pickup::Consumable, c.num);
+                    SDL_Log("dropcons %d at (%.0f,%.0f)", static_cast<int>(c.num), at.x, at.y);
+                }
                 continue;
             }
             // Depuracion: encender o apagar el segundo joystick virtual sin pasar por
@@ -5328,6 +6275,16 @@ void Engine::update_autoplay(f32 dt) {
             // desde un guion que una migracion de version NO ha perdido nada: la meta
             // (ofrendas, mejoras, codice, logros, desbloqueos, ajustes) no se ve entera
             // en ninguna pantalla del juego.
+            // Guardar la partida en este instante, por el mismo camino que el autoguardado de
+            // una celda limpia: lo que no se puede comprobar sin esperar a limpiar una celda.
+            if (c.op == "savenow") {
+                if (state.scene == GameScene::Playing || state.scene == GameScene::Paused) {
+                    populate_save_data();
+                    save.save();
+                    SDL_Log("savenow: partida guardada");
+                }
+                continue;
+            }
             if (c.op == "savedump") {
                 const SaveData& d = save.data;
                 SDL_Log("SAVEDUMP v%u run=%d act=%d cap=%d sala=%d hp=%.0f fe=%.0f objetos=%d",
@@ -5340,6 +6297,15 @@ void Engine::update_autoplay(f32 dt) {
                         d.codex_enemies, d.codex_items, d.codex_miracles, d.codex_chapters,
                         static_cast<unsigned long long>(d.codex_events),
                         d.unlocks, d.achievements, d.miracles_cast, d.total_kills);
+                {
+                    char ranks[96]; int off = 0;
+                    for (int i = 0; i < static_cast<int>(Meta::COUNT) && off < static_cast<int>(sizeof(ranks)) - 4; i++)
+                        off += snprintf(ranks + off, sizeof(ranks) - off, "%d", d.upgrade_ranks[i]);
+                    SDL_Log("SAVEDUMP rangos=%s avisos=0x%X alforja=%u:%u/%u:%u/%u:%u/%u:%u dones=%d/%d/%d",
+                            ranks, d.tips_seen, d.belt_ids[0], d.belt_charges[0], d.belt_ids[1], d.belt_charges[1],
+                            d.belt_ids[2], d.belt_charges[2], d.belt_ids[3], d.belt_charges[3],
+                            d.revives_left, d.rerolls_left, d.prayers_left);
+                }
                 SDL_Log("SAVEDUMP ajustes musica=%.2f efectos=%.2f mira=%d sens=%d idioma=%d "
                         "banderas=0x%X items_desbloq=0x%X skins=0x%X/%u derechos=0x%X",
                         d.music_volume, d.sfx_volume, d.aim_assist, d.sensitivity, d.language,
@@ -5692,6 +6658,24 @@ void Engine::update_autoplay(f32 dt) {
                         player.active_slot_count, loadout.c_str(), player.miracle_haste,
                         relic ? relic->name : "-", faith.floor_value, player.miracle_power,
                         faith.current, owned.empty() ? "-" : owned.c_str());
+                // Tercera linea (2026-10-03): la alforja, los dones del Santuario que quedan y
+                // las cifras que lo comprado cambia. Es el gate de santuario_check / alforja_check.
+                std::string belt;
+                for (int i = 0; i < player.belt_cap && i < Player::BELT_MAX; i++) {
+                    const auto& b = player.belt[i];
+                    const ItemDef* d = b.empty() ? nullptr : item_registry.get(b.id);
+                    char cell[64];
+                    snprintf(cell, sizeof(cell), "%s%s%s x%u", i ? " / " : "", (i == player.belt_sel && d) ? "*" : "",
+                             d ? d->name : "-", static_cast<unsigned>(b.empty() ? 0 : b.charges));
+                    belt += cell;
+                }
+                f32 dmg = 0.0f, spd = 0.0f;
+                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Combat))   dmg = world.combats[player.entity].damage;
+                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Movement)) spd = world.movements[player.entity].speed;
+                SDL_Log("GIFTS %s | alforja %d [%s] | aliento %d | suertes %d | oraciones %d | dano %.0f | vel %.0f | "
+                        "escudo %d | ofrendas %d",
+                        c.arg.empty() ? "-" : c.arg.c_str(), player.belt_cap, belt.c_str(), revives_left,
+                        rerolls_left, prayers_left, dmg, spd, player.shield_up ? 1 : 0, progression.offerings);
                 continue;
             }
             if (c.op == "quit") { state.is_running = false; break; }

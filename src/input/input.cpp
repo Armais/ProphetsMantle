@@ -139,9 +139,16 @@ void Input::update_touch(f32 dt) {
     if (!touch_ui) return;
     touch_info_slot = -1;
     for (auto& b : touch_buttons) {
-        if (!b.down) { b.hold = 0.0f; continue; }
+        if (!b.down) { b.hold = 0.0f; b.hold_fired = false; continue; }
         b.hold += dt;
         if (b.slot >= 0 && b.hold >= TOUCH_HOLD_INFO) touch_info_slot = b.slot;
+        // USAR mantenido: cambia al siguiente consumible de la alforja (y al soltar no se
+        // bebe nada). Mantenerlo mas sigue pasando hueco a hueco cada 0,4 s.
+        if (b.action == Action::Consumable && b.hold >= TOUCH_HOLD_INFO) {
+            b.hold_fired = true;
+            b.hold -= TOUCH_HOLD_INFO;
+            pulse(Action::BeltNext);
+        }
     }
 }
 
@@ -194,6 +201,12 @@ void Input::process_event(const SDL_Event& event) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
             process_mouse(event);
+            break;
+
+        // La rueda cambia el consumible elegido de la alforja (una muesca, un hueco)
+        case SDL_EVENT_MOUSE_WHEEL:
+            if (event.wheel.y > 0.0f)      pulse(Action::BeltPrev);
+            else if (event.wheel.y < 0.0f) pulse(Action::BeltNext);
             break;
 
         case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -262,6 +275,13 @@ void Input::process_keyboard(const SDL_Event& event) {
         // Tercer slot (mejora "Doble Porcion" de El Santuario): Q/E/F seguidas
         case SDL_SCANCODE_F:      actions[static_cast<u32>(Action::Miracle3)]  = pressed; break;
         case SDL_SCANCODE_R:      actions[static_cast<u32>(Action::Consumable)]= pressed; break;
+        // La alforja: los numeros usan ese hueco, como el cinturon de pociones de un ARPG.
+        // Teclado de arriba y teclado numerico valen igual.
+        case SDL_SCANCODE_1: case SDL_SCANCODE_KP_1: actions[static_cast<u32>(Action::Belt1)] = pressed; break;
+        case SDL_SCANCODE_2: case SDL_SCANCODE_KP_2: actions[static_cast<u32>(Action::Belt2)] = pressed; break;
+        case SDL_SCANCODE_3: case SDL_SCANCODE_KP_3: actions[static_cast<u32>(Action::Belt3)] = pressed; break;
+        case SDL_SCANCODE_4: case SDL_SCANCODE_KP_4: actions[static_cast<u32>(Action::Belt4)] = pressed; break;
+        case SDL_SCANCODE_C:      actions[static_cast<u32>(Action::BeltNext)]  = pressed; break;
         case SDL_SCANCODE_TAB:    actions[static_cast<u32>(Action::Map)]       = pressed; break;
         // AC_BACK: el boton "atras" de Android llega como tecla (SDLActivity lo consume).
         // Hace lo mismo que ESC: pausa en juego, cancela en los menus.
@@ -337,6 +357,13 @@ void Input::process_gamepad(const SDL_Event& event) {
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_DOWN:      // D-Pad abajo - Milagro 3
                 actions[static_cast<u32>(Action::Miracle3)] = pressed;
+                break;
+            // Cruceta izq/der: cambiar el consumible elegido de la alforja (X lo usa)
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                actions[static_cast<u32>(Action::BeltPrev)] = pressed;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                actions[static_cast<u32>(Action::BeltNext)] = pressed;
                 break;
             default: break;
         }
@@ -462,6 +489,9 @@ void Input::process_touch(const SDL_Event& event) {
                 // Pausa y Orar son pulsaciones de UN frame: mantener el dedo encima no
                 // puede pausar dos veces ni encadenar oraciones.
                 if (b.action == Action::Pause || b.action == Action::Pray) pulse(b.action);
+                // USAR va al SOLTAR, como un milagro: hay que saber si fue un toque (beber)
+                // o un mantener (cambiar de consumible).
+                else if (b.action == Action::Consumable) { b.hold_fired = false; }
                 else actions[static_cast<u32>(b.action)] = true;
             }
             return;
@@ -579,6 +609,9 @@ void Input::process_touch(const SDL_Event& event) {
                 if (b.slot >= 0 && b.hold < TOUCH_HOLD_INFO) {
                     // Tap corto sobre un milagro: se lanza ahora, un solo frame
                     pulse(b.action);
+                } else if (b.action == Action::Consumable) {
+                    if (!b.hold_fired) pulse(Action::Consumable);   // toque corto: beber
+                    b.hold_fired = false;
                 } else if (b.slot < 0) {
                     actions[static_cast<u32>(b.action)] = false;
                 }

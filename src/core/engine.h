@@ -195,7 +195,54 @@ struct Engine {
     // depende de en que orden se rehaga el equipo (concesion, reintento, carga, Ascension)
     // ni pisa el perdon del encuentro sunamita: se pueden tener los dos.
     bool relic_revive_ready = false;
-    bool portable_altar_used = false;   // Mejora "Altar Portatil": una oracion por capitulo
+
+    // --- Dones de El Santuario en curso (2026-10-03) ----------------------------------
+    // Lo que el jugador COMPRO tiene que verse funcionar: cada don lleva su contador, el HUD
+    // lo pinta y el log dice cuando salta. Van al guardado (v12) para que salir al menu y
+    // Continuar no los rellene.
+    int  revives_left = 0;          // Aliento de Vida: levantarse, por INTENTO
+    int  rerolls_left = 0;          // Echar Suertes: re-sorteos, por CAPITULO
+    int  prayers_left = 0;          // Altar Portatil: oraciones sin altar, por CAPITULO
+    bool primicias_pending = false; // la carta de Primicias espera a que se juegue
+    // Lo ganado en el INTENTO (desde el ultimo cobro): lo que paga award_offerings. Antes la
+    // paga se calculaba con `run_kills`, que NO se reiniciaba al reintentar: cada derrota
+    // volvia a cobrar las bajas de todas las anteriores.
+    struct RunTally { int kills = 0, cells = 0, bosses = 0, found = 0; };
+    RunTally tally;
+    // El desglose de la ultima paga, para la pantalla de derrota / victoria. Lo escribe
+    // award_offerings y lo pinta render_run_summary, con la cuenta subiendo.
+    struct OfferingLine { char label[48]; int value; };
+    struct OfferingSummary {
+        OfferingLine lines[7];
+        int  count = 0;
+        int  total = 0;          // lo que entra ahora (sin lo ya ingresado de los hallazgos)
+        int  bank  = 0;          // ofrendas que quedan en el banco tras cobrar
+        bool victory = false;
+        f32  t = 0.0f;           // segundos desde que se abrio: la cuenta sube
+    };
+    OfferingSummary summary;
+    // El contador de ofrendas del HUD: salta y dice "+N" al ingresar
+    f32  offering_pop = 0.0f;
+    int  offering_pop_amount = 0;
+    f32  belt_full_cd = 0.0f;       // aviso "alforja llena" (uno cada 3 s como mucho)
+    // La ficha de "objeto obtenido" del HUD (HUD::draw_pickup_card)
+    int         pickup_icon = -1;
+    std::string pickup_name, pickup_desc, pickup_hint;
+    Color       pickup_color = {245, 205, 90, 255};
+    f32         pickup_t = 0.0f;
+    void announce_item(const struct ItemDef& d, const char* hint);
+    // A donde vuelve El Santuario: al titulo o a la pantalla de derrota (desde ahi se va a
+    // gastar lo que se acaba de ganar y se reintenta ya con la mejora puesta).
+    GameScene sanctuary_return = GameScene::MainMenu;
+    int  sanctuary_tab = 0;         // MetaCategory
+    f32  sanctuary_flash = 0.0f;    // destello de compra
+    u32  sanctuary_flash_id = 0xFFFFFFFFu;
+    Rect sanctuary_tab_rects[8] = {};
+    Rect sanctuary_buy_rect = {0, 0, 0, 0};
+    Rect choice_reroll_rect = {0, 0, 0, 0};   // placa de Echar Suertes en la carta
+    // Fila de la pausa que abre el Equipo (pantalla propia sobre la pausa)
+    bool equipment_open = false;
+    int  equipment_scroll = 0;
 
     // Room / Map
     FloorMap  floor_map;
@@ -546,6 +593,23 @@ struct Engine {
     void award_offerings(bool victory);  // Ofrendas ganadas al terminar la partida
     void update_sanctuary();
     void render_sanctuary();
+    void open_sanctuary(GameScene back_to);
+    // Los consumibles caidos (secretos, elites, cofres, jefes): elige cual y lo planta
+    void spawn_consumable_at(Vec2 pos, f32 roll);
+    // La alforja: meter lo recogido, usar, cambiar de hueco. Una vez por frame en Playing.
+    void update_belt();
+    void use_belt_slot(int slot);
+    // Dones de El Santuario que se rellenan: por intento (revives) y por capitulo
+    void refill_attempt_gifts();
+    void refill_chapter_gifts();
+    // La primera vez que pasa algo, un cartel que lo explica (SaveData::tips_seen)
+    void show_tip_once(u32 bit, const char* title, const char* body, f32 seconds = 5.0f);
+    void bank_offerings(int amount, bool from_pickup);   // ingresa, guarda y anima el HUD
+    // Pantalla de derrota / victoria: el desglose de ofrendas y lo que ya se puede comprar
+    void render_run_summary(f32 top);
+    // Equipo (pausa): todos los objetos, la alforja, las bendiciones y las cifras
+    void update_equipment();
+    void render_equipment();
 
     // Save / Settings
     void populate_save_data();

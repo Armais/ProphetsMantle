@@ -232,7 +232,7 @@ comando `lang`) y `apply_settings_from_save` (la fila de Opciones):
 - `ItemRegistry` — nombre y efecto de los 22 objetos (HUD, cartas de elección, Códice).
   `init()` pasó a ser **idempotente** (`items.clear()` al entrar): sin eso, la segunda
   llamada duplicaba el catálogo.
-- `ProgressionSystem::upgrades` — las 15 mejoras de El Santuario. `init()` deja `unlocked` a
+- `ProgressionSystem::upgrades` — las 21 mejoras de El Santuario (y sus rangos). `init()` deja `unlocked` a
   cero, así que detrás va **`sync_progression_from_save()`** o se perderían las compradas.
 - `Engine::boss_bar_name` — el rótulo de la barra del jefe que se esté peleando.
 

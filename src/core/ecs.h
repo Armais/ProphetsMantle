@@ -175,6 +175,8 @@ struct EnemyAIComponent {
     u8  chapter          = 1;      // Capitulo en que nacio (escala a los hijos que se dividen)
     u8  split_generation = 0;      // Agua Corrupta: 0 = original; los hijos no vuelven a dividirse
     f32 death_fuse       = 0.0f;   // Idolatra: brasas prendiendo sobre el cadaver (telegrafia)
+    f32 burn_timer       = 0.0f;   // Antorcha del Altar: segundos que le quedan ardiendo
+    f32 burn_tick        = 0.0f;   // cadencia de la quemadura
     f32 buff_timer       = 0.0f;   // General Sirio: segundos que le queda el aura recibida
     f32 base_damage      = 0.0f;   // Valores previos al aura (0 = nunca buffeado)
     f32 base_speed       = 0.0f;
@@ -284,6 +286,7 @@ struct ProjectileComponent {
     Entity owner     = ENTITY_NONE;  // Who fired this
     bool friendly    = true;          // Player projectile?
     bool pierce      = false;         // Goes through enemies (miracles)
+    bool staff       = false;         // tiro del cayado (lo que prende la Antorcha del Altar)
     f32  spin        = 0.0f;          // Grados/s. 0 = el sprite apunta hacia donde vuela;
                                       // la piedra de la Honda gira sobre si misma
     Entity hit_list[8] = {ENTITY_NONE, ENTITY_NONE, ENTITY_NONE, ENTITY_NONE,
@@ -309,7 +312,9 @@ struct ItemComponent {
     // `Silver` son los talentos de plata de Guiezi (cap. 9): estan en el suelo pero NO
     // tienen colisionador — no son para el profeta, son el cebo por el que Guiezi se
     // arrodilla (game/bosses.cpp).
-    enum class Pickup : u8 { None, Heart, FaithOrb, Offering, Silver };
+    // `Consumable` (2026-10-03): un consumible tirado en el mundo; `item_id` dice cual. Va a
+    // la alforja, y si no cabe se queda en el suelo (no caduca como un corazon).
+    enum class Pickup : u8 { None, Heart, FaithOrb, Offering, Silver, Consumable };
     Type   type         = Type::Passive;
     Pickup pickup       = Pickup::None;
     u32    item_id      = 0;
@@ -383,13 +388,52 @@ struct ECSWorld {
     // secreto: el Engine. Lo llenan el tiro que rompe una tinaja y los milagros-llave.
     std::vector<Vec2> loot_drops;
     u32 offerings_found = 0;  // ofrendas recogidas este frame (van a la meta-progresion)
+    // La alforja (2026-10-03). Los consumibles se encuentran en el mundo: quien suelta uno
+    // apunta la POSICION aqui (el Engine decide cual, segun lo desbloqueado) y la recogida
+    // apunta el id en `consumables_found` para que el Engine lo meta en la alforja.
+    std::vector<Vec2> consumable_drops;
+    std::vector<u32>  consumables_found;
+    // Hoja de iconos de objeto (assets/sprites/icons.png): la recogida de un consumible se
+    // dibuja con SU icono, no con una celda generica del tileset.
+    u32 icons_sheet = TEXTURE_NONE;
+
+    // Lo que el equipo del PROFETA cambia en el combate (Player::recompute_item_mods). El
+    // Engine lo copia aqui cada frame antes de mover el mundo, porque combat.cpp no conoce
+    // al Player; y lee de vuelta lo que el mundo gasto (el escudo).
+    struct PlayerMods {
+        f32  heart_drop_mult = 1.0f;   // Mana del Cielo
+        f32  heart_heal_mult = 1.0f;   // Panes de Cebada
+        f32  kill_faith      = 0.0f;   // Ceniza del Carmelo
+        bool burning_shots   = false;  // Antorcha del Altar
+        bool shield_up       = false;  // Piedra del Memorial: el proximo golpe no entra
+        bool shield_broke    = false;  // se rompio este frame (sonido / aviso en el Engine)
+        bool shield_ate_hit  = false;  // el golpe en curso lo comio el escudo: sin fe ni marcador
+        // La alforja vista desde el suelo: `belt_stack` = bits de ItemDef::id de los tipos
+        // que ya lleva Y admiten otra carga; `belt_free` = huecos vacios. Un tipo nuevo gasta
+        // un hueco (se descuenta EN EL ACTO: tres consumibles distintos tocados en el mismo
+        // frame con dos huecos libres no pueden entrar los tres). Lo que no cabe se queda en
+        // el suelo y `belt_full_touch` avisa.
+        u32  belt_stack      = 0;
+        int  belt_free       = 0;
+        bool belt_full_touch = false;
+    };
+    PlayerMods mods;
+    // El golpe que acaba de entrar lo absorbio el escudo: los que llaman a apply_damage
+    // contra el profeta no cobran la fe ni cuentan el golpe. Se consume al leerlo.
+    bool take_shield_hit() { bool b = mods.shield_ate_hit; mods.shield_ate_hit = false; return b; }
     // Quien puede cruzar huecos ahora mismo. El Carro de Fuego (2 Reyes 2:11) es la llave de
     // los precipicios, y es lo unico que convierte un hueco en una puerta cerrada en vez de
     // en un muro. Es UNA entidad y no un componente porque dura dos segundos.
     f32 shake_request  = 0.0f;   // Sacudida pedida desde el mundo (estallido del brasero)
 
     // Floating damage numbers (filled by apply_damage, drawn and aged by the Engine)
-    struct DamagePopup { Vec2 pos; f32 amount; f32 life; bool boss; };
+    // `kind`: Damage (blanco / dorado de jefe), Heal (verde "+N"), Faith (oro "+N fe") y
+    // Burn (naranja, la quemadura de la Antorcha). Va el ultimo con valor por defecto: los
+    // push_back de siempre ({pos, dano, 0, jefe}) siguen siendo dano.
+    struct DamagePopup {
+        enum Kind : u8 { Damage, Heal, Faith, Burn };
+        Vec2 pos; f32 amount; f32 life; bool boss; Kind kind = Damage;
+    };
     std::vector<DamagePopup> popups;
     f32 hitstop = 0.0f;       // > 0: freeze the simulation for a couple of frames (impacto)
 

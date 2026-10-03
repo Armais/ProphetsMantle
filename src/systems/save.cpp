@@ -7,6 +7,7 @@
 #include "platform/platform.h"
 #include "core/config.h"
 #include <SDL3/SDL.h>
+#include <cstddef>
 #include <cstring>
 
 void SaveSystem::init() {
@@ -279,6 +280,18 @@ struct SaveDataV10 {
 };
 static_assert(sizeof(SaveDataV8) % alignof(u64) == 0, "SaveDataV10 tiene que casar byte a byte con la v10");
 
+// v11 = la v8 + el resumen de celdas con 36 entradas. Es exactamente el SaveData de antes
+// del bloque v12, y el static_assert de abajo lo vigila: si alguien mete un campo en medio
+// en vez de al final, deja de compilar en vez de leer basura.
+struct SaveDataV11 {
+    SaveDataV8 v8;
+    u8 room_flags[SAVE_MAX_ROOMS];
+    u8 room_open[SAVE_MAX_ROOMS][SAVE_ROOM_BYTES];
+};
+static_assert(offsetof(SaveData, upgrade_ranks) ==
+              sizeof(SaveDataV8) + sizeof(u8) * SAVE_MAX_ROOMS * (1 + SAVE_ROOM_BYTES),
+              "el bloque v12 tiene que empezar justo donde acababa la v11");
+
 void migrate_v8(const SaveDataV8& old, SaveData& out) {
     // El estado de sala (`room_flags`/`room_open`) se queda a cero: una partida v8 no guardo
     // que salas dejo despejadas, asi que su Continuar se comporta como siempre se comporto
@@ -331,6 +344,36 @@ void migrate_v10(const SaveDataV10& old, SaveData& out) {
     // eran secretos. La partida sigue en su capitulo y rebobina a su celda de inicio.
     migrate_v8(old.v8, out);
     out.current_room = -1;
+}
+
+// Lo nuevo de la v12 se DERIVA de lo que cualquier fichero viejo ya dice. Lo llaman todas
+// las ramas de migracion de load(), sea cual sea la version de partida.
+void derive_v12(SaveData& out) {
+    // Cada mejora comprada entra con rango 1: nadie pierde lo que pago.
+    for (int i = 0; i < 32 && i < SAVE_MAX_UPGRADES; i++)
+        out.upgrade_ranks[i] = ((out.upgrades_bought >> i) & 1u) ? 1 : 0;
+    // El consumible que se llevaba pasa al primer hueco de la alforja, con sus cargas.
+    for (int i = 0; i < SAVE_BELT_SLOTS; i++) { out.belt_ids[i] = UINT32_MAX; out.belt_charges[i] = 0; }
+    if (out.consumable_id != UINT32_MAX && out.consumable_uses > 0) {
+        out.belt_ids[0]     = out.consumable_id;
+        out.belt_charges[0] = static_cast<u8>(out.consumable_uses > 9 ? 9 : out.consumable_uses);
+    }
+    out.belt_selected = 0;
+    // Ninguno de los avisos se ha visto: el de las ofrendas es justo lo que faltaba.
+    out.tips_seen = 0;
+    // Los dones del intento en curso se rellenan al Continuar (Engine::continue_run ve el
+    // -1 y los da enteros): una partida vieja no los habia gastado.
+    out.revives_left = -1;
+    out.rerolls_left = -1;
+    out.prayers_left = -1;
+}
+
+void migrate_v11(const SaveDataV11& old, SaveData& out) {
+    // Todo lo de la v11 sigue igual (meta, equipo, capitulo y el resumen de celdas, que
+    // describe la MISMA rejilla). Lo nuevo se deriva de lo que el fichero ya dice:
+    migrate_v8(old.v8, out);
+    std::memcpy(out.room_flags, old.room_flags, sizeof(out.room_flags));
+    std::memcpy(out.room_open,  old.room_open,  sizeof(out.room_open));
 }
 
 void migrate_v7(const SaveDataV7& old, SaveData& out) {
@@ -532,6 +575,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v3(old, data);
         SDL_Log("Save file v3 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -541,6 +585,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v4(old, data);
         SDL_Log("Save file v4 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -550,6 +595,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v5(old, data);
         SDL_Log("Save file v5 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -559,6 +605,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v6(old, data);
         SDL_Log("Save file v6 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -568,6 +615,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v7(old, data);
         SDL_Log("Save file v7 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -577,6 +625,7 @@ bool SaveSystem::load() {
         SDL_CloseIO(file);
         migrate_v8(old, data);
         SDL_Log("Save file v8 migrated to v%u (%s)", SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
         return true;
     }
@@ -590,7 +639,19 @@ bool SaveSystem::load() {
         migrate_v10(old, data);
         SDL_Log("Save file v%u migrated to v%u (%s): estado de sala descartado, el capitulo rebobina",
                 version, SAVE_VERSION, save_path.c_str());
+        derive_v12(data);
         save();   // se reescribe ya en el formato nuevo
+        return true;
+    }
+    if (version == 11) {
+        SaveDataV11 old{};
+        SDL_ReadIO(file, &old, sizeof(old));
+        SDL_CloseIO(file);
+        migrate_v11(old, data);
+        derive_v12(data);
+        SDL_Log("Save file v11 migrated to v%u (%s): rangos y alforja derivados",
+                SAVE_VERSION, save_path.c_str());
+        save(false);   // se reescribe ya en el formato nuevo (sin resellar la fecha)
         return true;
     }
     if (version != SAVE_VERSION) {
@@ -637,6 +698,12 @@ void SaveSystem::delete_save() {
     for (int i = 0; i < Config::MAX_MIRACLE_SLOTS; i++) data.miracle_ids[i] = fresh.miracle_ids[i];
     data.active_slots    = fresh.active_slots;
     data.save_timestamp  = fresh.save_timestamp;
+    // v12: la alforja y los dones gastados son de la PARTIDA (rangos y avisos son meta)
+    for (int i = 0; i < SAVE_BELT_SLOTS; i++) { data.belt_ids[i] = UINT32_MAX; data.belt_charges[i] = 0; }
+    data.belt_selected   = 0;
+    data.revives_left    = 0;
+    data.rerolls_left    = 0;
+    data.prayers_left    = 0;
     // v9: el estado de sala es de la PARTIDA, muere con ella
     std::memset(data.room_flags, 0, sizeof(data.room_flags));
     std::memset(data.room_open,  0, sizeof(data.room_open));

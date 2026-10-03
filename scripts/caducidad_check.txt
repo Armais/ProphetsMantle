@@ -20,6 +20,9 @@ god
 # --- Guardar la partida y volver al menu (opcion "Salir" de la pausa) ---
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.2
 press down

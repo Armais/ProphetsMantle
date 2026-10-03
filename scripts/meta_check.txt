@@ -19,7 +19,11 @@
 #   1. `unlocks 0` + los cuatro bits a cero: los objetos bloqueados no salen en `cards`.
 #   2. Comprar pone el bit y lo dice en pantalla.
 #   3. El desbloqueo sobrevive a delete_save.
-#   4. El panel se lee entero a 320x180 CON 12 filas (capturas 50 y 51: hay scroll).
+#   4. El panel se lee entero a 320x180 (capturas 50 y 51: pestanas El Profeta y Tesoro).
+#
+# 2026-10-03: los Higos (17) son CONSUMIBLE y desde la alforja ya no salen en las cartas:
+# su mejora los mete en el sorteo de lo que cae en el MUNDO (ItemRegistry::roll_consumable).
+# El gate de cartas queda para Arco / Panes / Reloj; los Higos los cubre alforja_check.
 
 # `metareset` vuelve a bloquear TODA la meta comprable. Sin el, este guion solo servia la
 # PRIMERA vez: las compras persisten entre partidas —esa es justamente su gracia— y en la
@@ -39,33 +43,27 @@ wait 0.8
 shot 50_santuario_arriba
 wait 0.1
 
-# --- Bajar hasta el final: se ve la flecha de scroll y las cuatro mejoras nuevas ---
+# --- Pestana "Tesoro" (tres a la derecha: Profeta > Dones > Eliseo > Tesoro) y su ULTIMA
+# fila, El Reloj de Acaz. Desde el rediseno del 2026-10-03 El Santuario va por pestanas: las
+# doce filas en lista ya no existen. Las ofrendas se siembran para poder comprar de verdad.
+offerings 1000
+wait 0.2
+press right
+wait 0.15
+press right
+wait 0.15
+press right
+wait 0.2
 press down
 wait 0.12
 press down
 wait 0.12
 press down
 wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-press down
-wait 0.12
-shot 51_santuario_abajo
+shot 51_santuario_tesoro
 wait 0.1
 # --- Comprar por el camino REAL (ENTER sobre la fila), no con el comando ---
-# La navegacion de arriba deja la seleccion en la ULTIMA fila (la 11, El Reloj de Acaz).
+# La navegacion de arriba deja la seleccion en la ULTIMA fila del Tesoro (El Reloj de Acaz).
 press confirm
 wait 0.8
 shot 52_compra_real

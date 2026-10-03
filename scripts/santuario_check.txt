@@ -1,0 +1,132 @@
+# Verificacion de El Santuario REDISENADO (2026-10-03): rangos, dones que se notan y la
+# pantalla de fin que explica las ofrendas.
+# Uso:  MANTLE.exe --script scripts/santuario_check.txt
+#
+# La queja del usuario, literal: "el tema de las ofrendas no se entiende y lo que compras
+# ahi no afecta lo suficiente al gameplay ... lo suyo es que lo que comprases tuviese un
+# efecto". Este guion comprueba que cada compra SE NOTA en la partida, y que la pantalla de
+# derrota dice de donde salen las ofrendas y que se puede comprar ya.
+#
+# Que hay que ver en el LOG (gates):
+#   1. Compra por el camino REAL (ENTER): "Santuario: Provision del Cuervo rango 1/5 (-40 ...)"
+#      y despues "rango 2/5 (-80 ...)": el segundo rango cuesta mas.
+#   2. Al empezar: "Meta upgrades applied: +20 HP, +2 dmg, x1.07 speed, alforja 3" y la
+#      linea STATS con hp 100/100 (80 de Elias + 20).
+#   3. Primicias: "Primicias: carta de objeto al empezar" + "Item choice [PRIMICIAS: ...]".
+#   4. GIFTS inicio: aliento 1 | suertes 2 | oraciones 1, y la alforja con el Agua de la
+#      Tinaja ("Tinaja de Sarepta: 1 Agua(s) del Jordan").
+#   5. Echar suertes en una carta: "Echar suertes (quedan 1): A / B / C".
+#   6. Altar Portatil: "Portable altar: prayed in place (+10 faith), quedan 0".
+#   7. Aliento de Vida: "Revive used: Aliento de Vida (El Santuario), quedan 0".
+#   8. Muerte de verdad: "Run over: +N offerings ... diezmo 1" y la captura S06 con el
+#      desglose (capitulo, bajas, grupos, diezmo) y "Ya puedes ofrecer ...".
+#   9. El Santuario DESDE la derrota: "Scene change: 9 -> 8" y de vuelta "8 -> 9".
+#  10. Continuar conserva lo comprado (antes se perdia): tras Continuar, otra vez
+#      "Meta upgrades applied: +20 HP ..." y STATS con hp maximo 100 (o mas con objetos).
+#  11. SAVEDUMP rangos=... con el rango 2 en la posicion 0 (Provision del Cuervo).
+
+wait 1.0
+metareset
+offerings 2000
+wait 0.3
+
+# --- El Santuario: comprar dos rangos de Provision del Cuervo con ENTER ---
+press down
+wait 0.15
+press down
+wait 0.15
+press confirm
+wait 0.6
+shot S01_santuario
+wait 0.1
+press confirm
+wait 0.3
+press confirm
+wait 0.4
+shot S02_dos_rangos
+wait 0.1
+# --- Pestanas: Dones (A/D) y compra de los dones que se prueban aqui ---
+press right
+wait 0.3
+shot S03_dones
+wait 0.1
+wait 0.2
+press cancel
+wait 0.5
+meta 1 1
+meta 2 1
+meta 15 1
+meta 16 2
+meta 17 1
+meta 18 1
+meta 5 1
+meta 20 1
+meta 19 1
+wait 0.3
+savedump
+
+# --- Partida nueva: todo lo comprado tiene que verse ---
+# (al volver de El Santuario el titulo deja la seleccion en "Nueva Partida")
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 0.3
+shot S04_primicias
+wait 1.5
+stats inicio
+shot S05_hud_dones
+wait 0.1
+
+# --- Echar suertes sobre una carta ---
+cards
+wait 0.2
+press use
+wait 0.2
+shot S06_resorteo
+wait 1.0
+
+# --- Altar Portatil: orar sin altar ---
+faith 30
+press pray
+wait 0.4
+stats tras_orar
+
+# --- Aliento de Vida y despues la derrota de verdad (sin `god`: es un interruptor y
+# aqui hay que morir dos veces) ---
+spawn 3 10
+wait 30
+stats tras_aliento
+wait 30
+shot S07_derrota
+wait 3.0
+shot S08_derrota_desglose
+wait 0.1
+
+# --- El Santuario desde la derrota, y vuelta ---
+press down
+wait 0.2
+press confirm
+wait 0.6
+shot S09_santuario_desde_derrota
+wait 0.1
+press cancel
+wait 0.6
+
+# --- Volver al menu y CONTINUAR: lo comprado sigue puesto ---
+press down
+wait 0.2
+press down
+wait 0.2
+press confirm
+wait 0.8
+press down
+wait 0.2
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+stats tras_continuar
+savedump
+quit

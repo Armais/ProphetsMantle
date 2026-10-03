@@ -23,6 +23,9 @@ void ECSWorld::clear() {
     popups.clear();
     loot_drops.clear();
     offerings_found = 0;
+    consumable_drops.clear();
+    consumables_found.clear();
+    mods = PlayerMods{};
     hitstop = 0.0f;
     // Estado global de mundo: sin esto, una "Palabra de Sequia" lanzada justo antes de salir
     // al menu seguia ralentizando a los enemigos de la partida siguiente.
@@ -501,6 +504,11 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
                 f32 p = 0.5f + 0.5f * std::sin(time * 5.0f + static_cast<f32>(e));
                 tint = {static_cast<u8>(165 + 40 * p), static_cast<u8>(185 + 40 * p), 255, tint.a};
             }
+            // Ardiendo (Antorcha del Altar): parpadeo naranja mientras dura la quemadura
+            else if (is_enemy && enemy_ais[e].burn_timer > 0.0f && h.is_alive()) {
+                f32 p = 0.5f + 0.5f * std::sin(time * 14.0f + static_cast<f32>(e));
+                tint = {255, static_cast<u8>(170 + 50 * p), static_cast<u8>(90 + 40 * p), tint.a};
+            }
             // Player i-frames: blink
             if (is_player && h.iframes_timer > 0.0f && !movements[e].is_dashing) {
                 int phase = static_cast<int>(h.iframes_timer * 20.0f);
@@ -522,6 +530,19 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
 
         f32 bob = 0.0f;
         if (is_pickup) bob = std::sin(time * 5.0f + items[e].bob_phase) * 1.5f;
+        // Un consumible en el suelo brilla y lleva sombra: es una cosa que se lleva uno, no
+        // un corazon de los que caducan. El halo late para que se vea desde lejos.
+        if (is_pickup && items[e].pickup == ItemComponent::Pickup::Consumable &&
+            renderer.shadow_tex != TEXTURE_NONE) {
+            DrawCmd glow;
+            glow.sort_y = t.position.y - 0.5f;
+            const f32 k = 0.75f + 0.25f * std::sin(time * 4.0f + items[e].bob_phase);
+            glow.texture_id = renderer.shadow_tex;
+            glow.src = {0, 0, 64, 32};
+            glow.dst = {t.position.x - 9.0f * k, t.position.y + 2.0f, 18.0f * k, 6.0f};
+            glow.tint = {0, 0, 0, 120};
+            out.push_back(glow);
+        }
 
         bool has_texture = (s.texture_id < renderer.textures.size() &&
                             renderer.textures[s.texture_id].texture != nullptr);

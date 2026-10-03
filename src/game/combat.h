@@ -83,8 +83,17 @@ void on_enemy_killed(ECSWorld& world, struct FaithSystem& faith, Entity enemy, C
 Entity spawn_projectile(ECSWorld& world, Vec2 position, Vec2 direction, f32 damage, bool friendly,
                         ProjectileKind kind = ProjectileKind::Fireball, f32 speed = 0.0f, f32 range = 0.0f);
 
-// Spawn a pickup (heart / faith orb)
+// Spawn a pickup (heart / faith orb / offering). Con `Pickup::Consumable`, `value` es el
+// ItemDef::id del consumible (se pinta con su icono y no caduca).
 Entity spawn_pickup(ECSWorld& world, Vec2 position, ItemComponent::Pickup kind, f32 value);
+
+// Las recogidas a menos de 30 unidades se acercan solas al profeta (no la plata de Guiezi,
+// ni un consumible que no cabe en la alforja). La llama el Engine antes de las colisiones.
+void update_pickup_magnet(ECSWorld& world, f32 dt);
+
+// Antorcha del Altar: avanza las quemaduras (3 de dano cada 0,5 s) y paga las bajas. La
+// llama el Engine una vez por frame, junto a update_death_fuses.
+void update_burns(ECSWorld& world, struct FaithSystem& faith, CombatEvents& events, f32 dt);
 
 // Burst of tiny square particles (visual only: no collider, short lifetime)
 void spawn_particles(ECSWorld& world, Vec2 position, Color color, int count, f32 speed = 60.0f, f32 life = 0.35f);

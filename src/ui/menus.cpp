@@ -375,9 +375,14 @@ void MenuSystem::render_title(Renderer& renderer) {
         const int down = pressed_row(press_active, press_pos, hits, option_count);
 
         for (int i = 0; i < option_count; i++) {
-            draw_menu_button(renderer, menu_grid_button(i, ROWS, TOP, PITCH, BTN_H, btn_w),
-                             options[i], i == down, i == disabled, 0.9f);
+            const Rect br = menu_grid_button(i, ROWS, TOP, PITCH, BTN_H, btn_w);
+            draw_menu_button(renderer, br, options[i], i == down, i == disabled, 0.9f);
             mark_row_rect(i, hits[i]);
+            // El Santuario con algo comprable: una moneda que late en la esquina
+            if (i == 2 && sanctuary_ready) {
+                renderer.draw_disc({br.right() - 2.0f, br.y + 2.0f}, 3.2f, {255, 206, 90, 255});
+                renderer.draw_disc({br.right() - 2.6f, br.y + 1.4f}, 1.1f, {255, 248, 215, 240});
+            }
         }
         // Las ofrendas van al hueco de la septima celda, SIN panel: con placa se leerian
         // como un octavo boton. Se centran sobre el hueco del BOTON que ocuparia esa celda
@@ -398,14 +403,22 @@ void MenuSystem::render_title(Renderer& renderer) {
     const f32 BTN_TOP = 78.0f, BTN_PITCH = 10.9f, BTN_H = 9.5f;
     for (int i = 0; i < option_count; i++) {
         const f32 BTN_W = menu_button_width(renderer, options[i], 0.9f);
-        draw_menu_button(renderer, menu_button_rect(i, sel, BTN_TOP, BTN_PITCH, BTN_H, BTN_W),
-                         options[i], i == sel, i == disabled, 0.9f);
+        const Rect br = menu_button_rect(i, sel, BTN_TOP, BTN_PITCH, BTN_H, BTN_W);
+        draw_menu_button(renderer, br, options[i], i == sel, i == disabled, 0.9f);
         mark_row_rect(i, menu_hit_rect(i, BTN_TOP, BTN_PITCH, BTN_H, BTN_W));
+        if (i == 2 && sanctuary_ready) {
+            renderer.draw_disc({br.right() + 4.0f, br.y + br.h * 0.5f}, 2.6f, {255, 206, 90, 255});
+            renderer.draw_disc({br.right() + 3.4f, br.y + br.h * 0.5f - 0.6f}, 0.9f, {255, 248, 215, 240});
+        }
     }
 
-    // Ofrendas acumuladas: es lo que se gasta en El Santuario
-    if (offer_buf[0])
-        renderer.draw_text_centered(offer_buf, 160, {200, 175, 115, 220}, 0.75f);
+    // Ofrendas acumuladas: es lo que se gasta en El Santuario, y se dice
+    if (offer_buf[0]) {
+        char line[96];
+        snprintf(line, sizeof(line), "%s%s", offer_buf,
+                 sanctuary_ready ? tr("  ·  algo te espera en El Santuario", "  ·  something awaits in the Sanctuary") : "");
+        renderer.draw_text_centered(line, 160, {200, 175, 115, 220}, 0.75f);
+    }
     renderer.draw_text_centered(tr("[ENTER] Seleccionar", "[ENTER] Select"),
                                 170, {100, 90, 80, 180}, 0.8f);
 }
@@ -416,66 +429,68 @@ void MenuSystem::render_pause(Renderer& renderer) {
         static_cast<f32>(Config::GAME_WIDTH),
         static_cast<f32>(Config::GAME_HEIGHT)}, {0, 0, 0, 150});
 
-    renderer.draw_text_centered(tr("PAUSA", "PAUSED"), 50, Color::white(), 2);
+    renderer.draw_text_centered(tr("PAUSA", "PAUSED"), touch_hints ? 22.0f : 44.0f, Color::white(), 2);
 
-    option_count = 4;
+    option_count = 5;
     // En el tutorial la ultima fila es SU salida y lo dice: en PC no hay boton de SALTAR
     // (ESC ya es esta pausa, que el paso 14 enseña) y esta es la unica puerta.
-    const char* options[] = {tr("Reanudar", "Resume"), tr("El Códice", "The Codex"), tr("Opciones", "Options"),
+    // "Equipo" (2026-10-03): que llevas y que hace cada cosa, con las cifras.
+    const char* options[] = {tr("Reanudar", "Resume"), tr("Equipo", "Equipment"), tr("El Códice", "The Codex"),
+                             tr("Opciones", "Options"),
                              in_tutorial ? tr("Dejar el tutorial", "Leave the tutorial") : tr("Salir", "Quit")};
 
-    // En tactil las cuatro pildoras se comen la pantalla de 70 a 167. El pie "Toca una
-    // opcion" sobra en cuanto cada opcion tiene el tamaño de un dedo: explicaba lo obvio y
-    // ocupaba justo el sitio que hacia falta.
+    // En tactil las cinco pildoras van de 50 a 170. El pie "Toca una opcion" sobra en cuanto
+    // cada opcion tiene el tamaño de un dedo: explicaba lo obvio.
     draw_button_column(renderer, options, option_count,
-                       {78.0f, 15.0f, 12.0f}, {70.0f, 25.0f, 19.0f}, 0.95f);
+                       {72.0f, 15.0f, 12.0f}, {50.0f, 24.0f, 19.0f}, 0.95f);
 }
 
 void MenuSystem::render_game_over(Renderer& renderer) {
     renderer.clear({15, 8, 8, 255});
 
-    renderer.draw_text_centered(tr("DERROTA", "DEFEAT"), 44, {192, 57, 43, 255}, 2);
-    renderer.draw_text_centered(tr("El profeta ha caído", "The prophet has fallen"), 72, {160, 120, 120, 255});
+    renderer.draw_text_centered(tr("DERROTA", "DEFEAT"), 6, {192, 57, 43, 255}, 1.6f);
 
-    char buf[80];
-    snprintf(buf, sizeof(buf), tr("Capítulo %d  ·  %d enemigos  ·  %d:%02d", "Chapter %d  ·  %d enemies  ·  %d:%02d"),
-             stats_chapter, stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
-    renderer.draw_text_centered(buf, 92, {170, 150, 130, 255}, 0.9f);
+    char buf[96];
+    snprintf(buf, sizeof(buf), tr("El profeta ha caído  ·  capítulo %d  ·  %d:%02d", "The prophet has fallen  ·  chapter %d  ·  %d:%02d"),
+             stats_chapter, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
+    renderer.draw_text_centered(buf, 27, {170, 140, 130, 240}, 0.65f);
+    // (el desglose de ofrendas lo pinta el Engine entre y=38 y y=112: render_run_summary)
 
-    // Menu de verdad: morir y volver al menu por error costaba la partida entera
-    option_count = 2;
-    const char* options[] = {tr("Reintentar capítulo", "Retry chapter"), tr("Volver al menú", "Back to menu")};
-    // La nota de "sigue guardada" sube en tactil: los dos botones llegan hasta 165.
-    if (touch_hints)
-        renderer.draw_text_centered(tr("Tu partida sigue guardada al principio del capítulo", "Your run is still saved at the chapter start"),
-                                    101, {125, 110, 98, 210}, 0.7f);
+    // Menu de verdad: morir y volver al menu por error costaba la partida entera. "El
+    // Santuario" va en medio: gastar lo que acabas de ganar y reintentar ya con ello.
+    option_count = 3;
+    char sanct[48];
+    snprintf(sanct, sizeof(sanct), "%s%s", tr("El Santuario", "The Sanctuary"), sanctuary_ready ? "  (!)" : "");
+    const char* options[] = {tr("Reintentar capítulo", "Retry chapter"), sanct, tr("Volver al menú", "Back to menu")};
     draw_button_column(renderer, options, option_count,
-                       {116.0f, 15.0f, 12.0f}, {112.0f, 28.0f, 22.0f}, 0.95f);
+                       {121.0f, 13.5f, 11.0f}, {117.0f, 20.5f, 17.0f}, 0.9f);
 
     if (!touch_hints) {
         renderer.draw_text_centered(tr("Tu partida sigue guardada al principio del capítulo", "Your run is still saved at the chapter start"),
-                                    152, {125, 110, 98, 210}, 0.7f);
+                                    163, {125, 110, 98, 210}, 0.6f);
         renderer.draw_text_centered(tr("[W/S] elegir   [ENTER] aceptar   [R] reintentar", "[W/S] choose   [ENTER] accept   [R] retry"),
-                                    168, {100, 90, 80, 190}, 0.75f);
+                                    171, {100, 90, 80, 190}, 0.6f);
     }
 }
 
 void MenuSystem::render_victory(Renderer& renderer) {
     renderer.clear({18, 24, 44, 255});
 
-    renderer.draw_text_centered(tr("EL LEGADO", "THE LEGACY"), 40, {245, 225, 150, 255}, 2);
-    renderer.draw_text_centered(tr("Israel ha visto la mano de Dios", "Israel has seen the hand of God"), 72, {200, 200, 220, 255});
-    renderer.draw_text_centered(tr("Elías y Eliseo cumplieron su llamado", "Elijah and Elisha fulfilled their calling"), 86, {160, 170, 200, 220});
+    renderer.draw_text_centered(tr("EL LEGADO", "THE LEGACY"), 6, {245, 225, 150, 255}, 1.6f);
+    renderer.draw_text_centered(tr("Israel ha visto la mano de Dios: Elías y Eliseo cumplieron su llamado",
+                                   "Israel has seen the hand of God: Elijah and Elisha fulfilled their calling"),
+                                27, {190, 195, 220, 240}, 0.6f);
 
     char buf[64];
     snprintf(buf, sizeof(buf), tr("%d enemigos  ·  tiempo %d:%02d", "%d enemies  ·  time %d:%02d"),
              stats_kills, static_cast<int>(stats_time) / 60, static_cast<int>(stats_time) % 60);
-    renderer.draw_text_centered(buf, 110, {170, 180, 200, 255}, 0.9f);
+    renderer.draw_text_centered(buf, 35, {170, 180, 200, 230}, 0.6f);
+    // (el desglose de ofrendas lo pinta el Engine: render_run_summary)
     if (victory_note)
-        renderer.draw_text_centered(victory_note, 128, {190, 160, 110, 225}, 0.75f);
+        renderer.draw_text_centered(victory_note, 150, {190, 160, 110, 225}, 0.65f);
     renderer.draw_text_centered(touch_hints ? tr("Toca para volver al menú", "Tap to go back to the menu")
                                             : tr("[ENTER] Volver al menú", "[ENTER] Back to menu"),
-                                150, {120, 130, 150, 220});
+                                164, {120, 130, 150, 220}, 0.8f);
 }
 
 void MenuSystem::render_settings(Renderer& renderer) {

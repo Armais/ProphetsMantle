@@ -115,68 +115,68 @@ struct ItemRegistry {
 
         // === WEAPONS ===
         items.push_back({0, tr("Honda de David", "David's Sling"),
-            tr("Ataque a distancia secundario", "Secondary ranged attack"), ItemCategory::Weapon,
+            tr("Arma: lanza una piedra que atraviesa a todos. +5 de daño.", "Weapon: hurls a stone that pierces everyone. +5 damage."), ItemCategory::Weapon,
             ItemRarity::Common, false, 0, 5, 0, 0, 0});
 
         items.push_back({1, tr("Vara de Aarón", "Aaron's Rod"),
-            tr("Ataque cuerpo a cuerpo de largo alcance", "Long-reach melee sweep"), ItemCategory::Weapon,
+            tr("Arma: barrido en arco que empuja. +8 de daño y atacas más rápido.", "Weapon: a pushing arc sweep. +8 damage and faster attacks."), ItemCategory::Weapon,
             ItemRarity::Uncommon, false, 0, 8, 0, 0, -0.05f});
 
         // === PASSIVES ===
         items.push_back({2, tr("Pan de Cada Día", "Daily Bread"),
-            tr("+10 HP máximo", "+10 max HP"), ItemCategory::Passive,
+            tr("+10 de vida máxima. Al vencer a cada grupo recuperas 8 de vida.", "+10 max health. Beat a group of enemies to recover 8 health."), ItemCategory::Passive,
             ItemRarity::Common, false, 10, 0, 0, 0, 0});
 
         items.push_back({3, tr("Aceite de la Unción", "Anointing Oil"),
-            tr("+5% daño, +5 Fe", "+5% damage, +5 Faith"), ItemCategory::Passive,
+            tr("Tus milagros cuestan un 20% menos de fe. +2 de daño, +5 de fe.", "Your miracles cost 20% less faith. +2 damage, +5 faith."), ItemCategory::Passive,
             ItemRarity::Uncommon, false, 0, 2, 0, 5, 0});
 
         items.push_back({4, tr("Sandalias del Profeta", "Prophet's Sandals"),
-            tr("+15% velocidad", "+15% speed"), ItemCategory::Passive,
-            ItemRarity::Common, false, 0, 0, 30, 0, 0});
+            tr("+20% de velocidad y el dash se recarga un 35% antes.", "+20% speed and your dash recharges 35% sooner."), ItemCategory::Passive,
+            ItemRarity::Common, false, 0, 0, 20, 0, 0});
 
         items.push_back({5, tr("Maná del Cielo", "Manna from Heaven"),
-            tr("+20 HP, +3 Fe", "+20 HP, +3 Faith"), ItemCategory::Passive,
+            tr("+20 de vida máxima, +3 de fe. Los enemigos sueltan el doble de corazones.", "+20 max health, +3 faith. Enemies drop twice as many hearts."), ItemCategory::Passive,
             ItemRarity::Rare, false, 20, 0, 0, 3, 0});
 
         // === RELICS ===
         items.push_back({6, tr("Tablas de la Ley", "Tablets of the Law"),
-            tr("Fe no baja de 25", "Faith never drops below 25"), ItemCategory::Relic,
+            tr("Reliquia: tu fe nunca baja de 25.", "Relic: your faith never drops below 25."), ItemCategory::Relic,
             ItemRarity::Legendary, false, 0, 0, 0, 0, 0});
 
         items.push_back({7, tr("Arca del Pacto", "Ark of the Covenant"),
-            tr("+50% daño de milagros", "+50% miracle damage"), ItemCategory::Relic,
+            tr("Reliquia: tus milagros hacen un 50% más de daño.", "Relic: your miracles deal 50% more damage."), ItemCategory::Relic,
             ItemRarity::Legendary, false, 0, 0, 0, 0, 0});
 
         // === CONSUMABLES ===
         items.push_back({8, tr("Vino Nuevo", "New Wine"),
-            tr("+25% daño por 30s", "+25% damage for 30s"), ItemCategory::Consumable,
+            tr("Consumible: +25% de daño durante 30 s.", "Consumable: +25% damage for 30 s."), ItemCategory::Consumable,
             ItemRarity::Common, false, 0, 0, 0, 0, 0});
 
         items.push_back({9, tr("Agua del Jordán", "Water of the Jordan"),
-            tr("Cura 30 HP", "Heals 30 HP"), ItemCategory::Consumable,
+            tr("Consumible: cura 35 de vida.", "Consumable: heals 35 health."), ItemCategory::Consumable,
             ItemRarity::Common, false, 0, 0, 0, 0, 0});
 
         // === HEREDABLES ===
         items.push_back({10, tr("Antorcha del Altar", "Altar Torch"),
-            tr("+3 daño", "+3 damage"), ItemCategory::Passive,
+            tr("+3 de daño. Tus disparos prenden: el enemigo arde 2,5 s.", "+3 damage. Your shots ignite: the enemy burns for 2.5 s."), ItemCategory::Passive,
             ItemRarity::Uncommon, true, 0, 3, 0, 0, 0});
 
         items.push_back({11, tr("Piedra del Memorial", "Memorial Stone"),
-            tr("+10 HP", "+10 HP"), ItemCategory::Passive,
+            tr("+10 de vida máxima. Un escudo de piedra para un golpe; vuelve a los 12 s.", "+10 max health. A stone shield blocks one hit; it returns after 12 s."), ItemCategory::Passive,
             ItemRarity::Uncommon, true, 10, 0, 0, 0, 0});
 
         items.push_back({12, tr("Ceniza del Carmelo", "Ash of Carmel"),
-            tr("+8 Fe inicial", "+8 starting Faith"), ItemCategory::Passive,
+            tr("+8 de fe. Cada enemigo abatido te da 1 de fe más.", "+8 faith. Every enemy you strike down gives 1 more faith."), ItemCategory::Passive,
             ItemRarity::Rare, true, 0, 0, 0, 8, 0});
 
         // === SOLO DE ENCUENTRO (game/events.h) — no entran en el sorteo de cartas ===
         items.push_back({13, tr("Tinaja de Harina", "Jar of Meal"),
-            tr("+15 HP máximo", "+15 max HP"), ItemCategory::Passive,
+            tr("+15 de vida máxima.", "+15 max health."), ItemCategory::Passive,
             ItemRarity::Rare, true, 15, 0, 0, 0, 0, true});
 
         items.push_back({14, tr("Vasija de Aceite", "Cruse of Oil"),
-            tr("+4 daño", "+4 damage"), ItemCategory::Passive,
+            tr("+4 de daño.", "+4 damage."), ItemCategory::Passive,
             ItemRarity::Rare, true, 0, 4, 0, 0, 0, true});
 
         // === AMPLIACION DEL CATALOGO (16 -> 22 objetos) ===
@@ -186,27 +186,27 @@ struct ItemRegistry {
         // Todos salen de 1-2 Reyes salvo donde se dice; ninguno contradice el texto.
 
         items.push_back({16, tr("Arco de Joás", "Joash's Bow"),
-            tr("Ráfaga de 3 saetas", "Volley of 3 arrows"), ItemCategory::Weapon,
+            tr("Arma: ráfaga de 3 saetas en abanico. +4 de daño.", "Weapon: a fanned volley of 3 arrows. +4 damage."), ItemCategory::Weapon,
             ItemRarity::Uncommon, false, 0, 4, 0, 0, 0, false, true});
 
         items.push_back({17, tr("Higos de Ezequías", "Hezekiah's Figs"),
-            tr("+15 HP máximo", "+15 max HP"), ItemCategory::Consumable,
+            tr("Consumible: cura toda la vida y +10 de vida máxima.", "Consumable: heals you fully and +10 max health."), ItemCategory::Consumable,
             ItemRarity::Uncommon, false, 0, 0, 0, 0, 0, false, true});
 
         items.push_back({18, tr("Sal de Eliseo", "Elisha's Salt"),
-            tr("+20 Fe", "+20 Faith"), ItemCategory::Consumable,
+            tr("Consumible: +25 de fe al instante.", "Consumable: +25 faith at once."), ItemCategory::Consumable,
             ItemRarity::Common, false, 0, 0, 0, 0, 0});
 
         items.push_back({19, tr("Cinto de Cuero", "Leather Belt"),
-            tr("Atacas un 12% más rápido", "You attack 12% faster"), ItemCategory::Passive,
+            tr("Atacas un 12% más rápido.", "You attack 12% faster."), ItemCategory::Passive,
             ItemRarity::Uncommon, true, 0, 0, 0, 0, -0.03f});
 
         items.push_back({20, tr("El Reloj de Acaz", "The Dial of Ahaz"),
-            tr("Un golpe mortal por capítulo te deja vivo", "One lethal blow per chapter leaves you alive"), ItemCategory::Relic,
+            tr("Reliquia: un golpe mortal por capítulo te deja con media vida.", "Relic: one lethal blow per chapter leaves you at half health."), ItemCategory::Relic,
             ItemRarity::Legendary, false, 0, 0, 0, 0, 0, false, true});
 
         items.push_back({21, tr("Panes de Cebada", "Loaves of Barley"),
-            tr("+18 HP máximo, +4 Fe", "+18 max HP, +4 Faith"), ItemCategory::Passive,
+            tr("+18 de vida máxima, +4 de fe. Los corazones te curan un 50% más.", "+18 max health, +4 faith. Hearts heal you 50% more."), ItemCategory::Passive,
             ItemRarity::Rare, true, 18, 0, 0, 4, 0, false, true});
 
         // === EL MANTO DE ELIAS — el objeto que da titulo al juego ===
@@ -215,7 +215,7 @@ struct ItemRegistry {
         // pisar al Arca (miracle_power) ni a las Tablas (floor_value): abre el tercer slot
         // y acorta la recarga, que es lo que nadie mas toca. Ver Player::grant_item.
         items.push_back({15, tr("El Manto de Elías", "Elijah's Mantle"),
-            tr("+1 slot de milagro, -25% de recarga", "+1 miracle slot, -25% cooldown"), ItemCategory::Passive,
+            tr("+1 hueco de milagro y los milagros se recargan un 25% antes.", "+1 miracle slot and miracles recharge 25% sooner."), ItemCategory::Passive,
             ItemRarity::Legendary, true, 0, 0, 0, 0, 0, true});
     }
 
@@ -262,6 +262,10 @@ struct ItemRegistry {
         int total = 0;
         for (auto& it : items) {
             if (it.event_only) continue;   // se ganan hablando, no eligiendo
+            // Los consumibles ya no se ELIGEN (2026-10-03): una carta es una decision de
+            // partida entera y un consumible casi siempre perdia contra un pasivo. Se
+            // encuentran en el mundo y van a la alforja (roll_consumable).
+            if (it.category == ItemCategory::Consumable) continue;
             if (it.starts_locked && !(unlocked_mask & (1u << it.id))) continue;   // aun no comprado
             if (std::find(owned.begin(), owned.end(), it.id) != owned.end()) continue;
             pool.push_back(it.id);
@@ -282,6 +286,21 @@ struct ItemRegistry {
             weights.erase(weights.begin() + k);
         }
         return picked;
+    }
+
+    // QUE consumible cae en el mundo. `r` en [0,1): lo pasa quien suelta (el Engine lo
+    // saca de la POSICION para los secretos, que asi pagan siempre lo mismo). Agua del
+    // Jordan es lo mas comun: curar es lo que mas se necesita. Los Higos solo con su
+    // mejora de El Santuario comprada (`unlocked_mask`, bits de SaveData::items_unlocked).
+    static u32 roll_consumable(f32 r, u32 unlocked_mask) {
+        const bool figs = (unlocked_mask >> 17) & 1u;
+        // Agua 40 · Vino 25 · Sal 20 · Higos 15 (sin Higos se reparte entre los otros)
+        const f32 w_agua = 40.0f, w_vino = 25.0f, w_sal = 20.0f, w_higo = figs ? 15.0f : 0.0f;
+        f32 x = r * (w_agua + w_vino + w_sal + w_higo);
+        if ((x -= w_agua) < 0.0f) return 9;
+        if ((x -= w_vino) < 0.0f) return 8;
+        if ((x -= w_sal)  < 0.0f) return 18;
+        return figs ? 17u : 9u;
     }
 
     // Get all heredable items (for Elias -> Eliseo transfer)

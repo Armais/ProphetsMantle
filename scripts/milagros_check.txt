@@ -41,7 +41,9 @@ wait 0.1
 # =============================================================================
 # 3.2 Aceite Inagotable: cargas del consumible
 # =============================================================================
-give 9
+# (2026-10-03) Vino Nuevo y no Agua del Jordan: con la vida llena el Agua ya NO se gasta
+# ("Ya tienes la vida llena"), y aqui se mide justo que la carga baje al usarla.
+give 8
 wait 0.4
 # Celda del consumible sin numero: una sola carga
 shot 53_consumible_1_carga
@@ -84,6 +86,9 @@ wait 1.0
 # --- Guardar y volver a cargar: los tres slots tienen que sobrevivir ---
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.2
 press down

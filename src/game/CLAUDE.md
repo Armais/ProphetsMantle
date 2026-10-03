@@ -124,10 +124,10 @@ toca. El jefe ya no sale en el mapa: se aprende con pistas (`get_boss_intel`). L
   `draw_sorted`): bocadillo sobre cada relato pendiente, PNJ o escena, y el titulo al
   acercarse. Un relato de ESCENA ya no es la antorcha (nadie la leia como interaccion): brilla
   en el suelo, se abre un aro (`ring_tex`) y suben chispas.
-- **Aceite Inagotable** (2 Reyes 4:6): el consumible tiene cargas (`Player::consumable_charges`). Recoger otra vasija igual suma carga, una distinta reemplaza; `use_consumable` solo suelta el objeto cuando se gasta la ultima. El milagro da +2 cargas, y con las manos vacias regala un consumible con 2. El numero se pinta sobre la celda del HUD cuando es > 1. Va en el guardado (`SaveData::consumable_uses`).
+- **Aceite Inagotable** (2 Reyes 4:6): desde la ALFORJA (2026-10-03, ver la seccion "La alforja") da +2 cargas al consumible ELEGIDO, hasta 9 (por encima del tope normal de recogida, 5), y con la alforja vacia regala una vasija con 2. Las cargas se pintan en cada hueco ("x2").
 - **Tres slots de milagro**: `Config::MAX_MIRACLE_SLOTS = 3` (Q / E / F; `Action::Miracle3` = tecla F, D-Pad abajo en mando). Elias sigue con 1 (2 desde el cap. 4); Eliseo con 2, y 3 con la mejora meta 6 de El Santuario. Todo lo que iteraba slots va contra la constante: `Player::miracle_slots`, la tabla `MIRACLE_KEYS` de `player.cpp`, `draw_miracle_slots` (la tercera celda cae en x≈238 de 320 y no pisa ni la caja de mensajes ni la barra de jefe), `open_miracle_choice`, el bot y el comando `learn`.
 - **Miracle gating readability**: a Tier-3 miracle needs faith level *Siervo Fiel* (50), and the run starts at exactly 50, so equipping one in slot Q made it lock on the first hit taken and read as "I need 100% faith". The fix is threefold and must stay together: the Q slot always starts Tier 1; `draw_miracle_slots` splits `lock_tier` (padlock + the faith **required**, via `faith_required_for_tier`) from `lock_cost` (cost in red); and `Player::MiracleEvent` carries the reason (`NeedTier` / `NeedCost` / `OnCooldown`) so the Engine names it ("Fuego del Cielo: necesitas 50 de fe (Siervo Fiel)"). `draw_faith_bar` also ticks the 25/50/75 thresholds. A one-shot `[Q]` hint fires in ch. 1 after 5 castable seconds (`Engine::miracle_hint_*`).
-- **Working**: items — `GameScene::Choice` offers 3 cards after Elite/Boss rooms, on opening the treasure chest and in 1 of 5 normal rooms (`open_item_choice`). `ItemRegistry::roll_choices` never repeats an owned item, so a run tops out at the 14 sorteables (los tres `event_only` no entran). `Player::grant_item` applies HP/damage/speed/faith/cadence plus relics (Tablas → `FaithSystem::floor_value`, Arca → `miracle_power`) and consumables (R). Heredable items pass to Eliseo on the Ascension. Weapons (Honda/Vara) are a **secondary attack** on `Action::AttackSecondary` (tecla `I`): `Player::fire_secondary` — la Honda lanza una piedra que atraviesa con la animacion de disparo, la Vara barre en arco con `AnimID::CastMiracle` y cinco brotes verdes. Al recogerla el mensaje dice la tecla, y la celda del HUD lleva icono por arma + la `I` + el nombre.
+- **Working**: items — `GameScene::Choice` offers 3 cards after Elite/Boss rooms, on opening the treasure chest and in 1 of 5 normal rooms (`open_item_choice`). `ItemRegistry::roll_choices` never repeats an owned item and **no ofrece consumibles** (2026-10-03: se encuentran en el mundo y van a la alforja). `Player::grant_item` applies HP/damage/speed/faith/cadence plus relics (Tablas → `FaithSystem::floor_value`, Arca → `miracle_power`), consumables (a la alforja) y recalcula la mecanica propia de cada pasivo (`recompute_item_mods`). Heredable items pass to Eliseo on the Ascension. Weapons (Honda/Vara) are a **secondary attack** on `Action::AttackSecondary` (tecla `I`): `Player::fire_secondary` — la Honda lanza una piedra que atraviesa con la animacion de disparo, la Vara barre en arco con `AnimID::CastMiracle` y cinco brotes verdes. Al recogerla el mensaje dice la tecla, y la celda del HUD lleva icono por arma + la `I` + el nombre.
 ### Catalogo de objetos: 16 -> 22 (roadmap Beta "20+", 2026-08-25)
 
 Se repartieron **donde el pool estaba flojo**, no a bulto: las ARMAS eran dos y los
@@ -138,8 +138,8 @@ texto (regla del proyecto; precedente: el Leproso Enloquecido).
 | id | Objeto | Categoria | Efecto | Pasaje |
 |----|--------|-----------|--------|--------|
 | 16 | Arco de Joas | Arma | rafaga de 3 saetas abiertas 14 grados | 2 Reyes 13:17 |
-| 17 | Higos de Ezequias | Consumible | **+15 HP MAXIMO** | 2 Reyes 20:7 (+20:6) |
-| 18 | Sal de Eliseo | Consumible | **+20 Fe** | 2 Reyes 2:21 |
+| 17 | Higos de Ezequias | Consumible | **vida llena + 10 de maximo** (2026-10-03; antes +15 de maximo) | 2 Reyes 20:7 (+20:6) |
+| 18 | Sal de Eliseo | Consumible | **+25 Fe** (antes +20) | 2 Reyes 2:21 |
 | 19 | Cinto de Cuero | Pasivo (heredable) | -12% de recarga de ataque | 2 Reyes 1:8 |
 | 20 | El Reloj de Acaz | **Reliquia** | perdona una muerte por capitulo | 2 Reyes 20:11 |
 | 21 | Panes de Cebada | Pasivo (heredable) | +18 HP, +4 Fe | 2 Reyes 4:43 |
@@ -409,3 +409,63 @@ la fe porque viene a cobrar en hijos (2 R 4:1); la Muerte cede a quien se tiende
 
 **Comando nuevo** `bosshp <fraccion> [quien]`, y `killall` ahora atraviesa lo intocable: ver
 `scripts/CLAUDE.md`. Guion: `scripts/jefes_check.txt`.
+
+### La alforja y los objetos con mecanica propia (2026-10-03)
+
+Queja del usuario: *"los objetos tampoco son muy logicos de usar"*. Lo que habia de verdad:
+
+- UN hueco de consumible: coger otro **pisaba** el que llevabas en silencio, y el pisado se
+  quedaba de fantasma en la fila de objetos del HUD (seguia en `Player::items`).
+- Los consumibles competian en las CARTAS con los pasivos (una carta es una decision de
+  partida entera, y un consumible casi siempre perdia) y los Higos (+15 de maximo) no tenian
+  ningun motivo para guardarse: era un pasivo con un paso de mas.
+- Descripciones con cifras falsas: el Aceite decia "+5% dano" y daba +2 planos; las Sandalias
+  "+15% velocidad" y daban +30. Y casi todos los pasivos eran un +HP o un +dano que no se veia.
+
+**La alforja** (`Player::belt`, `BeltSlot {id, charges}`, `belt_cap` de El Santuario, 2..4):
+
+- Un consumible por hueco con sus cargas (tope 5 al recoger; el Aceite Inagotable llega a 9).
+  Coger otro igual suma carga; uno nuevo ocupa un hueco libre; **con la alforja llena se queda
+  en el suelo** (`Pickup::Consumable` no caduca) y avisa "Alforja llena". Nada se pierde.
+- **Se encuentran en el mundo**, no se eligen: 1 de cada 10 secretos (por posicion, como la
+  ofrenda), uno en cada elite despejada, uno junto a cada cofre, uno por jefe y un 2,5% por
+  baja. QUE consumible sale lo decide `ItemRegistry::roll_consumable` (Agua 40, Vino 25,
+  Sal 20, Higos 15 solo con su mejora). Quien suelta apunta la posicion en
+  `ECSWorld::consumable_drops` y el Engine elige (`spawn_consumable_at`), igual que los
+  hallazgos: un solo sitio decide lo que paga el mundo.
+- Recoger: `combat.cpp pickup()` mira `ECSWorld::mods.belt_stack` (tipos que admiten carga) y
+  `belt_free` (huecos libres), y **descuenta en el acto**: tres consumibles distintos tocados en
+  el mismo frame con dos huecos libres entraban los tres y el tercero se perdia (lo cazo
+  alforja_check). El id va a `consumables_found` y `Engine::update_belt` lo mete.
+- Usar (`Player::use_belt`): **1-4** usan ese hueco; **R / X / USAR** el ELEGIDO; **rueda / C /
+  cruceta izq-der / mantener USAR** cambian el elegido. Cada uso dice lo que ha hecho ("+35 de
+  vida", numero verde sobre el profeta, "+25 fe" en oro) y suena distinto.
+- Viaja con todo: reintento, Ascension (Eliseo recoge la alforja de Elias), guardado v12.
+- Los Higos ahora **curan entera y suben 10 el maximo**: son los que se guardan para el
+  momento malo. La Sal +25 de fe. El Agua 35 de vida.
+
+**Mecanica propia por pasivo** (`Player::recompute_item_mods`, idempotente desde `items`, como
+`apply_relic_effects`; lo que toca el combate se copia cada frame a `ECSWorld::mods`):
+
+| id | Objeto | Ademas de su cifra |
+|---|---|---|
+| 2 | Pan de Cada Dia | al vencer a cada grupo recuperas 8 de vida |
+| 3 | Aceite de la Uncion | los milagros cuestan un 20% menos (`Player::miracle_cost`, tambien en el HUD) |
+| 4 | Sandalias del Profeta | +20% de velocidad (antes +30 que decia +15%) y el dash recarga un 35% antes |
+| 5 | Mana del Cielo | los enemigos sueltan el doble de corazones |
+| 10 | Antorcha del Altar | el tiro del cayado PRENDE: 3 de dano cada 0,5 s durante 2,5 s (`update_burns`, tinte naranja, numeros naranjas; el tic no congela el mundo) |
+| 11 | Piedra del Memorial | escudo que se come un golpe entero; vuelve a los 12 s (aro de piedra a los pies y piedra junto a la vida en el HUD) |
+| 12 | Ceniza del Carmelo | +1 de fe por baja ("+1 fe" sobre el caido) |
+| 21 | Panes de Cebada | los corazones curan un 50% mas |
+
+El escudo: `apply_damage` lo consume y marca `mods.shield_ate_hit`; **los cinco sitios que
+dañan al profeta** (proyectil x2, contacto, brasero del Idolatra, peligros de jefe) preguntan
+`world.take_shield_hit()` y entonces no cobran la fe ni cuentan el golpe.
+
+**Las descripciones dicen la cifra de verdad** y QUE hace el objeto ("Arma: lanza una piedra
+que atraviesa a todos. +5 de dano."). Las cartas miden 92 de alto y ajustan con
+`Renderer::wrap_text` (el ajuste de 40 bytes de `hud.cpp` se comia media frase con tildes en
+silencio). Y al obtener cualquier objeto sale la **ficha** del HUD (`announce_item`): icono,
+nombre en su color de rareza, que hace y como se usa.
+
+Guion: **`scripts/alforja_check.txt`** (gates en su cabecera).

@@ -33,7 +33,15 @@ enum class Action : u32 {
     Miracle1,       // Q / RB / Boton Milagro 1
     Miracle2,       // E / LB / Boton Milagro 2
     Miracle3,       // F / Y(Xbox) / Boton Milagro 3 (solo con la mejora "Doble Porcion")
-    Consumable,     // R / X
+    Consumable,     // R / X  (usa el consumible ELEGIDO de la alforja)
+    // La alforja (2026-10-03): 1-4 usan ese hueco directamente; la rueda del raton, la
+    // cruceta izq/der del mando o mantener USAR en tactil cambian el elegido.
+    Belt1,
+    Belt2,
+    Belt3,
+    Belt4,
+    BeltNext,
+    BeltPrev,
 
     // UI
     Pause,          // Esc / Start / Boton II / Atras de Android
@@ -93,6 +101,7 @@ struct TouchButton {
     bool   down   = false;
     bool   enabled = true;  // false = ni se dibuja ni responde
     f32    hold   = 0.0f;   // segundos pulsado
+    bool   hold_fired = false;   // USAR: el hold ya cambio de consumible (al soltar no se bebe)
 };
 
 // dash, consumible, milagro 1-3, arma secundaria, orar, pausa

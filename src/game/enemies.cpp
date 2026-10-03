@@ -570,9 +570,11 @@ static void detonate(ECSWorld& world, FaithSystem& faith, CombatEvents& events, 
             auto& h = world.healths[v];
             if (h.invulnerable || h.iframes_timer > 0.0f) continue;   // los i-frames mandan
             apply_damage(world, e, v, dmg);
-            if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 150.0f;
-            faith.on_take_damage();
-            events.player_hits++;
+            if (!world.take_shield_hit()) {   // la Piedra del Memorial se lo comio: ni empujon ni fe
+                if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 150.0f;
+                faith.on_take_damage();
+                events.player_hits++;
+            }
         } else if (is_disc) {
             // Un discipulo cae sin dar fe ni botin: no es un enemigo abatido
             if (world.has(v, Component::Movement)) world.movements[v].knockback = away * 90.0f;

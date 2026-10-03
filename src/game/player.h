@@ -38,14 +38,59 @@ struct Player {
     u32 relic_slot = UINT32_MAX;
     u32 relic_replaced = UINT32_MAX;  // La que acaba de salir, para poder nombrarla en el aviso
     u32 weapon_slot = UINT32_MAX;     // Secondary weapon
-    u32 consumable_slot = UINT32_MAX; // Held consumable (R)
-    // "Aceite Inagotable" (2 Reyes 4:6): el consumible que llevas tiene cargas y solo se
-    // suelta cuando se vacia la ultima. Sin cargas el milagro "Consumibles x2" del GDD no
-    // tenia donde apoyarse. 0 = no llevas nada.
-    u8  consumable_charges = 0;
+
+    // ---- LA ALFORJA (2026-10-03) ----------------------------------------------------
+    // Los consumibles ya no salen en las cartas ni se pisan unos a otros: se ENCUENTRAN en
+    // el mundo (secretos, elites, cofres, algun enemigo) y van a la alforja. Cada hueco
+    // guarda UN tipo con sus cargas; recoger otro igual suma carga, uno nuevo ocupa un hueco
+    // libre, y con la alforja llena se queda en el suelo (nada se pierde en silencio).
+    // Teclado: 1-4 usan ese hueco, R el elegido, rueda / [ ] lo cambian. Mando: X usa,
+    // cruceta izq/der cambia. Tactil: USAR usa, mantenerlo cambia. "Aceite Inagotable"
+    // (2 Reyes 4:6) suma cargas al elegido. `belt_cap` sale de El Santuario (Alforja Ancha).
+    static constexpr int BELT_MAX   = 4;   // = SAVE_BELT_SLOTS
+    static constexpr int BELT_STACK = 5;   // cargas por hueco al recoger (el milagro llega a 9)
+    struct BeltSlot {
+        u32 id = UINT32_MAX;
+        u8  charges = 0;
+        bool empty() const { return id == UINT32_MAX || charges == 0; }
+    };
+    BeltSlot belt[BELT_MAX];
+    int belt_cap = 2;
+    int belt_sel = 0;
+    bool belt_can_take(u32 id) const;          // ¿cabe una carga mas de este consumible?
+    bool belt_add(u32 id, int n = 1, int stack_cap = BELT_STACK);
+    int  belt_slot_of(u32 id) const;           // hueco que ya lleva ese tipo, o -1
+    int  belt_count() const;                   // huecos ocupados
+    void belt_fix_selection();                 // el elegido nunca apunta a un hueco vacio
+    void belt_cycle(int dir);                  // siguiente / anterior hueco ocupado
+    // Usa una carga del hueco `slot` (-1 = el elegido). Devuelve el id usado (UINT32_MAX
+    // si no se gasto nada) y deja en `fx` lo que ha hecho, ya escrito ("+35 de vida"), o
+    // por que no se gasto ("Ya tienes la vida llena": el Agua no se tira a lo tonto).
+    u32  use_belt(int slot, ECSWorld& world, struct FaithSystem& faith,
+                  const struct ItemRegistry& registry, char* fx, int fx_n);
 
     // Item-driven modifiers
     f32 damage_buff_timer = 0.0f;     // Vino Nuevo: +25% damage while > 0
+
+    // ---- Efectos PROPIOS de los objetos (2026-10-03) -------------------------------
+    // "Los objetos no son logicos": casi todos eran un +HP o un +dano que no se veia. Ahora
+    // cada pasivo trae una mecanica que se nota jugando. Se RECALCULAN desde `items` en
+    // recompute_item_mods (idempotente, como apply_relic_effects): se llama al conceder y
+    // al rehacer el equipo. Los que toca el combate se copian a ECSWorld::mods cada frame.
+    f32  clear_heal        = 0.0f;   // Pan de Cada Dia: vida al despejar un grupo
+    f32  miracle_cost_mult = 1.0f;   // Aceite de la Uncion: milagros mas baratos
+    f32  dash_cd_mult      = 1.0f;   // Sandalias del Profeta: dash antes
+    f32  heart_drop_mult   = 1.0f;   // Mana del Cielo: mas corazones
+    f32  heart_heal_mult   = 1.0f;   // Panes de Cebada: los corazones curan mas
+    f32  kill_faith        = 0.0f;   // Ceniza del Carmelo: fe por baja
+    bool burning_shots     = false;  // Antorcha del Altar: el disparo prende
+    bool has_shield        = false;  // Piedra del Memorial: escudo de un golpe
+    bool shield_up         = false;
+    f32  shield_timer      = 0.0f;   // recarga del escudo (s)
+    static constexpr f32 SHIELD_RECHARGE = 12.0f;
+    void recompute_item_mods();
+    // Coste en fe de un milagro con los descuentos que lleve el profeta
+    f32 miracle_cost(MiracleID id) const;
     f32 miracle_power     = 1.0f;     // Arca del Pacto: miracle damage multiplier
     // El Manto de Elias: multiplicador de la recarga de los milagros (0.75 = 25% mas rapido).
     // Se aplica al fijar el cooldown en MiracleSlot::try_cast, no al descontarlo, para que
@@ -142,8 +187,6 @@ struct Player {
     // Returns the message to show. `record` = false when re-applying inherited items.
     const char* grant_item(ECSWorld& world, struct FaithSystem& faith,
                            const struct ItemDef& def, bool record = true);
-    bool use_consumable(ECSWorld& world, struct FaithSystem& faith,
-                        const struct ItemRegistry& registry);
 };
 
 // =============================================================================

@@ -417,6 +417,38 @@ estado de las celdas.)
 
 ---
 
+## 4bis. Ofrendas, El Santuario y la alforja (2026-10-03)
+
+El usuario: *"el tema de las ofrendas no se entiende y lo que compras ahí no afecta lo
+suficiente al gameplay ... Los objetos tampoco son muy lógicos de usar."* La referencia para
+esto no es ALTTP sino los roguelikes que mejor resuelven el bucle entre partidas (Hades, Dead
+Cells): **lo que se gana se ve llegar, se sabe para qué sirve y se nota al comprarlo.**
+
+1. ✅ **Las ofrendas se entienden.** Contador en el HUD que salta al ingresar; la primera
+   ofrenda explica qué es (no se pierde al morir, se gasta en El Santuario); la derrota y la
+   victoria **desglosan** lo ganado (capítulo, bajas, grupos, jefes, diezmo, hallazgos) y dicen
+   qué se puede comprar ya. Desde la derrota se va **directo a El Santuario** y se reintenta ya
+   con la mejora puesta. El título marca El Santuario cuando hay algo comprable.
+2. ✅ **Lo comprado se nota.** Mejoras con **rangos** y cifra exacta ("Ahora: +20 de vida ·
+   Siguiente: +30"), y **dones** que cambian la partida: levantarse al caer (Aliento de Vida),
+   empezar eligiendo un objeto (Primicias), re-sortear las cartas (Echar Suertes), más huecos
+   de alforja, agua al empezar cada capítulo (La Tinaja de Sarepta), más ofrendas (Diezmo).
+   Cada don se VE en partida (alientos junto a la vida, placa de re-sorteo, banner al
+   levantarse). Y se cerraron dos fugas: lo comprado se perdía al Continuar y al pasar a Eliseo.
+3. ✅ **La alforja** (ALTTP tiene botellas; los ARPG, cinturón): los consumibles **se
+   encuentran en el mundo** (secretos, élites, cofres, jefes), van a huecos con cargas, se usan
+   con 1-4 / el elegido con R, y con la alforja llena se quedan en el suelo. Ya no compiten en
+   las cartas con los objetos de la partida, ni se pisan unos a otros en silencio.
+4. ✅ **Cada pasivo con su mecánica** (el Pan cura al vencer, la Antorcha prende, la Piedra es
+   un escudo, la Ceniza da fe por baja...), descripciones con la cifra de verdad, ficha de
+   "objeto obtenido" con cómo se usa, y **Equipo** en la pausa con todo lo que llevas.
+
+Cifras y dónde vive cada cosa: `src/systems/CLAUDE.md` (El Santuario) y `src/game/CLAUDE.md`
+(la alforja y los objetos). El guardado subió a **v12** (rangos, alforja, avisos), con su
+migración desde cualquier versión anterior.
+
+---
+
 ## 5. Personajes no jugables
 
 El PNJ del encuentro se dibujaba con la celda de **antorcha** del tileset. Eso se acabó.
@@ -465,6 +497,8 @@ El PNJ del encuentro se dibujaba con la celda de **antorcha** del tileset. Eso s
 | Duración de run | 20-35 min | 45-60 min (el autoguardado por sala ya sostiene la sesión móvil de 5-15) |
 | Estética | "Pixel Art 16-bit" | figurita 3D suave (decidido 2026-08-19) |
 | Personajes desbloqueables | tercer profeta jugable | **cosméticos** (decidido 2026-08-25) |
+| Meta-progresión | 8 mejoras de cifra | El Santuario con rangos y dones que cambian la partida (2026-10-03) |
+| Consumibles | carta de elección, 1 hueco | se encuentran en el mundo; alforja de 2-4 huecos (2026-10-03) |
 | Steam | integración Steamworks | logros propios, multiplataforma; Steam en el backlog |
 
 Lo que **no** cambia: las cifras de fe, milagros, enemigos y objetos del v1.0 siguen siendo las
