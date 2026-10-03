@@ -673,6 +673,10 @@ NAMES = SHEET_NAMES
 
 
 def build(name):
+    # Los jefes (bosses.py, 2026-10-03) van por su propio registro: humanoide + piezas propias.
+    from . import bosses
+    if name in bosses.SPECS:
+        return bosses.build_boss(name, bosses.SPECS[name])
     kind, spec = SPECS[name]
     if kind == 'humanoid':
         char = build_humanoid(name, spec)

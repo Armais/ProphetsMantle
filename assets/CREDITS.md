@@ -70,6 +70,7 @@ La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compil
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
 | 12 hojas de personaje | `assets/sprites/*.png` | `tools/blender/mantle_sprites/` (Blender 4.1) |
+| 9 hojas de jefe (`boss_*.png`, mismo formato) | `assets/sprites/boss_*.png` | `tools/blender/mantle_sprites/bosses.py` (Blender 4.2, 2026-10-03) |
 | Tileset de terreno | `assets/sprites/tiles.png` | `tools/blender/mantle_sprites/tiles.py` |
 | 8 estampas del prólogo + 10 intros de capítulo + 4 estampas del Ascenso (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
 | 22 retratos y viñetas | `assets/sprites/portraits.png` | `tools/blender/mantle_sprites/portraits.py` |
