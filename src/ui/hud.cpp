@@ -1864,7 +1864,9 @@ void HUD::draw_boss_bar(Renderer& renderer, const HUDContext& ctx) {
     draw_bar(renderer, {x, y, w, 6}, std::min(1.0f, ctx.boss_hp / ctx.boss_hp_max), bar_c, 1.25f);
     draw_badge(renderer, ctx.tileset, TileSprite::Skull, x - 6.0f, y + 3.0f, 11.0f);
     if (ctx.boss_invulnerable)
-        renderer.draw_text_centered(tr("INTOCABLE — acércate", "UNTOUCHABLE — get closer"), y - 19.0f, {215, 190, 230, 235}, 0.7f);
+        renderer.draw_text_centered(ctx.boss_invul_hint ? ctx.boss_invul_hint
+                                                        : tr("INTOCABLE — acércate", "UNTOUCHABLE — get closer"),
+                                    y - 19.0f, {215, 190, 230, 235}, 0.7f);
     // Jefe en GRUPO: una marca por cabeza viva bajo la barra, para ver caer al corro
     if (ctx.boss_group) {
         const f32 mw = 6.0f, gap = 3.0f;

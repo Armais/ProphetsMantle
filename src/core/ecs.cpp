@@ -35,6 +35,12 @@ void ECSWorld::clear() {
     for (u32 i = 0; i < MAX_ENTITIES; i++) {
         masks[i].reset();
     }
+    // Los peligros de un jefe no sobreviven al mundo que los lanzo (reintento, menu)
+    for (Hazard& h : hazards) h = Hazard{};
+    flash_request = 0.0f;
+    darkness_req  = 0.0f;
+    hazard_bursts = 0;
+    shield_blocks = 0;
 }
 
 // Entity ids are recycled through the free list, so a new entity can land on a slot whose
@@ -489,6 +495,11 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
             else if (is_enemy && enemy_ais[e].buff_timer > 0.0f) {
                 f32 p = 0.5f + 0.5f * std::sin(time * 9.0f + static_cast<f32>(e));
                 tint = {255, static_cast<u8>(150 - 40 * p), static_cast<u8>(120 - 40 * p), tint.a};
+            }
+            // Cegado por la hueste celestial (cap. 10): palido y frio, se ve que no esta
+            else if (is_enemy && enemy_ais[e].blind_timer > 0.0f) {
+                f32 p = 0.5f + 0.5f * std::sin(time * 5.0f + static_cast<f32>(e));
+                tint = {static_cast<u8>(165 + 40 * p), static_cast<u8>(185 + 40 * p), 255, tint.a};
             }
             // Player i-frames: blink
             if (is_player && h.iframes_timer > 0.0f && !movements[e].is_dashing) {

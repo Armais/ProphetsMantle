@@ -483,6 +483,28 @@ inline ChapterDef get_chapter_def(int chapter) {
     }
 }
 
+// La HOJA PROPIA de cada jefe (2026-10-03): mismo formato que toda hoja de personaje
+// (896x1920, 7x15 celdas de 128 px, fila = AnimID, pies en la fila 112). `which` = 0 la
+// cabeza, 1 su pareja (solo el cap. 5: Jezabel). En el cap. 3 es la del SUMO SACERDOTE: el
+// corro sigue con profeta_baal.png. Si el fichero aun no existe el Engine cae, en silencio
+// salvo una linea de log, a la hoja del enemigo base (`boss_type`) — igual que antes.
+inline const char* get_boss_sheet(int chapter, int which = 0) {
+    if (which == 1) return (chapter == 5) ? "sprites/jezabel.png" : nullptr;
+    switch (chapter) {
+        case 1:  return "sprites/boss_capitan.png";
+        case 2:  return "sprites/boss_sacerdote.png";
+        case 3:  return "sprites/boss_sumo_sacerdote.png";
+        case 4:  return "sprites/boss_desesperacion.png";
+        case 5:  return "sprites/acab.png";
+        case 6:  return "sprites/boss_espiritu.png";
+        case 7:  return "sprites/boss_acreedor.png";
+        case 8:  return "sprites/boss_muerte.png";
+        case 9:  return "sprites/boss_guiezi.png";
+        case 10: return "sprites/boss_benadad.png";
+        default: return nullptr;
+    }
+}
+
 // =============================================================================
 // Room Map (floor layout - which rooms connect to which)
 // =============================================================================

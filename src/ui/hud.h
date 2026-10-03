@@ -40,6 +40,9 @@ struct HUDContext {
     bool            boss_group = false;        // pinta una marca por cabeza viva bajo la barra
     bool            boss_invulnerable = false;
     const char*     boss_name = nullptr;
+    // Por que es intocable AHORA (idolos, corro, bajo el agua, la Muerte de lejos). nullptr =
+    // el aviso de siempre ("acercate"), que solo tiene sentido para la Muerte.
+    const char*     boss_invul_hint = nullptr;
     int             chapter   = 1;
     const char*     banner    = nullptr;   // Big centred title (chapter start)
     const char*     subbanner = nullptr;   // Smaller line under the banner

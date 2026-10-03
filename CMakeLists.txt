@@ -150,6 +150,8 @@ set(MANTLE_SOURCES
     src/game/faith.cpp
     src/game/miracles.cpp
     src/game/enemies.cpp
+    src/game/bosses.cpp
+    src/game/hazards.cpp
     src/game/items.cpp
     src/game/rooms.cpp
     src/game/combat.cpp
