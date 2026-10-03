@@ -10,6 +10,8 @@ assets/
   sprites/vfx.png       - Hoja de efectos propia: 8 fotogramas x 7 filas, celda 128 px (ver spawn_fx)
   sprites/portraits.png - 28 celdas, 6x5, celda 96 px (Bestiario del Códice + los locutores del pozo)
   sprites/icons.png     - 32 iconos: 22 objetos (celda = ItemDef::id) + 10 milagros (22 + MiracleID), 8x4 de 128 px (render/sprites.h, Icon)
+  sprites/estampas/     - 46 estampas de relato, ev_NN.png = id de Ev:: (768x384, tools/estampas), una viva a la vez
+  sprites/boss_*.png    - 9 hojas de jefe (mismo formato que las de personaje, tools/blender/mantle_sprites/bosses.py)
   sprites/chariot.png   - el Carro de Fuego del milagro: filas este/sur/norte, columnas 0-3 capa back y 4-7 capa front (Engine::collect_chariot_draws)
   sprites/              - Character sheets: 12 PNG (896x1920, 7 cols x 15 rows of 128x128 = 32 game units
                           x ASSET_SCALE 4, rows = AnimID, smooth alpha + 2px dark outline)

@@ -220,11 +220,92 @@ static void draw_chips(Renderer& renderer, const EffectChip* chips, int count, f
     }
 }
 
+// =============================================================================
+// Piezas de la caja de dialogo (2026-10-03): marco dorado, cinta del titulo y fondo
+// =============================================================================
+// Todo sale de las texturas procedurales del Renderer (panel en 9 trozos, disco, vineta):
+// ni un PNG nuevo para el marco. El dorado se construye con tres pasadas del mismo panel
+// (sombra, filo claro y cuerpo) y el bisel de `panel_tex` hace el resto.
+static Color with_a(Color c, f32 a) {
+    c.a = static_cast<u8>(std::max(0.0f, std::min(1.0f, a)) * c.a);
+    return c;
+}
+
+// Marco de lamina: sombra, moldura dorada con bisel, filete oscuro y cuatro clavos.
+// `shine` 0..1 recorre la moldura de izquierda a derecha (el brillo de la entrada).
+static void draw_gold_frame(Renderer& r, Rect in, f32 a, f32 shine) {
+    const f32 m = 3.2f;
+    r.draw_panel({in.x - m - 1.5f, in.y - m + 2.5f, in.w + 2 * m + 3.0f, in.h + 2 * m + 1.0f},
+                 with_a({0, 0, 0, 150}, a), 5.0f);
+    r.draw_panel({in.x - m - 0.6f, in.y - m - 0.6f, in.w + 2 * m + 1.2f, in.h + 2 * m + 1.2f},
+                 with_a({255, 230, 160, 255}, a), 4.6f);
+    r.draw_panel({in.x - m, in.y - m, in.w + 2 * m, in.h + 2 * m}, with_a({196, 150, 72, 255}, a), 4.2f);
+    r.draw_panel({in.x - m + 1.2f, in.y - m + 1.2f, in.w + 2 * m - 2.4f, in.h + 2 * m - 2.4f},
+                 with_a({150, 108, 46, 255}, a), 3.4f);
+    r.draw_rect({in.x - 0.9f, in.y - 0.9f, in.w + 1.8f, in.h + 1.8f}, with_a({28, 18, 12, 255}, a));
+    for (int k = 0; k < 4; k++) {
+        const Vec2 c = {(k & 1) ? in.x + in.w + m * 0.5f : in.x - m * 0.5f,
+                        (k & 2) ? in.y + in.h + m * 0.5f : in.y - m * 0.5f};
+        r.draw_disc(c, 2.3f, with_a({92, 62, 26, 255}, a));
+        r.draw_disc(c, 1.7f, with_a({255, 214, 120, 255}, a));
+        r.draw_disc({c.x - 0.45f, c.y - 0.45f}, 0.6f, with_a({255, 250, 220, 255}, a));
+    }
+    if (shine > 0.0f && shine < 1.0f) {
+        const f32 sx = in.x - m + (in.w + 2 * m) * shine;
+        for (int k = 0; k < 6; k++) {
+            const f32 w = 6.0f - k;
+            const u8 al = static_cast<u8>(30 + k * 22);
+            r.draw_rect({sx - w * 0.5f, in.y - m, w, m}, with_a({255, 248, 220, al}, a));
+            r.draw_rect({sx - w * 0.5f - 2.0f, in.y + in.h, w, m}, with_a({255, 248, 220, al}, a));
+        }
+    }
+}
+
+// Cinta con el titulo del relato, centrada en `cx`: dos colas plegadas y el cuerpo.
+static void draw_title_ribbon(Renderer& r, f32 cx, f32 y, const char* text, f32 a) {
+    const f32 sc = 0.95f;
+    const f32 tw = r.measure_text(text, sc);
+    const f32 w = tw + 26.0f, h = 13.0f;
+    const f32 x = cx - w * 0.5f;
+    // colas
+    for (int s = -1; s <= 1; s += 2) {
+        const f32 tx = (s < 0) ? x - 9.0f : x + w - 3.0f;
+        r.draw_panel({tx, y + 3.0f, 12.0f, h - 2.0f}, with_a({110, 30, 34, 255}, a), 2.0f);
+        r.draw_rect({(s < 0) ? tx : tx + 9.0f, y + 3.0f, 3.0f, h - 2.0f}, with_a({0, 0, 0, 0}, a));
+    }
+    r.draw_panel({x - 0.8f, y - 0.8f, w + 1.6f, h + 1.6f}, with_a({255, 214, 120, 255}, a), 3.0f);
+    r.draw_panel({x, y, w, h}, with_a({150, 38, 44, 255}, a), 2.6f);
+    r.draw_rect({x + 3.0f, y + 1.6f, w - 6.0f, 0.6f}, with_a({255, 190, 170, 120}, a));
+    r.draw_rect({x + 3.0f, y + h - 2.2f, w - 6.0f, 0.6f}, with_a({60, 10, 14, 160}, a));
+    r.draw_text(text, cx - tw * 0.5f, y + (h - Renderer::TEXT_LINE_UNITS * sc) * 0.5f - 0.3f,
+                with_a({255, 236, 196, 255}, a), sc);
+}
+
+// Caja de texto: sombra, filo dorado y cuerpo oscuro con degradado y brillo arriba.
+static void draw_text_box(Renderer& r, Rect b) {
+    r.draw_panel({b.x - 1.5f, b.y + 1.5f, b.w + 3.0f, b.h + 2.0f}, {0, 0, 0, 140}, 6.0f);
+    r.draw_panel({b.x - 2.0f, b.y - 2.0f, b.w + 4.0f, b.h + 4.0f}, {214, 172, 92, 250}, 6.0f);
+    r.draw_panel({b.x - 0.8f, b.y - 0.8f, b.w + 1.6f, b.h + 1.6f}, {96, 68, 34, 255}, 5.2f);
+    r.draw_panel(b, {30, 24, 34, 252}, 5.0f);
+    const int bands = 12;
+    for (int i = 0; i < bands; i++) {
+        const f32 k = static_cast<f32>(i) / bands;
+        r.draw_rect({b.x + 3.0f, b.y + 3.0f + k * (b.h - 6.0f), b.w - 6.0f, (b.h - 6.0f) / bands + 0.4f},
+                    {60, 44, 64, static_cast<u8>(40.0f * (1.0f - k))});
+    }
+    r.draw_rect({b.x + 5.0f, b.y + 1.4f, b.w - 10.0f, 0.6f}, {255, 236, 196, 70});
+}
+
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits) {
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
     const f32 H = static_cast<f32>(Config::GAME_HEIGHT);
-    renderer.draw_rect({0, 0, W, H}, {8, 6, 12, 130});
+    const bool has_plate = view.plate != TEXTURE_NONE;
+    // Con lamina el mundo se aparta mas: es una pagina del libro, no un aviso sobre el juego
+    renderer.draw_rect({0, 0, W, H}, {8, 6, 12, static_cast<u8>(has_plate ? 165 : 130)});
+    if (has_plate)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0.0f, 0.0f, 160.0f, 90.0f},
+                                  {-10.0f, -10.0f, W + 20.0f, H + 20.0f}, {0, 0, 0, 200});
 
     const f32 bx = 12.0f, bw = W - 24.0f;
     // Retrato de quien habla, si lo tiene. La celda mide 24 unidades (96 px) y se dibuja a
@@ -288,27 +369,61 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
     }
     const f32 by = H - box_h - 10.0f;
 
-    renderer.draw_rect({bx - 2, by - 2, bw + 4, box_h + 4}, {180, 150, 95, 240});
-    renderer.draw_rect({bx, by, bw, box_h}, {24, 19, 28, 248});
-    renderer.draw_rect({bx, by, bw, 1.0f}, {255, 255, 255, 40});
+    // --- La lamina del relato: enmarcada arriba, en el hueco que deja la caja. Entra con un
+    // fundido que la acerca (0,45 s), un brillo que recorre la moldura y, mientras se lee, un
+    // acercamiento lentisimo (Ken Burns) que la mantiene viva sin distraer.
+    if (has_plate) {
+        const TextureEntry* te = renderer.get_texture(view.plate);
+        const f32 tw = te ? static_cast<f32>(te->width) : 768.0f;
+        const f32 th = te ? static_cast<f32>(te->height) : 384.0f;
+        const f32 top = 7.0f, ribbon = 9.0f;
+        f32 ph = std::min(88.0f, by - ribbon - top - 4.0f);
+        ph = std::max(ph, 44.0f);
+        const f32 pw = ph * (tw / th);
+        const f32 e = view.open_t < 0.45f ? view.open_t / 0.45f : 1.0f;
+        const f32 k = e * e * (3.0f - 2.0f * e);
+        const f32 grow = 0.94f + 0.06f * k;
+        const Rect pr = {W * 0.5f - pw * grow * 0.5f, top + (1.0f - k) * 5.0f + ph * (1.0f - grow) * 0.5f,
+                         pw * grow, ph * grow};
+        draw_gold_frame(renderer, pr, k, (view.open_t - 0.25f) / 0.9f);
+        const f32 kb = std::min(view.open_t / 24.0f, 1.0f);
+        const f32 z = 1.0f + 0.05f * kb;
+        const Rect src = {tw * (1.0f - 1.0f / z) * (0.5f + 0.25f * kb), th * (1.0f - 1.0f / z) * 0.5f,
+                          tw / z, th / z};
+        renderer.draw_sprite_rect(view.plate, src, pr, {255, 255, 255, static_cast<u8>(255.0f * k)});
+        // luz de pagina: un filo claro arriba y una sombra suave abajo dentro del marco
+        renderer.draw_rect({pr.x, pr.y, pr.w, 0.6f}, {255, 246, 220, static_cast<u8>(70.0f * k)});
+        renderer.draw_rect({pr.x, pr.y + pr.h - 3.0f, pr.w, 3.0f}, {0, 0, 0, static_cast<u8>(50.0f * k)});
+        if (view.speaker && view.speaker[0])
+            draw_title_ribbon(renderer, W * 0.5f, pr.y + pr.h - 4.0f, view.speaker, k);
+    }
+
+    draw_text_box(renderer, {bx, by, bw, box_h});
 
     if (has_portrait) {
         const f32 pxx = bx + 5.0f, pyy = by + 5.0f;
-        renderer.draw_rect({pxx - 1.0f, pyy - 1.0f, PORTRAIT_W + 2.0f, PORTRAIT_W + 2.0f},
-                           {150, 122, 80, 200});
-        renderer.draw_rect({pxx, pyy, PORTRAIT_W, PORTRAIT_W}, {14, 11, 18, 240});
+        renderer.draw_panel({pxx - 1.6f, pyy - 1.6f, PORTRAIT_W + 3.2f, PORTRAIT_W + 3.2f},
+                            {214, 172, 92, 255}, 3.0f);
+        renderer.draw_panel({pxx - 0.6f, pyy - 0.6f, PORTRAIT_W + 1.2f, PORTRAIT_W + 1.2f},
+                            {70, 50, 26, 255}, 2.4f);
+        renderer.draw_rect({pxx, pyy, PORTRAIT_W, PORTRAIT_W}, {22, 17, 26, 255});
+        // halo calido detras de la cara: el retrato se despega del fondo
+        renderer.draw_sprite_rect(renderer.shadow_tex, {0.0f, 0.0f, 64.0f, 32.0f},
+                                  {pxx - 2.0f, pyy + 2.0f, PORTRAIT_W + 4.0f, PORTRAIT_W * 0.9f},
+                                  {255, 196, 120, 46});
         renderer.draw_sprite_rect(portraits, Portrait::src(view.portrait),
                                   {pxx, pyy, PORTRAIT_W, PORTRAIT_W}, Color::white());
         renderer.draw_rect({pxx, pyy, PORTRAIT_W, 0.7f}, {255, 240, 200, 90});
     }
 
     // Nombre de quien habla, sobre una placa que muerde el borde superior. Va alineado con
-    // el texto, no con el borde: el nombre y sus palabras se leen en la misma columna.
-    if (view.speaker && view.speaker[0]) {
+    // el texto, no con el borde: el nombre y sus palabras se leen en la misma columna. Con
+    // lamina el titulo ya va en la cinta: repetirlo en la placa seria decir dos veces lo mismo.
+    if (!has_plate && view.speaker && view.speaker[0]) {
         f32 nw = renderer.measure_text(view.speaker, 0.85f);
         f32 nx = has_portrait ? text_x - 5.0f : bx + 5.0f;
-        renderer.draw_rect({nx, by - 7.0f, nw + 10.0f, 12.0f}, {180, 150, 95, 245});
-        renderer.draw_rect({nx + 1.0f, by - 6.0f, nw + 8.0f, 10.0f}, {40, 31, 24, 250});
+        renderer.draw_panel({nx - 0.8f, by - 7.8f, nw + 11.6f, 13.6f}, {214, 172, 92, 250}, 3.0f);
+        renderer.draw_panel({nx + 0.4f, by - 6.6f, nw + 9.2f, 11.2f}, {48, 36, 28, 255}, 2.4f);
         renderer.draw_text(view.speaker, nx + 5.0f, by - 5.0f, {245, 218, 160, 255}, 0.85f);
     }
     for (int i = 0; i < n; i++)
@@ -334,8 +449,13 @@ void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f3
             Color c = on ? Color{250, 215, 130, 255} : Color{160, 152, 142, 235};
             // El borde derecho es el de siempre (bx+bw-5): sin retrato la banda tiene que
             // quedar exactamente donde estaba antes de que existiera este campo.
-            if (on) renderer.draw_rect({text_x - 3.0f, oy - 1.0f,
-                                        (bx + bw - 5.0f) - (text_x - 3.0f), opt_h[i] - 1.0f}, {70, 56, 34, 200});
+            if (on) {
+                const Rect sr = {text_x - 3.0f, oy - 1.0f, (bx + bw - 5.0f) - (text_x - 3.0f), opt_h[i] - 1.0f};
+                const f32 pulse = 0.75f + 0.25f * std::sin(time * 4.0f);
+                renderer.draw_panel({sr.x - 0.6f, sr.y - 0.6f, sr.w + 1.2f, sr.h + 1.2f},
+                                    {214, 172, 92, static_cast<u8>(150.0f * pulse)}, 2.6f);
+                renderer.draw_panel(sr, {84, 62, 34, 235}, 2.2f);
+            }
             char buf[96];
             snprintf(buf, sizeof(buf), "%s%s", on ? "> " : "  ", view.options[i]);
             renderer.draw_text(buf, text_x, oy, c, 0.8f);

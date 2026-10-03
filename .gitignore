@@ -68,3 +68,6 @@ tools/audio/sonicpi/tmp/
 
 # Binario de Linux (build/linux, SDL sin ventana: guiones en contenedores)
 /MANTLE
+tools/estampas/tmp/
+tools/estampas/figs/_tmp/
+tools/estampas/figs/

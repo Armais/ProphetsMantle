@@ -136,6 +136,10 @@ struct DialogueView {
     // que si, el boton (o el [ESC]) mentiria.
     bool skippable    = false;
     bool skip_pressed = false;   // dedo apoyado en SALTAR: el boton se enciende
+    // La ESTAMPA del relato (tools/estampas): con ella la caja pasa a ser una lamina enmarcada
+    // arriba, el titulo en una cinta y el texto debajo. TEXTURE_NONE = la caja de siempre.
+    u32  plate  = TEXTURE_NONE;
+    f32  open_t = 0.0f;          // segundos desde que se abrio: entrada animada de la lamina
 };
 void draw_dialogue(Renderer& renderer, const DialogueView& view, u32 tileset, f32 time,
                    u32 portraits = TEXTURE_NONE);

@@ -84,6 +84,7 @@ struct DialogueState {
     // El Ascenso se juega sobre NEGRO y no sobre el mundo: pasa fuera de una sala, y
     // dejar detras la arena del jefe del capitulo 5 seria mentir sobre donde estas.
     bool dark = false;
+    f32  t = 0.0f;           // segundos desde que se abrio la caja (entrada animada de la estampa)
 };
 
 enum class Act : u8 {
@@ -225,6 +226,10 @@ struct Engine {
     u32 icons_texture   = TEXTURE_NONE;   // assets/sprites/icons.png (render/sprites.h, namespace Icon)
     u32 chariot_texture = TEXTURE_NONE;   // assets/sprites/chariot.png (Carro de Fuego visible)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
+    // La ESTAMPA del relato abierto (assets/sprites/estampas/ev_NN.png, tools/estampas). Se carga
+    // al abrir el relato y se descarga al abrir el siguiente: solo hay una viva, 1,2 MB de VRAM.
+    u32 plate_texture = TEXTURE_NONE;
+    int plate_event   = -1;
     u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
     // Hojas de Acab y Jezabel (896x1920, como las de los profetas): solo las usan las escenas
     // guionizadas (start_scene), donde estan de pie en el escenario.
@@ -475,6 +480,7 @@ struct Engine {
     void reset_boss_bar();
     void update_boss_bar();      // Cada frame: suma cabeza + corro y loguea las bajas del grupo
     void open_dialogue(int event_id);           // Encuentro biblico -> GameScene::Dialogue
+    void load_event_plate(int event_id);        // La estampa del relato (assets/sprites/estampas)
     void update_dialogue(f32 dt);               // Avance de lineas + eleccion
     void apply_event_choice(int event_id, int option);  // Efecto de la decision
     // Etiquetas de consecuencia de una opcion, de la misma tabla que la aplica (events.h)

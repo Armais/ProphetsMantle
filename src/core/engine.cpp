@@ -1273,6 +1273,10 @@ void Engine::render() {
             // tactil aparece el boton. Un encuentro del pozo no se salta.
             v.skippable = scene_step >= 0;
             v.skip_pressed = dialogue_skip_pressed;
+            if (dialogue.event_id >= 0 && dialogue.event_id < Ev::COUNT && dialogue.event_id == plate_event) {
+                v.plate = plate_texture;
+                v.open_t = dialogue.t;
+            }
             if (dialogue.resolved) {
                 v.body = dialogue.result;
                 // Y debajo, lo que acaba de pasar: las mismas etiquetas que tenia la opcion
@@ -4229,12 +4233,34 @@ void Engine::open_dialogue(int event_id) {
     // juego a mitad de la caja no deberia perderlo del Codice. Las cajas de escena
     // (game/scenes.h) no son relatos: quedan fuera de la mascara.
     if (event_id < Ev::COUNT) codex_see_event(save.data, event_id);
+    load_event_plate(event_id);
     dialogue.auto_timer = autoplay.active ? 1.0f : 0.0f;
     audio.play_sfx(SfxID::Notification, 0.7f);
     change_scene(GameScene::Dialogue);
 }
 
+// La estampa del relato (tools/estampas, una por id de `Ev::`). Las cajas de escena
+// (Sc::LINE_BASE en adelante) no llevan: son dialogos, no relatos. Sin el PNG la caja se
+// pinta como siempre (draw_dialogue mira `plate`).
+void Engine::load_event_plate(int event_id) {
+    const int want = (event_id >= 0 && event_id < Ev::COUNT) ? event_id : -1;
+    if (want == plate_event) return;
+    char path[64];
+    if (plate_event >= 0) {
+        std::snprintf(path, sizeof(path), "sprites/estampas/ev_%02d.png", plate_event);
+        renderer.unload_texture(path);
+    }
+    plate_texture = TEXTURE_NONE;
+    plate_event = want;
+    if (want < 0) return;
+    std::snprintf(path, sizeof(path), "sprites/estampas/ev_%02d.png", want);
+    plate_texture = renderer.load_texture(path, /*smooth=*/true);
+    if (plate_texture == TEXTURE_NONE) SDL_Log("Estampa ausente: %s", path);
+    else                               SDL_Log("Estampa del relato %d: %s", want, path);
+}
+
 void Engine::update_dialogue(f32 dt) {
+    dialogue.t += dt;
     EventDef def = get_dialogue_def(dialogue.event_id);
     int opt_count = def.options[1].label ? 2 : 1;
 
