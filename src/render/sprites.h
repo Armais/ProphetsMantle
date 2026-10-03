@@ -234,6 +234,29 @@ namespace Icon {
     constexpr int MIRACLES = 10;
     constexpr int NONE = -1;
 
+    // El Santuario (icons.py, `SANCTUARY`, 2026-10-03): un icono PROPIO por mejora, celdas
+    // 32..50. Antes tomaba prestadas celdas de objetos y milagros y se leian mal: la
+    // antorcha como "Fuego Interior", un cuenco de ceniza como "Fe Renovada", unas tortas
+    // como "La Mesa de Eliseo" y una escalinata como "La Sombra que Vuelve".
+    constexpr int SANCT_CORAZON   = 32;   // Provision del Cuervo: corazon con el cuervo
+    constexpr int SANCT_HOGUERA   = 33;   // Fuego Interior
+    constexpr int SANCT_SANDALIA  = 34;   // Sandalias Rapidas: una sandalia con estelas
+    constexpr int SANCT_HALO      = 35;   // Fe Renovada
+    constexpr int SANCT_ALIENTO   = 36;   // Aliento de Vida: corazon con el soplo
+    constexpr int SANCT_PRIMICIAS = 37;   // gavilla, granada y racimo
+    constexpr int SANCT_SUERTES   = 38;   // dos dados
+    constexpr int SANCT_ALFORJA   = 39;
+    constexpr int SANCT_TINAJA    = 40;   // la tinaja de Sarepta rebosando
+    constexpr int SANCT_DIEZMO    = 41;   // bolsa y monedas
+    constexpr int SANCT_ALTAR     = 42;   // altar de cuernos con sus varas
+    constexpr int SANCT_HERENCIA  = 43;   // el manto de Elias, con luz
+    constexpr int SANCT_LAMPARA   = 44;   // Doble Porcion Mejorada: lampara de tres llamas
+    constexpr int SANCT_ESCUELA   = 45;   // rollo y dos cayados
+    constexpr int SANCT_MESA      = 46;   // La Mesa de Eliseo
+    constexpr int SANCT_SOMBRA    = 47;   // La Sombra que Vuelve: cuadrante solar
+    constexpr int SANCT_CAYADO    = 48;   // skins del cayado: 48 + StaffSkin id - 1
+    constexpr int SANCT_LAST      = 50;
+
     inline int item(u32 id)    { return id < static_cast<u32>(ITEMS) ? static_cast<int>(id) : NONE; }
     inline int miracle(u32 m)  { return m < static_cast<u32>(MIRACLES) ? MIRACLE_BASE + static_cast<int>(m) : NONE; }
     inline Rect src(int index) {

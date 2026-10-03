@@ -141,7 +141,8 @@ que se deben explorar"*, *"la ubicacion del jefe ... no debe ser visible desde e
   `draw_icon(renderer, idx, dst)` devuelve false sin hoja, para que cada sitio caiga a su
   icono generico del tileset. La usan la fila de objetos, la celda del arma, las celdas de
   milagro, los botones tactiles USAR / ARMA, las cartas de eleccion (`ChoiceCard::icon_idx`,
-  a 25 unidades) y la ficha del Codice (Objetos y Milagros, en el hueco del retrato).
+  a 25 unidades), la ficha del Codice (Objetos y Milagros, en el hueco del retrato) y El
+  Santuario, que desde el 2026-10-03 tiene celdas PROPIAS (`Icon::SANCT_*`, 32..50).
 
 ### El mapa se PINTA en una textura (2026-09-12)
 
@@ -304,10 +305,10 @@ etiqueta de la partida caducada es la candidata natural a desbordarse.
 | Pantalla | PC | Tactil |
 |---|---|---|
 | Idioma | 94 / 17 / 13 | 92 / **28** / 22 |
-| Pausa | 78 / 15 / 12 | 70 / **25** / 19 |
-| Derrota | 116 / 15 / 12 | 112 / **28** / 22 (la nota sube a y=101) |
+| Pausa | 72 / 15 / 12 (5 filas desde el 2026-10-03) | 50 / **24** / 19, titulo a y=22 |
+| Derrota | 121 / 13,5 / 11 (3 filas + desglose encima) | 117 / **20,5** / 17 |
 | Opciones | 52 / 15, placa 14 | 48 / **21**, placa **19**, ventana de 6 |
-| Santuario | paso 14,5, 7 filas | paso **20**, **5** filas |
+| Santuario | paso 16, 7 filas + detalle (2026-10-03) | paso **20**, **5** filas + detalle |
 | Codice | paso 10, 8 filas | paso **15**, **5** filas, pestañas de 16 |
 | Pregunta del tutorial | 94 / 17 / 13 | 92 / **26** / 20, top **78** |
 
@@ -419,3 +420,38 @@ hit-test de rect, asi que redondear el dibujo no cambia ni un pixel de lo que re
 **El HUD no puede mentir sobre lo que pinta**: durante el tutorial el minimapa muestra el
 capítulo 1 —el que se va a jugar al salir—, así que `HUDContext::tutorial` cambia la línea del
 objetivo por "Mapa del cap. 1" en vez de dar una dirección de jefe que aquí no significa nada.
+
+## Lo que se compra y lo que se lleva, a la vista (2026-10-03)
+
+El usuario: las ofrendas "no se entienden", lo comprado "no afecta" y los objetos "no son
+logicos de usar". Buena parte era de esta capa: nada de eso se VEIA. Piezas nuevas:
+
+- **Contador de ofrendas** (`HUD::draw_offerings`) bajo la fe, a la derecha del panel de
+  vitales: moneda dorada + banco; al ingresar SALTA y dice "+N" (`HUDContext::offering_pop`).
+  `offerings = -1` lo apaga (tutorial).
+- **Dones junto a la vida**: un aliento dorado por cada Aliento de Vida que queda, y la
+  **piedra** de la Piedra del Memorial a la derecha del panel (apagada con su barrido mientras
+  recarga). En el mundo, el escudo es un aro de piedra a los pies (`Engine::render`).
+- **La alforja** (`HUD::draw_belt`, `HUD::belt_cell_rect`): abajo a la izquierda en PC (14 u,
+  la tecla 1-4 encima, "x2" de cargas, marco de oro en el ELEGIDO y "[R] <nombre>" al lado);
+  en tactil sube a y=58, sin teclas (alli se usa con USAR, que lleva el icono del elegido y
+  se mantiene para cambiar). "[P] Orar xN" encima cuando hay Altar Portatil.
+- **Ficha de objeto obtenido** (`HUD::draw_pickup_card`, datos en `Engine::announce_item`):
+  arriba al centro, entra deslizandose 4 s: icono, nombre en su color de rareza, QUE hace y
+  COMO se usa ("A la alforja: pulsa [2] para usarlo", "Arma nueva: [I] o clic derecho").
+- **Numeros flotantes con tipo** (`ECSWorld::DamagePopup::kind`): dano blanco/oro, curacion
+  verde "+N", fe dorada "+N fe", quemadura naranja.
+- `draw_message` baja a escala 0,6 si a 0,75 aun no cabe en 300 unidades.
+- **Cartas de eleccion**: 92 de alto (eran 78) y el ajuste de lineas de `Renderer::wrap_text`
+  (el de 40 bytes de este fichero cortaba en silencio las descripciones con tildes; se borro).
+  Debajo, la placa **"[R] Echar suertes (N)"** cuando hay re-sorteos (`choice_reroll_rect`,
+  dibujo y toque de la misma formula).
+- **Equipo** (fila 1 de la pausa, `Engine::render_equipment`): cifras reales (vida, dano con el
+  multiplicador de fe, cadencia en disparos/s, velocidad, fe, reliquia, arma), los dones del
+  Santuario activos y lo que queda de cada uno, la alforja y TODOS los objetos con icono,
+  nombre y efecto (W/S recorre si hay mas de seis). **Insertar la fila desplazo las de debajo**
+  (Codice 2, Opciones 3, Salir 4): los guiones que bajaban por la pausa se re-pinnearon.
+- **Derrota y victoria** pintan el desglose de ofrendas (`Engine::render_run_summary`) y la
+  derrota tiene **El Santuario** como fila del medio. El titulo marca El Santuario con una
+  moneda cuando hay algo comprable (`MenuSystem::sanctuary_ready`). El Santuario en si esta en
+  `src/systems/CLAUDE.md`.

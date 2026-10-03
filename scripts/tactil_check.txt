@@ -22,7 +22,8 @@ faith 100
 learn 0 0
 learn 2 1
 learn 9 2
-give 9
+# (2026-10-03) Vino Nuevo y no Agua: con `god` la vida va llena y el Agua ya no se gasta
+give 8
 give 0
 meta 5
 wait 0.6
@@ -48,7 +49,7 @@ wait 0.1
 untouch 303 123
 wait 0.6
 
-# --- Consumible: el Agua del Jordan cura 30 HP ---
+# --- Consumible (USAR, al SOLTAR el dedo): el Vino Nuevo se bebe ---
 touch 276 123
 wait 0.2
 untouch 276 123

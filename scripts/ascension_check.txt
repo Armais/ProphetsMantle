@@ -58,6 +58,9 @@ wait 0.1
 # --- El Manto en la pestana Objetos del Codice (ultima fila, dorado) ---
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.3
 press confirm
@@ -108,6 +111,9 @@ wait 0.8
 # --- Guardar y volver a cargar: el Manto y los slots tienen que sobrevivir ---
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.2
 press down

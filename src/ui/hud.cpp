@@ -54,35 +54,6 @@ static void draw_bar(Renderer& renderer, Rect r, f32 ratio, Color fill, f32 fram
     renderer.draw_rect({r.x, r.y, r.w, 0.5f}, {255, 255, 255, 40});
 }
 
-// Greedy word wrap into fixed-size lines; returns how many lines were produced.
-static int wrap_text(const Renderer& renderer, const char* text, f32 max_w, f32 scale,
-                     char out[][40], int max_lines) {
-    int lines = 0;
-    const char* p = text;
-    char cur[40] = {0};
-    while (*p && lines < max_lines) {
-        const char* space = std::strchr(p, ' ');
-        size_t wlen = space ? static_cast<size_t>(space - p) : std::strlen(p);
-        char word[40];
-        if (wlen >= sizeof(word)) wlen = sizeof(word) - 1;
-        std::memcpy(word, p, wlen);
-        word[wlen] = 0;
-
-        char candidate[80];
-        snprintf(candidate, sizeof(candidate), "%s%s%s", cur, cur[0] ? " " : "", word);
-        if (cur[0] && renderer.measure_text(candidate, scale) > max_w) {
-            snprintf(out[lines++], 40, "%s", cur);
-            snprintf(cur, sizeof(cur), "%s", word);
-        } else {
-            snprintf(cur, sizeof(cur), "%s", candidate);
-        }
-        if (!space) break;
-        p = space + 1;
-    }
-    if (cur[0] && lines < max_lines) snprintf(out[lines++], 40, "%s", cur);
-    return lines;
-}
-
 static Color rarity_color(ItemRarity r) { return item_rarity_color(r); }   // game/items.h
 
 static const char* rarity_name(ItemRarity r) {
@@ -107,7 +78,9 @@ static TileSprite category_icon(ItemCategory c) {
 
 // Reparto de las cartas. Lo usan el DIBUJO y el hit-test tactil: la carta que se toca es
 // la que se ve, sin dos copias de la formula. Alto generoso (la carta crece al elegirse).
-constexpr f32 CARD_W = 92.0f, CARD_H = 78.0f, CARD_GAP = 8.0f, CARD_TOP = 38.0f;
+// 92 de alto (2026-10-03): las descripciones dicen ya QUE hace cada objeto con su cifra,
+// y en 78 no cabian cinco lineas bajo el icono.
+constexpr f32 CARD_W = 92.0f, CARD_H = 92.0f, CARD_GAP = 8.0f, CARD_TOP = 34.0f;
 Rect choice_card_rect(int i, int count) {
     if (count <= 0) return {0, 0, 0, 0};
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
@@ -161,26 +134,30 @@ void draw_choice_cards(Renderer& renderer, const char* title, const ChoiceCard* 
 
         // Se mide todo antes de pintar y el bloque se centra bajo el icono: al quitar la
         // referencia biblica del pie, la carta se quedaba con un tercio vacio abajo.
-        char lines[2][40];
-        int n = wrap_text(renderer, card.name, CARD_W - 8.0f, 0.8f, lines, 2);
-        char dl[4][40];
-        int dn = wrap_text(renderer, card.desc, CARD_W - 8.0f, 0.62f, dl, 4);
+        // Renderer::wrap_text y no el ajuste de 40 bytes de este fichero: con las
+        // descripciones honestas (2026-10-03) una linea con tildes pasaba de 40 bytes y la
+        // carta se comia media frase EN SILENCIO. Este no trunca palabras y, si algo no
+        // cabe, lo dice en el log (TEXT TRUNCATED).
+        std::string lines[2];
+        int n = renderer.wrap_text(card.name, CARD_W - 8.0f, 0.8f, lines, 2);
+        std::string dl[5];
+        int dn = renderer.wrap_text(card.desc, CARD_W - 8.0f, 0.6f, dl, 5);
 
-        f32 content_h = n * 8.0f + 3.0f + dn * 6.5f + 2.0f
+        f32 content_h = n * 8.0f + 3.0f + dn * 6.3f + 2.0f
                       + (card.tag[0]   ? 7.0f : 0.0f)
                       + (card.extra[0] ? 7.0f : 0.0f);
         const f32 body_top = y + 29.0f;               // justo debajo del icono
         f32 ty = body_top + std::max(0.0f, (y + h - 5.0f - body_top - content_h) * 0.5f);
 
         for (int l = 0; l < n; l++)
-            centred(lines[l], cx, ty + l * 8.0f, on ? TEXT_LIGHT : Color{215, 208, 195, 255}, 0.8f);
+            centred(lines[l].c_str(), cx, ty + l * 8.0f, on ? TEXT_LIGHT : Color{215, 208, 195, 255}, 0.8f);
         ty += n * 8.0f + 3.0f;
 
         if (card.tag[0]) { centred(card.tag, cx, ty, rc, 0.55f); ty += 7.0f; }
         if (card.extra[0]) { centred(card.extra, cx, ty, {230, 170, 90, 255}, 0.55f); ty += 7.0f; }
 
         for (int l = 0; l < dn; l++)
-            centred(dl[l], cx, ty + 2.0f + l * 6.5f, {180, 172, 160, 255}, 0.62f);
+            centred(dl[l].c_str(), cx, ty + 2.0f + l * 6.3f, {190, 182, 170, 255}, 0.6f);
     }
 
     // En tactil la carta se toma con DOS toques (el primero elige), igual que una opcion
@@ -591,7 +568,9 @@ void HUD::render(Renderer& renderer, const Player& player,
     }
 
     draw_faith_bar(renderer, faith, ctx);
+    draw_offerings(renderer, ctx);
     draw_inventory(renderer, player, ctx);
+    draw_belt(renderer, player, ctx);
     // En VERTICAL las celdas de milagro se han ido a la banda negra con el resto de los
     // botones, y ahi no llega el objetivo de 320x180: las pinta la pasada de superposicion
     // (Engine::render), igual que dash y consumible.
@@ -603,6 +582,7 @@ void HUD::render(Renderer& renderer, const Player& player,
     }
     draw_boss_bar(renderer, ctx);
     draw_message(renderer, ctx);
+    draw_pickup_card(renderer, ctx);
     draw_banner(renderer, ctx);
     draw_touch_controls(renderer, player, ctx);
     // El mapa grande va EL ULTIMO: ahora ocupa casi toda la pantalla y con el orden de
@@ -625,6 +605,51 @@ void HUD::draw_health_bar(Renderer& renderer, f32 current, f32 max, const HUDCon
     char buf[16];
     snprintf(buf, sizeof(buf), "%.0f", current);
     renderer.draw_text(buf, BAR_X + BAR_W + 4, y - 1.5f, TEXT_LIGHT, 1.0f);
+
+    // Piedra del Memorial: la piedra junto a la vida; apagada (con su recarga barriendo)
+    // mientras vuelve. Lo que protege tiene que verse en el HUD, no solo en el suelo.
+    if (ctx.shield >= 0) {
+        const Rect r = {2.0f + BAR_X + BAR_W + 30.0f + 2.0f, y - 1.0f, 9.0f, 9.0f};
+        renderer.draw_rect({r.x - 0.75f, r.y - 0.75f, r.w + 1.5f, r.h + 1.5f},
+                           ctx.shield > 0 ? Color{220, 214, 200, 230} : Color{80, 76, 72, 200});
+        renderer.draw_rect(r, {24, 20, 26, 220});
+        draw_icon(renderer, Icon::item(11), r, ctx.shield > 0 ? Color::white() : Color{120, 116, 110, 200});
+        if (ctx.shield == 0 && ctx.shield_recharge > 0.0f)
+            renderer.draw_rect({r.x, r.y, r.w, r.h * ctx.shield_recharge}, {10, 8, 12, 170});
+    }
+    // Aliento de Vida (El Santuario): un aliento dorado por cada vez que te levantaras.
+    // Junto a la vida, porque es vida: lo que se compro tiene que verse en la partida.
+    for (int i = 0; i < ctx.revives && i < 3; i++) {
+        const f32 cx = 2.0f + BAR_X + BAR_W + 30.0f - 2.0f - i * 6.0f, cy = y + 3.0f;
+        const f32 k = 0.85f + 0.15f * std::sin(ctx.time * 3.0f + i);
+        renderer.draw_disc({cx, cy}, 2.6f * k, {255, 214, 110, 235});
+        renderer.draw_disc({cx - 0.6f, cy - 0.7f}, 1.0f, {255, 250, 220, 240});
+    }
+}
+
+// Las ofrendas del banco, bajo la fe: la moneda dorada y el numero. Al entrar unas cuantas
+// el contador SALTA y dice "+N": asi se ve que lo del suelo va a algun sitio, y que ese
+// sitio se queda contigo aunque mueras.
+void HUD::draw_offerings(Renderer& renderer, const HUDContext& ctx) {
+    if (ctx.offerings < 0) return;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", ctx.offerings);
+    const f32 pop = ctx.offering_pop > 0.0f ? ctx.offering_pop : 0.0f;
+    const f32 sc = 0.62f + 0.25f * pop * pop;
+    const f32 right = 2.0f + BAR_X + BAR_W + 30.0f - 2.0f;
+    const f32 w = renderer.measure_text(buf, sc);
+    const f32 x = right - w, y = 23.0f - 2.0f * pop;
+    const f32 cx = x - 4.5f, cy = y + 3.4f;
+    renderer.draw_disc({cx, cy + 0.5f}, 2.6f, {110, 70, 20, 220});
+    renderer.draw_disc({cx, cy}, 2.6f, {255, 206, 90, 255});
+    renderer.draw_disc({cx - 0.7f, cy - 0.7f}, 0.9f, {255, 248, 210, 240});
+    renderer.draw_text(buf, x, y, pop > 0.0f ? Color{255, 240, 170, 255} : Color{245, 210, 120, 235}, sc);
+    if (pop > 0.0f && ctx.offering_pop_amount != 0) {
+        char d[16];
+        snprintf(d, sizeof(d), "%+d", ctx.offering_pop_amount);
+        renderer.draw_text(d, right + 2.0f, y - 6.0f * (1.0f - pop),
+                           {255, 230, 140, static_cast<u8>(255.0f * std::min(1.0f, pop * 2.0f))}, 0.6f);
+    }
 }
 
 void HUD::draw_faith_bar(Renderer& renderer, const FaithSystem& faith, const HUDContext& ctx) {
@@ -719,19 +744,13 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         if (shown >= 20) break;
         const ItemDef* def = ctx.registry->get(id);
         if (!def) continue;
-        bool held  = (id == player.consumable_slot);
+        const bool held  = false;   // los consumibles viven en la alforja, no en esta fila
         bool relic = (id == player.relic_slot);
         // Frame carries the rarity colour; the icon stays untinted so it reads at 9 units
         renderer.draw_rect({x - 1, Y - 1, S + 2, S + 2}, held ? Color{245, 205, 90, 230} : rarity_color(def->rarity));
         renderer.draw_rect({x, Y, S, S}, {22, 16, 26, 220});
         if (!draw_icon(renderer, Icon::item(id), {x - 0.5f, Y - 0.5f, S + 1.0f, S + 1.0f}))
             renderer.draw_sprite_rect(ctx.tileset, get_tile_src(category_icon(def->category)), {x, Y, S, S});
-        // Cargas del consumible (Aceite Inagotable): sin el numero, "+2 cargas" es invisible
-        if (held && player.consumable_charges > 1) {
-            char n[4];
-            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
-            renderer.draw_text(n, x + S - 3.0f, Y + S - 5.0f, {255, 235, 180, 250}, 0.6f);
-        }
         // La reliquia que llevas puesta: solo cabe una (GDD 7.3), y sin marca la fila de
         // objetos no distingue "la que me hace efecto" de "una legendaria mas".
         if (relic) {
@@ -744,9 +763,104 @@ void HUD::draw_inventory(Renderer& renderer, const Player& player, const HUDCont
         x += S + 2.0f;
         shown++;
     }
-    // En tactil el consumible se usa con el boton USAR, no con la R
-    if (player.consumable_slot != UINT32_MAX && !(ctx.input && ctx.input->touch_ui))
-        renderer.draw_text("R", x + 1.0f, Y + 1.5f, {245, 205, 90, 230}, 0.6f);
+}
+
+// =============================================================================
+// La alforja (2026-10-03)
+// =============================================================================
+// Abajo a la izquierda, como el cinturon de pociones de un ARPG: un hueco por consumible,
+// su tecla encima (1-4), sus cargas debajo y el ELEGIDO (el que usa R / X / USAR) con marco
+// de oro. En tactil sube encima del pulgar del joystick y sin teclas: alli se usa con USAR.
+Rect HUD::belt_cell_rect(int i, bool touch) {
+    const f32 S = touch ? 12.0f : 14.0f;
+    const f32 x0 = 4.0f, y0 = touch ? 58.0f : static_cast<f32>(Config::GAME_HEIGHT) - S - 5.0f;
+    return {x0 + i * (S + 3.0f), y0, S, S};
+}
+
+void HUD::draw_belt(Renderer& renderer, const Player& player, const HUDContext& ctx) {
+    if (ctx.offerings < 0 && player.belt_count() == 0) return;   // tutorial sin nada: limpio
+    const bool touch = (ctx.input && ctx.input->touch_ui);
+    const int cap = std::min(player.belt_cap, Player::BELT_MAX);
+    for (int i = 0; i < cap; i++) {
+        const Rect r = belt_cell_rect(i, touch);
+        const auto& b = player.belt[i];
+        const bool sel = !b.empty() && i == player.belt_sel;
+        renderer.draw_rect({r.x - 1.0f, r.y - 1.0f, r.w + 2.0f, r.h + 2.0f},
+                           sel ? Color{245, 205, 90, 240} : b.empty() ? Color{70, 64, 72, 150} : Color{150, 140, 125, 220});
+        renderer.draw_rect(r, b.empty() ? Color{22, 18, 26, 120} : Color{24, 19, 28, 225});
+        if (!b.empty()) {
+            if (!draw_icon(renderer, Icon::item(b.id), {r.x - 0.5f, r.y - 0.5f, r.w + 1.0f, r.h + 1.0f}) && ctx.tileset != TEXTURE_NONE)
+                renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::Orb), r);
+            if (b.charges > 1) {
+                char n[6];
+                snprintf(n, sizeof(n), "x%u", static_cast<unsigned>(b.charges));
+                const f32 nw = renderer.measure_text(n, 0.5f);
+                renderer.draw_rect({r.right() - nw - 1.0f, r.bottom() - 5.0f, nw + 1.5f, 5.0f}, {10, 8, 12, 200});
+                renderer.draw_text(n, r.right() - nw - 0.5f, r.bottom() - 5.5f, {255, 238, 190, 255}, 0.5f);
+            }
+        }
+        if (!touch) {
+            // La tecla del hueco, en chapa, encima de la celda
+            char k[4];
+            snprintf(k, sizeof(k), "%d", i + 1);
+            renderer.draw_text(k, r.x + 1.0f, r.y - 6.5f, b.empty() ? Color{110, 104, 98, 170}
+                                                                    : Color{235, 225, 200, 240}, 0.5f);
+        }
+    }
+    // El elegido, con su tecla de "usar" y su nombre, a la derecha de la fila
+    if (player.belt_count() > 0) {
+        const auto& b = player.belt[player.belt_sel];
+        const Rect last = belt_cell_rect(cap - 1, touch);
+        const ItemDef* d = ctx.registry ? ctx.registry->get(b.id) : nullptr;
+        if (d && !touch) {
+            char lab[64];
+            snprintf(lab, sizeof(lab), "[R] %s", d->name);
+            renderer.draw_text(lab, last.right() + 4.0f, last.y + 4.0f, {225, 210, 175, 220}, 0.55f);
+        }
+    } else if (!touch && ctx.offerings >= 0) {
+        const Rect last = belt_cell_rect(cap - 1, touch);
+        renderer.draw_text(tr("Alforja", "Satchel"), last.right() + 4.0f, last.y + 4.0f, {130, 122, 112, 170}, 0.5f);
+    }
+    // Altar Portatil: oraciones sin altar que quedan, con su tecla, en la misma columna que
+    // el nombre del consumible y justo encima (en tactil lo dice el boton ORAR). El icono es
+    // el del don en El Santuario, no el del milagro Altar Consumido.
+    if (ctx.prayers > 0 && !touch) {
+        const Rect last = belt_cell_rect(cap - 1, touch);
+        const Rect r = {last.right() + 4.0f, last.y - 6.0f, 7.0f, 7.0f};
+        if (!draw_icon(renderer, Icon::SANCT_ALTAR, r) && ctx.tileset != TEXTURE_NONE)
+            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::AltarGod), r);
+        char lab[32];
+        snprintf(lab, sizeof(lab), tr("[P] Orar x%d", "[P] Pray x%d"), ctx.prayers);
+        renderer.draw_text(lab, r.right() + 2.0f, r.y + 0.5f, {190, 215, 240, 220}, 0.5f);
+    }
+}
+
+// Objeto obtenido: una ficha arriba al centro con su icono, su nombre, que hace y COMO se
+// usa. Es lo que dice "esto es tuyo y sirve para esto" (Zelda, Isaac, Hades). Entra
+// deslizandose y se apaga al final.
+void HUD::draw_pickup_card(Renderer& renderer, const HUDContext& ctx) {
+    if (!ctx.pickup_name || ctx.pickup_t <= 0.0f) return;
+    const f32 a = std::min(1.0f, ctx.pickup_t / 0.5f);
+    const f32 slide = std::min(1.0f, (4.0f - ctx.pickup_t) * 6.0f);   // entra en ~0,16 s
+    const u8 al = static_cast<u8>(255.0f * a);
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH);
+    std::string dl[3];
+    const int dn = ctx.pickup_desc ? renderer.wrap_text(ctx.pickup_desc, 150.0f, 0.55f, dl, 3) : 0;
+    const f32 w = 186.0f;
+    const f32 h = 17.0f + dn * 6.5f + (ctx.pickup_hint ? 7.0f : 0.0f);
+    const Rect r = {(W - w) * 0.5f, 33.0f - (1.0f - slide) * 10.0f, w, h};
+    renderer.draw_panel({r.x, r.y + 1.5f, r.w, r.h}, {0, 0, 0, static_cast<u8>(110 * a)}, 4.0f);
+    renderer.draw_panel(r, {26, 21, 33, static_cast<u8>(236 * a)}, 4.0f);
+    renderer.draw_rect({r.x + 4.0f, r.y + 1.0f, r.w - 8.0f, 1.0f},
+                       {ctx.pickup_color.r, ctx.pickup_color.g, ctx.pickup_color.b, al});
+    const Rect ic = {r.x + 4.0f, r.y + 4.0f, 22.0f, 22.0f};
+    draw_icon(renderer, ctx.pickup_icon, ic, {255, 255, 255, al});
+    renderer.draw_text(ctx.pickup_name, r.x + 30.0f, r.y + 3.0f,
+                       {ctx.pickup_color.r, ctx.pickup_color.g, ctx.pickup_color.b, al}, 0.8f);
+    for (int i = 0; i < dn; i++)
+        renderer.draw_text(dl[i].c_str(), r.x + 30.0f, r.y + 13.0f + i * 6.5f, {215, 208, 195, al}, 0.55f);
+    if (ctx.pickup_hint)
+        renderer.draw_text(ctx.pickup_hint, r.x + 30.0f, r.y + 14.0f + dn * 6.5f, {250, 220, 140, al}, 0.55f);
 }
 
 // =============================================================================
@@ -812,10 +926,11 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
 
         TileSprite icon = TileSprite::Arrow;
         int own = Icon::NONE;   // icono propio del objeto (icons.png), si lo hay
-        if (cons && ctx.registry) {
-            const ItemDef* d = ctx.registry->get(player.consumable_slot);
+        const Player::BeltSlot& sel = player.belt[std::max(0, std::min(player.belt_sel, Player::BELT_MAX - 1))];
+        if (cons && ctx.registry && !sel.empty()) {
+            const ItemDef* d = ctx.registry->get(sel.id);
             if (d) icon = category_icon(d->category);
-            own = Icon::item(player.consumable_slot);
+            own = Icon::item(sel.id);
         } else if (weap) {
             icon = weapon_icon(player.weapon_slot);
             own = Icon::item(player.weapon_slot);
@@ -826,9 +941,9 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
         const Color it = b.down ? Color::white() : Color{230, 225, 215, 200};
         if (!draw_icon(renderer, own, ir, it))
             renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon), ir, it);
-        if (cons && player.consumable_charges > 1) {
+        if (cons && !sel.empty() && sel.charges > 1) {
             char n[4];
-            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(player.consumable_charges));
+            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(sel.charges));
             renderer.draw_text(n, b.rect.right() - 5.0f, b.rect.bottom() - 7.0f, {255, 235, 180, 250}, 0.65f);
         }
         // La etiqueta va ENCIMA: debajo de estos botones estan las placas de coste de las
@@ -922,7 +1037,7 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         if (!slot.is_empty()) {
             auto def = get_miracle_def(slot.miracle);
             lock_tier = def.tier > faith.get_max_miracle_tier();
-            lock_cost = !lock_tier && def.faith_cost > faith.current;
+            lock_cost = !lock_tier && player.miracle_cost(slot.miracle) > faith.current;
             if (lock_tier) tier_need = faith_required_for_tier(def.tier);
         }
         bool locked = lock_tier || lock_cost;
@@ -1024,10 +1139,9 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         // Sobre el slot: normalmente el coste en fe; si falta nivel, la fe que hay que
         // alcanzar precedida de "+", que es la informacion que de verdad hace falta.
         if (!slot.is_empty()) {
-            auto def = get_miracle_def(slot.miracle);
             char cost[12];
             if (lock_tier) snprintf(cost, sizeof(cost), "%.0f", tier_need);
-            else           snprintf(cost, sizeof(cost), "%.0f", def.faith_cost);
+            else           snprintf(cost, sizeof(cost), "%.0f", player.miracle_cost(slot.miracle));
             Color cc = locked ? Color{240, 120, 100, 255} : Color{160, 210, 250, 255};
             f32 tw = renderer.measure_text(cost, 0.65f);
             f32 cx0 = x + S - tw - 1.0f;
@@ -2033,11 +2147,12 @@ void HUD::draw_message(Renderer& renderer, const HUDContext& ctx) {
     const int count = lines[1] ? 2 : 1;
 
     f32 scale = 1.0f, tw = 0.0f;
-    for (int pass = 0; pass < 2; pass++) {
+    static const f32 SCALES[3] = {1.0f, 0.75f, 0.6f};
+    for (int pass = 0; pass < 3; pass++) {
+        scale = SCALES[pass];
         tw = 0.0f;
         for (int i = 0; i < count; i++) tw = std::max(tw, renderer.measure_text(lines[i], scale));
         if (tw <= 300.0f) break;
-        scale = 0.75f;
     }
     const f32 lh = 11.0f * scale;
     f32 y = Config::GAME_HEIGHT - 44.0f - (count - 1) * lh;

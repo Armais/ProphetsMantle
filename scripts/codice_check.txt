@@ -38,6 +38,9 @@ wait 0.5
 # --- Abrir El Codice desde la pausa (opcion 1) ---
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.3
 press confirm

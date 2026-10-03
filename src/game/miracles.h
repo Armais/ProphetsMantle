@@ -109,10 +109,12 @@ struct MiracleSlot {
     }
 
     // cooldown_mult: El Manto de Elias lo baja a 0.75 (Player::miracle_haste)
-    bool try_cast(f32 current_faith, int max_tier, f32 cooldown_mult = 1.0f) {
+    // cost: lo que se cobra de verdad (< 0 = el de la ficha). Lo pasa Player con los
+    // descuentos de los objetos (Aceite de la Uncion, Player::miracle_cost).
+    bool try_cast(f32 current_faith, int max_tier, f32 cooldown_mult = 1.0f, f32 cost = -1.0f) {
         if (is_empty() || !is_ready()) return false;
         auto def = get_miracle_def(miracle);
-        if (def.faith_cost > current_faith) return false;
+        if ((cost >= 0.0f ? cost : def.faith_cost) > current_faith) return false;
         if (def.tier > max_tier) return false;
 
         cooldown_remaining = def.cooldown * cooldown_mult;

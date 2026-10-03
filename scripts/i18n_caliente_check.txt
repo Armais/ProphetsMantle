@@ -60,6 +60,9 @@ wait 0.5
 # Se sale por la pausa (fila 3) y se entra desde el titulo (fila 2).
 press pause
 wait 0.6
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.12
 press down

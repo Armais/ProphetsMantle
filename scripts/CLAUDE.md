@@ -323,3 +323,37 @@ uno viejo y un guion:
 - Medir la duracion de una pelea: partida limpia (`defaults` + `metareset`), `chapter n`,
   `goto boss`, `walkarena 50`, `bot 160`; la linea `Boss <nombre> defeated in T s` la da
   (en el duo, `... (cae la ultima del duo)`). Cifras de hoy en `src/game/CLAUDE.md`.
+
+## El Santuario, la alforja y los objetos (2026-10-03)
+
+Comandos nuevos o cambiados:
+
+- **`meta <id> [rango]`**: sin rango compra el MAXIMO de esa mejora (los ids son estables,
+  `namespace Meta` en `systems/progression.h`). En plena partida rellena YA los dones que se
+  gastan (oraciones, re-sorteos, Aliento, huecos de alforja); en el juego real se rellenan al
+  empezar intento o capitulo. `metareset` ademas pone los rangos a 0 y olvida los avisos.
+- **`offerings <n>`** fija el banco de ofrendas (para comprar por el camino REAL, con ENTER).
+- **`dropcons <id>`** suelta un consumible (8 Vino, 9 Agua, 17 Higos, 18 Sal) 22 unidades por
+  debajo del profeta; `collect` lo atrae.
+- **`savenow`** guarda la partida en el acto, por el mismo camino que el autoguardado de una
+  celda limpia (`populate_save_data`).
+- `press belt1..belt4 / beltnext / beltprev`: la alforja. `press use` = el elegido.
+- `stats` imprime una TERCERA linea, **`GIFTS`**: la alforja (`*` = elegido, `xN` cargas), lo
+  que queda de Aliento / Suertes / oraciones, dano y velocidad reales, el escudo y el banco.
+- `savedump` imprime una linea mas: `SAVEDUMP rangos=<un digito por mejora> avisos=0x..
+  alforja=id:cargas/... dones=aliento/suertes/oraciones` (`-1` = "rellenar al Continuar").
+
+**La pausa estrena "Equipo" en la fila 1**: Codice pasa a la 2, Opciones a la 3 y Salir a la
+4. Se re-pinnearon los nueve guiones que bajaban por ella (`ascension_check`,
+`audiencia_check`, `caducidad_check`, `codice_check`, `i18n_caliente_check`, `i18n_check`,
+`milagros_check`, `tutorial_check`, `vfx_check`: un `press down` mas tras `press pause`,
+marcado con un comentario). `meta_check` va a la pestana Tesoro en vez de bajar doce filas.
+
+Guiones nuevos: **`santuario_check.txt`** (rangos por el camino real, cada don funcionando en
+partida, la derrota con su desglose, El Santuario desde la derrota y que Continuar conserva lo
+comprado) y **`alforja_check.txt`** (recoger / llena / usar por hueco / cambiar, los Higos, la
+mecanica de cada pasivo y la alforja en el guardado). Sus gates estan en su cabecera.
+
+**Ojo con los guardados nuevos**: en un `XDG_DATA_HOME` vacio el juego arranca en el selector
+de IDIOMA, y los guiones que esperan el titulo navegan mal. La bateria se corre sobre una
+copia de un guardado con el idioma ya contestado (`press confirm` + `quit` una vez).

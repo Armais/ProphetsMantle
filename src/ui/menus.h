@@ -35,6 +35,9 @@ struct MenuSystem {
     bool continue_expired     = false;
     int  abandoned_offerings  = 0;
     int  offerings    = 0;   // Se muestra en el titulo (moneda de El Santuario)
+    // Hay algo que se puede comprar YA en El Santuario: el boton lleva una marca dorada.
+    // Lo rellena el Engine (refresh_continue_state); el menu no conoce la progresion.
+    bool sanctuary_ready = false;
     MenuScreen settings_origin = MenuScreen::Title;
     // Espejo de los ajustes (GDD 4.2). La fuente de la verdad es SaveData (v7); el menu
     // escribe aqui y el Engine los reparte con apply_settings_from_save(). MenuSystem no

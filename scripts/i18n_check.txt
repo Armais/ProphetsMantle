@@ -111,6 +111,9 @@ wait 0.8
 
 press pause
 wait 0.5
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.25
 press confirm
@@ -163,6 +166,9 @@ wait 0.8
 
 press pause
 wait 0.5
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: todo lo de debajo baja una
+press down
+wait 0.2
 press down
 wait 0.25
 press confirm
@@ -189,6 +195,9 @@ press cancel
 wait 0.6
 
 # Volver al menu para las pantallas que solo existen ahi
+# (2026-10-03) la pausa estrena "Equipo" en la fila 1: "Salir" es ahora la 4
+press down
+wait 0.2
 press down
 wait 0.2
 press down

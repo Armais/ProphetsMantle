@@ -1,0 +1,124 @@
+# Verificacion de la ALFORJA y de los objetos con mecanica propia (2026-10-03)
+# Uso:  MANTLE.exe --script scripts/alforja_check.txt
+#
+# El usuario: "los objetos tampoco son muy logicos de usar". Lo que habia: un solo hueco de
+# consumible que se PISABA en silencio al coger otro (y el viejo se quedaba de fantasma en la
+# fila del HUD), los Higos sin motivo para guardarlos, descripciones con cifras falsas ("+5%
+# dano" que eran +2 planos, "+15% velocidad" que eran +30%) y pasivos que solo eran un numero.
+#
+# Que hay que ver en el LOG (gates):
+#   1. Recoger: "Belt: +1 Vino Nuevo (hueco 0 ...)", "+1 Agua del Jordan (hueco 1 ...)" y,
+#      con la alforja LLENA (2 huecos), "Belt full: el consumible se queda en el suelo": el
+#      tercero NO se pierde. Tras usar uno, el que esperaba en el suelo entra solo.
+#   2. Usar por hueco (belt1 / belt2) y el elegido (use): "Belt used: X (hueco N) -> efecto".
+#      Higos: "Vida llena · +10 de vida maxima" y el STATS siguiente con hp = maximo.
+#   3. Cambiar de elegido (beltnext): el asterisco del GIFTS se mueve de hueco.
+#   4. Objetos con mecanica propia (GIFTS / STATS / log):
+#        Aceite de la Uncion    -> "Cast miracle: Cuervos de Querit (cost: 4 faith)" (5 x 0,8)
+#        Piedra del Memorial    -> "Shield: Piedra del Memorial absorbed a hit" y escudo 0 -> 1
+#                                  tras 12 s
+#        Ceniza del Carmelo     -> la fe sube 1 de mas por baja (popups "+1 fe" en S-captura)
+#        Antorcha del Altar     -> captura A05 con enemigos naranjas y numeros naranjas
+#        Sandalias del Profeta  -> vel 120 en el GIFTS (100 + 20, la cifra que dice la carta)
+#   5. La alforja viaja en el guardado: SAVEDUMP alforja=ID:cargas/...
+
+wait 1.0
+metareset
+wait 0.2
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+god
+stats inicio
+
+# --- 1. Recoger tres consumibles con dos huecos ---
+dropcons 8
+dropcons 9
+dropcons 18
+wait 0.2
+collect
+wait 0.6
+shot A01_alforja_llena
+wait 0.1
+stats llena
+# --- 2. Usar el hueco 1: el que esperaba en el suelo entra solo ---
+press belt1
+wait 0.3
+collect
+wait 0.6
+stats hueco_libre
+shot A02_entra_el_tercero
+wait 0.1
+# --- 3. Cambiar de elegido y usar el elegido ---
+press beltnext
+wait 0.2
+stats tras_cambiar
+press use
+wait 0.3
+stats tras_usar_elegido
+# --- Los Higos: guardar para el mal momento (cura entera y sube el maximo) ---
+meta 9
+wait 0.1
+dropcons 17
+collect
+wait 0.5
+god
+spawn 0 4
+wait 4.0
+killall
+wait 0.5
+stats herido
+# Los Higos entran en el hueco que dejo la Sal: el 1. Dos pulsaciones a proposito: si la
+# primera cae en un frame de hit-stop (el mundo congelado tras un golpe no lee teclas) se
+# pierde, y la segunda sobre un hueco ya vacio no gasta nada.
+wait 0.4
+press belt1
+wait 0.3
+press belt1
+wait 0.3
+stats tras_higos
+god
+shot A03_higos
+wait 0.1
+
+# --- 4. Objetos con mecanica propia ---
+give 3
+give 4
+give 10
+give 11
+give 12
+wait 0.3
+stats con_objetos
+press m1
+wait 0.4
+spawn 0 4
+wait 0.1
+bot 2.5
+shot A05_antorcha
+wait 0.1
+bot 3.0
+stats tras_combate
+god
+spawn 0 2
+wait 3.0
+stats tras_golpe
+killall
+wait 13.0
+stats escudo_vuelve
+god
+
+# --- 5. Guardado ---
+savenow
+savedump
+press pause
+wait 0.5
+press down
+wait 0.2
+press confirm
+wait 0.6
+shot A06_equipo
+wait 0.1
+quit

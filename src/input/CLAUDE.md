@@ -4,9 +4,9 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 
 ### Controls
 
-**PC (Teclado):** WASD/Flechas=Mover, K (mantener)=Ataque en ráfaga hacia la ÚLTIMA DIRECCIÓN DE MOVIMIENTO (8 direcciones, `Player::last_move_dir`; el ratón NO apunta ni dispara), Espacio/J=Dash, Q=Milagro1, E=Milagro2, F=Milagro3 (solo con el tercer slot), R=Consumible (usa el que llevas en `Player::consumable_slot`), Tab=Mapa, Esc=Pausa. En la pantalla de elección: A/D elegir, ENTER tomar. `Input::aim_axis` existe solo como override para el bot/scripts de autoplay. La opción "Auto-mira" (Opciones) activa el auto-apuntado del GDD también en PC (`--touch` lo fuerza para depurar).
+**PC (Teclado):** WASD/Flechas=Mover, K (mantener)=Ataque en ráfaga hacia la ÚLTIMA DIRECCIÓN DE MOVIMIENTO (8 direcciones, `Player::last_move_dir`; el ratón NO apunta ni dispara), Espacio/J=Dash, Q=Milagro1, E=Milagro2, F=Milagro3 (solo con el tercer slot), **1-4 = usar ese hueco de la alforja** (`Action::Belt1..4`), R=usar el consumible ELEGIDO, **rueda del ratón / C = cambiar el elegido** (`BeltPrev/BeltNext`), I o clic derecho=arma, P=orar (Altar Portátil), Tab=Mapa, Esc=Pausa. En la pantalla de elección: A/D elegir, ENTER tomar. `Input::aim_axis` existe solo como override para el bot/scripts de autoplay. La opción "Auto-mira" (Opciones) activa el auto-apuntado del GDD también en PC (`--touch` lo fuerza para depurar).
 
-**Gamepad:** Stick Izq=Mover, Stick Der=Apuntar, RT=Ataque, LT=Ataque secundario, A/X=Dash, RB=Milagro1, LB=Milagro2, **Y/△=Milagro3** (D-Pad↓ sigue valiendo), X/□=Consumible, D-Pad↑=Orar.
+**Gamepad:** Stick Izq=Mover, Stick Der=Apuntar, RT=Ataque, LT=Ataque secundario, A/X=Dash, RB=Milagro1, LB=Milagro2, **Y/△=Milagro3** (D-Pad↓ sigue valiendo), X/□=usar el consumible elegido, **D-Pad ←/→ = cambiar el elegido de la alforja** (solo eso: no mueven al profeta), D-Pad↑=Orar.
 El GDD asignaba Y/△ a la vez a *Interactuar* y al tercer milagro; se resolvió a favor del
 milagro porque **`Action::Interact` no la lee nadie** (el altar se activa al pisarlo y el cofre
 al dispararle), y sin este botón el tercer slot solo se alcanzaba por la cruceta.
@@ -274,3 +274,13 @@ que dispara, y destapó dos cosas:
 Guion: **`scripts/tutorial_tactil_check.txt`** (`--touch`). Su gate visual es que **ningún
 cartel del tutorial nombre una tecla** — mitad izquierda, mitad derecha, DASH, USAR, ARMA,
 celdas del HUD — y el del log, `Tutorial: saltado en el paso N` al tocar (222,11).
+
+### La alforja con el dedo (2026-10-03)
+
+**USAR va al SOLTAR, como un milagro** (antes iba al bajar el dedo): hay que saber si fue un
+toque o un mantener. Toque corto = usar el consumible elegido (`pulse(Consumable)`).
+**Mantenerlo `TOUCH_HOLD_INFO` (0,4 s) = pasar al siguiente** (`pulse(BeltNext)`, y otra vez
+cada 0,4 s mientras siga apoyado); al soltar tras un mantener no se bebe nada
+(`TouchButton::hold_fired`). El boton lleva el icono y las cargas del ELEGIDO, y solo existe
+con algo en la alforja (`set_touch_enabled(belt_count() > 0, ...)`). ORAR solo existe con
+oraciones del Altar Portatil que gastar (`Engine::prayers_left`).

@@ -64,6 +64,24 @@ struct HUDContext {
     bool            map_revealed = false;  // "Ojos Abiertos": todo el capitulo a la vista
     u32             tileset   = TEXTURE_NONE;
     const ItemRegistry* registry = nullptr;   // Needed to draw the inventory icons
+    // Ofrendas en el banco (-1 = no se pinta: tutorial). El contador salta al ingresar.
+    int   offerings = -1;
+    f32   offering_pop = 0.0f;
+    int   offering_pop_amount = 0;
+    // Dones de El Santuario que quedan (se pintan junto a la vida / la alforja)
+    int   revives = 0;            // Aliento de Vida
+    int   prayers = 0;            // Altar Portatil
+    // Piedra del Memorial: -1 = no la llevas; 1 = escudo arriba; 0 = recargando
+    // (`shield_recharge` = lo que FALTA, 1..0, para el barrido)
+    int   shield = -1;
+    f32   shield_recharge = 0.0f;
+    // Aviso de objeto obtenido: icono, nombre, que hace y como se usa (Engine::announce_item)
+    int         pickup_icon = -1;
+    const char* pickup_name = nullptr;
+    const char* pickup_desc = nullptr;
+    const char* pickup_hint = nullptr;
+    Color       pickup_color = {245, 205, 90, 255};
+    f32         pickup_t = 0.0f;
     // Controles tactiles: null o `touch_ui` apagado = no se dibuja ninguno y en
     // escritorio el HUD queda exactamente igual que antes.
     const Input*        input    = nullptr;
@@ -193,4 +211,10 @@ private:
     void draw_message(Renderer& renderer, const HUDContext& ctx);
     void draw_objective(Renderer& renderer, const HUDContext& ctx);
     void draw_inventory(Renderer& renderer, const Player& player, const HUDContext& ctx);
+    void draw_belt(Renderer& renderer, const Player& player, const HUDContext& ctx);
+    void draw_offerings(Renderer& renderer, const HUDContext& ctx);
+    void draw_pickup_card(Renderer& renderer, const HUDContext& ctx);
+public:
+    // Rect de un hueco de la alforja (dibujo y toque comparten formula). -1 si no cabe.
+    static Rect belt_cell_rect(int i, bool touch);
 };

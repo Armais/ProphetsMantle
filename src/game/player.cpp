@@ -13,6 +13,7 @@
 #include "render/sprites.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 // =============================================================================
 // Player::resolve_aim - a donde va el disparo (GDD 4.2 / 4.3)
@@ -96,7 +97,7 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
         movement.is_dashing = true;
         movement.dash_dir = dash_dir;
         movement.dash_timer = Config::DASH_DURATION;
-        movement.dash_cooldown = Config::DASH_COOLDOWN;
+        movement.dash_cooldown = Config::DASH_COOLDOWN * dash_cd_mult;   // Sandalias del Profeta
 
         // I-frames during dash
         world.healths[entity].iframes_timer = Config::IFRAMES_DURATION;
@@ -147,6 +148,11 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
         StaffSkin skin = get_staff_skin(staff_skin);
         if (shot != ENTITY_NONE && world.has(shot, Component::Sprite))
             world.sprites[shot].tint = skin.shot;
+        if (shot != ENTITY_NONE && world.has(shot, Component::Projectile))
+            world.projectiles[shot].staff = true;
+        // Antorcha del Altar: el tiro que prende va con una chispa de mas en la boca
+        if (burning_shots)
+            spawn_particles(world, transform.position + aim * 8.0f, {255, 150, 60, 255}, 3, 40.0f, 0.25f);
 
         // Fogonazo en la boca del cayado y retroceso en el propio profeta: el disparo
         // deja de salir de la nada. El retroceso NO pisa un knockback mayor (el de un
@@ -190,7 +196,9 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
                 last_event = MiracleEvent::NeedTier;
                 continue;
             }
-            if (def.faith_cost > faith.current) {
+            // El coste que se COBRA es el que lleva los descuentos (Aceite de la Uncion)
+            const f32 cost = miracle_cost(slot.miracle);
+            if (cost > faith.current) {
                 last_event = MiracleEvent::NeedCost;
                 continue;
             }
@@ -198,11 +206,11 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
                 last_event = MiracleEvent::OnCooldown;
                 continue;
             }
-            if (slot.try_cast(faith.current, faith.get_max_miracle_tier(), miracle_haste)) {
-                faith.modify(-def.faith_cost, true);   // miracle cost ignores the relic floor
+            if (slot.try_cast(faith.current, faith.get_max_miracle_tier(), miracle_haste, cost)) {
+                faith.modify(-cost, true);   // miracle cost ignores the relic floor
                 play_anim(world.animations[entity], AnimID::CastMiracle, true);
                 cast_miracle(world, faith, slot.miracle);
-                SDL_Log("Cast miracle: %s (cost: %.0f faith)", def.name, def.faith_cost);
+                SDL_Log("Cast miracle: %s (cost: %.0f faith)", def.name, cost);
             }
         }
     }
@@ -281,6 +289,18 @@ void Player::update(ECSWorld& world, Input& input, FaithSystem& faith, f32 dt) {
         if (chariot_timer <= 0.0f && world.gap_crosser == entity) world.gap_crosser = ENTITY_NONE;
     }
     if (damage_buff_timer > 0.0f)    damage_buff_timer -= dt;
+
+    // Piedra del Memorial: el escudo vuelve tras SHIELD_RECHARGE segundos sin romperse.
+    // Lo rompe apply_damage (ECSWorld::mods.shield_up) y el Engine lo copia de vuelta.
+    if (has_shield && !shield_up) {
+        shield_timer -= dt;
+        if (shield_timer <= 0.0f) {
+            shield_up = true;
+            spawn_vfx(world, transform.position + Vec2{0, 2}, TileSprite::Rock, {220, 215, 205, 230},
+                      14.0f, 0.4f, 1.6f, 0.0f, {0, 0}, 11);
+            spawn_particles(world, transform.position, {225, 220, 210, 255}, 8, 50.0f, 0.4f);
+        }
+    }
 
     // Ojos Abiertos: mientras dura, una marca sobre cada enemigo y cada objeto de la sala.
     // El mapa revelado (map_revealed) dura todo el capitulo; estas marcas, solo la duracion.
@@ -417,7 +437,9 @@ const char* Player::grant_item(ECSWorld& world, FaithSystem& faith, const ItemDe
     // puede pasar (`roll_choices` no ofrece lo que ya llevas), pero el comando `give` de
     // los guiones si, y ahi es donde se vio.
     const bool already_owned = std::find(items.begin(), items.end(), def.id) != items.end();
-    if (record && !(def.category == ItemCategory::Relic && already_owned))
+    // Los consumibles van a la ALFORJA, no a la fila de objetos (ver mas abajo).
+    if (record && !(def.category == ItemCategory::Relic && already_owned) &&
+        def.category != ItemCategory::Consumable)
         items.push_back(def.id);
 
     // Flat stat bonuses (every category can carry them)
@@ -455,9 +477,10 @@ const char* Player::grant_item(ECSWorld& world, FaithSystem& faith, const ItemDe
             secondary_cd = 0.0f;
             break;
         case ItemCategory::Consumable:
-            // Otra vasija del mismo aceite suma carga; una distinta reemplaza lo que llevabas
-            if (consumable_slot == def.id) consumable_charges = static_cast<u8>(std::min(9, consumable_charges + 1));
-            else { consumable_slot = def.id; consumable_charges = 1; }
+            // A la ALFORJA, no a la fila de objetos: un consumible no es equipo. Si no cabe
+            // (en juego normal no llega aqui: la recogida del suelo mira antes si cabe) se
+            // pierde esa carga, igual que antes se perdia el que se llevaba.
+            belt_add(def.id, 1);
             break;
         default:
             break;
@@ -470,40 +493,150 @@ const char* Player::grant_item(ECSWorld& world, FaithSystem& faith, const ItemDe
         active_slot_count = std::max(active_slot_count, Config::MAX_MIRACLE_SLOTS);
         miracle_haste = 0.75f;
     }
+    recompute_item_mods();
     return def.description;
 }
 
-bool Player::use_consumable(ECSWorld& world, FaithSystem& faith, const ItemRegistry& registry) {
-    if (consumable_slot == UINT32_MAX) return false;
-    const ItemDef* def = registry.get(consumable_slot);
-    if (!def) { consumable_slot = UINT32_MAX; return false; }
+// =============================================================================
+// Efectos propios de los objetos (2026-10-03)
+// =============================================================================
+// Se RECALCULAN desde `items` cada vez, como apply_relic_effects: asi conceder, reintentar,
+// cargar y heredar no pueden acumularlos. El escudo conserva su estado si ya lo tenia.
+void Player::recompute_item_mods() {
+    auto has = [this](u32 id) { return std::find(items.begin(), items.end(), id) != items.end(); };
+    clear_heal        = has(2)  ? 8.0f  : 0.0f;    // Pan de Cada Dia
+    miracle_cost_mult = has(3)  ? 0.80f : 1.0f;    // Aceite de la Uncion
+    dash_cd_mult      = has(4)  ? 0.65f : 1.0f;    // Sandalias del Profeta
+    heart_drop_mult   = has(5)  ? 2.0f  : 1.0f;    // Mana del Cielo
+    burning_shots     = has(10);                   // Antorcha del Altar
+    kill_faith        = has(12) ? 1.0f  : 0.0f;    // Ceniza del Carmelo
+    heart_heal_mult   = has(21) ? 1.5f  : 1.0f;    // Panes de Cebada
+    const bool had = has_shield;
+    has_shield        = has(11);                   // Piedra del Memorial
+    if (has_shield && !had) { shield_up = true; shield_timer = 0.0f; }
+    if (!has_shield)        { shield_up = false; }
+}
 
-    switch (def->id) {
-        case 8:  damage_buff_timer = 30.0f; break;                                  // Vino Nuevo
-        case 9:  if (world.has(entity, Component::Health)) world.healths[entity].heal(30.0f); break;
-        // Higos de Ezequias (2 Reyes 20:7). El pasaje no acaba en que la llaga sane: acaba
-        // en "anadire a tus dias quince anos" (20:6). Por eso sube el MAXIMO y no cura y ya.
-        case 17: if (world.has(entity, Component::Health)) {
-                     world.healths[entity].max += 15.0f;
-                     world.healths[entity].heal(15.0f);
-                 }
-                 break;
-        // Sal de Eliseo (2 Reyes 2:21): "Yo sane estas aguas". El unico consumible que
-        // devuelve FE, que es el recurso del juego y hasta ahora solo se ganaba jugando.
-        case 18: faith.modify(20.0f); break;
+f32 Player::miracle_cost(MiracleID id) const {
+    if (id == MiracleID::COUNT) return 0.0f;
+    return std::floor(get_miracle_def(id).faith_cost * miracle_cost_mult + 0.5f);
+}
+
+// =============================================================================
+// La alforja
+// =============================================================================
+int Player::belt_slot_of(u32 id) const {
+    for (int i = 0; i < belt_cap && i < BELT_MAX; i++)
+        if (!belt[i].empty() && belt[i].id == id) return i;
+    return -1;
+}
+
+int Player::belt_count() const {
+    int n = 0;
+    for (int i = 0; i < belt_cap && i < BELT_MAX; i++) if (!belt[i].empty()) n++;
+    return n;
+}
+
+bool Player::belt_can_take(u32 id) const {
+    const int s = belt_slot_of(id);
+    if (s >= 0) return belt[s].charges < BELT_STACK;
+    for (int i = 0; i < belt_cap && i < BELT_MAX; i++) if (belt[i].empty()) return true;
+    return false;
+}
+
+bool Player::belt_add(u32 id, int n, int stack_cap) {
+    if (id == UINT32_MAX || n <= 0) return false;
+    int s = belt_slot_of(id);
+    if (s < 0) {
+        for (int i = 0; i < belt_cap && i < BELT_MAX; i++)
+            if (belt[i].empty()) { s = i; belt[i].id = id; belt[i].charges = 0; break; }
+    }
+    if (s < 0) return false;
+    const int cap = std::max(stack_cap, static_cast<int>(belt[s].charges));
+    if (belt[s].charges >= cap) return false;
+    belt[s].charges = static_cast<u8>(std::min(cap, belt[s].charges + n));
+    belt_fix_selection();
+    return true;
+}
+
+void Player::belt_fix_selection() {
+    const int cap = std::min(belt_cap, BELT_MAX);
+    if (belt_sel < 0 || belt_sel >= cap) belt_sel = 0;
+    if (!belt[belt_sel].empty()) return;
+    for (int i = 0; i < cap; i++) if (!belt[i].empty()) { belt_sel = i; return; }
+}
+
+void Player::belt_cycle(int dir) {
+    const int cap = std::min(belt_cap, BELT_MAX);
+    if (cap <= 0) return;
+    for (int k = 1; k <= cap; k++) {
+        const int i = ((belt_sel + dir * k) % cap + cap) % cap;
+        if (!belt[i].empty()) { belt_sel = i; return; }
+    }
+}
+
+u32 Player::use_belt(int slot, ECSWorld& world, FaithSystem& faith, const ItemRegistry& registry,
+                     char* fx, int fx_n) {
+    if (fx && fx_n > 0) fx[0] = '\0';
+    if (slot < 0) slot = belt_sel;
+    if (slot < 0 || slot >= belt_cap || slot >= BELT_MAX || belt[slot].empty()) return UINT32_MAX;
+    if (entity == ENTITY_NONE || !world.is_alive(entity)) return UINT32_MAX;
+    const u32 id = belt[slot].id;
+    const ItemDef* def = registry.get(id);
+    if (!def) { belt[slot] = BeltSlot{}; belt_fix_selection(); return UINT32_MAX; }
+
+    Vec2 pos = world.transforms[entity].position;
+    auto& h = world.healths[entity];
+    // Beber agua con la vida llena era tirarla: no se gasta, y se dice por que.
+    if (id == 9 && h.current >= h.max) {
+        if (fx) snprintf(fx, fx_n, "%s", tr("Ya tienes la vida llena", "Your health is already full"));
+        return UINT32_MAX;
+    }
+    switch (id) {
+        case 8:   // Vino Nuevo
+            damage_buff_timer = 30.0f;
+            if (fx) snprintf(fx, fx_n, "%s", tr("+25% de daño durante 30 s", "+25% damage for 30 s"));
+            spawn_fx(world, pos, FxID::Holy, {200, 90, 160, 230}, 30.0f, 0.5f, 11);
+            break;
+        case 9: {  // Agua del Jordan
+            const f32 before = h.current;
+            h.heal(35.0f);
+            if (fx) snprintf(fx, fx_n, tr("+%.0f de vida", "+%.0f health"), h.current - before);
+            if (world.popups.size() < 24)
+                world.popups.push_back({pos, h.current - before, 0.0f, false, ECSWorld::DamagePopup::Heal});
+            spawn_fx(world, pos, FxID::Heal, {150, 235, 255, 235}, 34.0f, 0.55f, 11);
+            break;
+        }
+        // Higos de Ezequias (2 Reyes 20:7): "la pusieron sobre la llaga, y sano". Cura ENTERA
+        // y sube el maximo ("anadire a tus dias quince anos", 20:6): es la que se guarda para
+        // el momento malo, y por eso ya no es un +maximo que nadie tenia motivo para retrasar.
+        case 17: {
+            h.max += 10.0f;
+            const f32 before = h.current;
+            h.current = h.max;
+            if (fx) snprintf(fx, fx_n, "%s", tr("Vida llena  ·  +10 de vida máxima", "Full health  ·  +10 max health"));
+            if (world.popups.size() < 24)
+                world.popups.push_back({pos, h.current - before, 0.0f, false, ECSWorld::DamagePopup::Heal});
+            spawn_fx(world, pos, FxID::Heal, {170, 255, 170, 235}, 40.0f, 0.6f, 11);
+            break;
+        }
+        // Sal de Eliseo (2 Reyes 2:21): el unico consumible que devuelve FE.
+        case 18:
+            faith.modify(25.0f);
+            faith.reset_inactivity();
+            if (fx) snprintf(fx, fx_n, "%s", tr("+25 de fe", "+25 faith"));
+            if (world.popups.size() < 24)
+                world.popups.push_back({pos, 25.0f, 0.0f, false, ECSWorld::DamagePopup::Faith});
+            spawn_fx(world, pos, FxID::Holy, {255, 235, 160, 235}, 34.0f, 0.55f, 11);
+            break;
         default: break;
     }
+    spawn_particles(world, pos, {255, 240, 200, 255}, 10, 60.0f, 0.45f);
     // "El aceite se detuvo cuando no quedo vasija vacia" (2 Reyes 4:6): mientras haya
-    // cargas la vasija sigue en la mano y no se toca el inventario.
-    if (consumable_charges > 1) { consumable_charges--; return true; }
-
-    // Consumables are removed from the inventory list too, so re-rolls can offer them again
-    for (size_t i = 0; i < items.size(); i++) {
-        if (items[i] == consumable_slot) { items.erase(items.begin() + i); break; }
-    }
-    consumable_slot = UINT32_MAX;
-    consumable_charges = 0;
-    return true;
+    // cargas el hueco sigue ocupado.
+    if (--belt[slot].charges == 0) belt[slot] = BeltSlot{};
+    belt_fix_selection();
+    return id;
 }
 
 // =============================================================================
@@ -751,14 +884,11 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             // "Cuando las vasijas fueron llenas, el aceite se detuvo" (2 Reyes 4:6):
             // +2 cargas al consumible que llevas. Con las manos vacias, el aceite te da
             // una vasija con 2 (los ids 8 y 9 son los dos consumibles de game/items.h).
-            if (consumable_slot == UINT32_MAX) {
-                consumable_slot = (randf() < 0.5f) ? 8u : 9u;
-                consumable_charges = 2;
-                if (std::find(items.begin(), items.end(), consumable_slot) == items.end())
-                    items.push_back(consumable_slot);   // para que salga en la fila del HUD
-            } else {
-                consumable_charges = static_cast<u8>(std::min(9, consumable_charges + 2));
-            }
+            // Con la alforja: +2 cargas al consumible ELEGIDO (hasta 9, por encima del
+            // tope normal de recogida). Con la alforja vacia, una vasija nueva con 2.
+            belt_fix_selection();
+            if (belt[belt_sel].empty()) belt_add((randf() < 0.5f) ? 8u : 9u, 2, 9);
+            else                        belt_add(belt[belt_sel].id, 2, 9);
             // El aceite no se detiene: gotas doradas brotando de los pies hacia arriba
             for (int i = 0; i < 9; i++) {
                 Vec2 o = {randf_range(-11.0f, 11.0f), randf_range(-2.0f, 5.0f)};

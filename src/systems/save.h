@@ -43,7 +43,16 @@
 //      rejilla de 30 + el interior, con holgura) y el de una v9/v10 describe OTRA rejilla:
 //      la migracion (SaveDataV10 + migrate_v10) lo descarta y el capitulo rebobina a su
 //      celda de inicio, igual que al pasar a v10. Equipo, meta y capitulo se conservan.
-constexpr u32 SAVE_VERSION = 11;
+// v12: El Santuario con RANGOS, la ALFORJA de consumibles y los avisos de una sola vez
+//      (2026-10-03). Bloque nuevo al final, con holgura reservada como hizo la v7. La
+//      migracion (SaveDataV11 + migrate_v11) da rango 1 a cada mejora comprada en v11 y
+//      mete el consumible que se llevaba en el primer hueco de la alforja.
+constexpr u32 SAVE_VERSION = 12;
+
+// Huecos de la alforja que caben en el fichero (Player::BELT_MAX).
+constexpr int SAVE_BELT_SLOTS = 4;
+// Mejoras de El Santuario que caben en el fichero (Meta::COUNT, con holgura).
+constexpr int SAVE_MAX_UPGRADES = 32;
 
 // Dimensiones del resumen por celda. 36 = FloorMap::MAX_ROOMS (engine.cpp lo vigila con
 // un static_assert); 110 bytes = los 40x22 tiles de una celda exterior, a bit por tile.
@@ -64,6 +73,13 @@ constexpr u32 SETTING_TOUCH_RSTICK = 1u << 1;   // Segundo joystick virtual en t
 // guardado anterior a esto trae el bit a cero y ve el selector una vez, que es lo correcto:
 // nunca se le pregunto. `defaults` lo limpia, y por eso vuelve a salir tras un reset.
 constexpr u32 SETTING_LANG_CHOSEN  = 1u << 2;
+
+// Bits de SaveData::tips_seen: avisos que se ensenan UNA vez en la vida del guardado (meta,
+// sobreviven a delete_save). Un bit nuevo no rompe el formato.
+constexpr u32 TIP_OFFERINGS   = 1u << 0;   // que es una ofrenda y para que sirve
+constexpr u32 TIP_BELT        = 1u << 1;   // primer consumible en la alforja: como se usa
+constexpr u32 TIP_SANCTUARY   = 1u << 2;   // primera visita a El Santuario
+constexpr u32 TIP_BELT_FULL   = 1u << 3;   // la alforja llena (el consumible se queda en el suelo)
 
 
 struct SaveData {
@@ -150,6 +166,23 @@ struct SaveData {
     // stride Config::ROOM_TILES_X).
     u8 room_flags[SAVE_MAX_ROOMS] = {};
     u8 room_open[SAVE_MAX_ROOMS][SAVE_ROOM_BYTES] = {};
+
+    // --- v12: El Santuario con rangos, la alforja y los avisos (2026-10-03) -----
+    // META: rango comprado de cada mejora (indice = MetaUpgrade::id). `upgrades_bought`
+    // se sigue escribiendo (bit = rango > 0) para los guiones y el SAVEDUMP de siempre.
+    u8  upgrade_ranks[SAVE_MAX_UPGRADES] = {};
+    u32 tips_seen        = 0;   // TIP_*: avisos de una sola vez ya vistos
+    // PARTIDA: la alforja (Player::belt). Sustituye a consumable_id/consumable_uses, que
+    // se quedan en el fichero solo para que las versiones viejas se puedan leer.
+    u32 belt_ids[SAVE_BELT_SLOTS]     = {UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    u8  belt_charges[SAVE_BELT_SLOTS] = {};
+    int belt_selected    = 0;
+    // PARTIDA: lo que queda de los dones de El Santuario en este intento / capitulo.
+    // Sin esto, Continuar los rellenaba: salir al menu y volver era un re-sorteo gratis.
+    int revives_left     = 0;   // Aliento de Vida
+    int rerolls_left     = 0;   // Echar Suertes
+    int prayers_left     = 0;   // Altar Portatil
+    u32 reserved_v12[8]  = {};  // holgura: lo siguiente no tiene por que subir la version
 };
 
 struct SaveSystem {

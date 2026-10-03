@@ -224,6 +224,9 @@ static bool hurt_player(ECSWorld& w, FaithSystem& faith, CombatEvents& ev, const
     if (!hp.is_alive() || hp.invulnerable || hp.iframes_timer > 0.0f) return false;
     if (h.damage > 0.0f) apply_damage(w, ENTITY_NONE, p, h.damage);
     else                 hp.iframes_timer = 0.6f;   // sin dano (cadena pura): no repetir cada frame
+    // La Piedra del Memorial se lo comio: cuenta como golpe recibido para el peligro (no
+    // repite), pero ni empuja ni cobra fe. La cadena y la deuda (dano 0) no la tocan.
+    if (w.take_shield_hit()) return true;
     if (w.has(p, Component::Movement)) {
         Vec2 away = (w.transforms[p].position - from).normalized();
         if (away.length_sq() < 0.5f) away = {0, 1};

@@ -123,7 +123,7 @@ src/input/          - input.h/cpp (teclado / raton / mando / tactil, acciones)
 src/audio/          - audio.h/cpp (SDL3_mixer, API MIX_*)
 src/game/           - player, faith, miracles, enemies, items, rooms, combat, events, lore, tutorial
 src/ui/             - hud, menus, codex, cinematic
-src/systems/        - save (v9), progression, achievements
+src/systems/        - save (v12), progression (El Santuario), achievements
 src/platform/       - platform.h (deteccion de plataforma, rutas de assets y guardado)
 assets/             - audio/ sprites/ fonts/ branding/ + CREDITS.md    -> assets/CLAUDE.md
 tools/              - blender/ audio/ branding/                        -> tools/CLAUDE.md
@@ -143,8 +143,8 @@ docs/               - temas largos, se leen bajo demanda
 | Faith | `game/faith.h` | `FaithSystem` | Core mechanic, 6 tiers |
 | Combat | `game/combat.h` | (free functions) | O(n^2) collision, projectiles |
 | Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; **zona continua** por capitulo (`RoomType::Zone`, celdas de 40x22 cosidas en 6x4 / 6x5 hasta 240x110; arena del jefe dentro de la celda B, pegada a un borde distinto por capitulo; el jefe se averigua con pistas, `get_boss_intel`); interior 20x11 |
-| Save | `systems/save.h` | `SaveSystem` | Binary format, version 1 |
-| Progression | `systems/progression.h` | `ProgressionSystem` | 8 meta-upgrades |
+| Save | `systems/save.h` | `SaveSystem` | Binary format, version 12 (migra v3..v11) |
+| Progression | `systems/progression.h` | `ProgressionSystem` | El Santuario: 21 mejoras con rangos en 5 pestanas |
 | Achievements | `systems/achievements.h` | `AchievementSystem` | 18 logros, bitmask en el guardado |
 
 ### ECS Components
