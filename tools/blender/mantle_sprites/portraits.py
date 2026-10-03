@@ -26,7 +26,8 @@ from . import render as R
 from . import characters as C
 from . import parts
 
-CELL = 96           # px por retrato = 24 unidades de juego a ASSET_SCALE 4
+CELL = 192          # px por retrato (2026-10-03: el doble; el motor lo pinta a 32 unidades = 128 px a 720p
+                    # y a 1080p eran 96 px estirados al 200%)
 COLS = 6
 SS = 2
 
@@ -60,6 +61,10 @@ LAYOUT = [
     # porque seria mentir sobre lo que el jugador esta mirando.
     'arroyo_seco', 'dos_pensamientos', 'nubecilla', 'enebro_angel',
     'tres_unciones', 'siete_mil', 'manto_jordan',
+    # Los nueve jefes con hoja propia (bosses.py, 2026-10-03): hablan antes de pelear y hasta
+    # hoy lo hacian con la cara de un enemigo raso (el Capitan era el soldado).
+    'boss_capitan', 'boss_sacerdote', 'boss_sumo_sacerdote', 'boss_desesperacion', 'boss_espiritu',
+    'boss_acreedor', 'boss_muerte', 'boss_guiezi', 'boss_benadad',
 ]
 
 def _bbox():

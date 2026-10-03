@@ -40,7 +40,7 @@ La apertura de un capitulo se oye en cuatro tramos seguidos y **cada uno estrena
 - **`load_music_or(id, path, fallback)`**: si el `.ogg` de un capitulo no esta, carga el
   de respaldo y lo dice por log. Un capitulo mudo se nota mucho mas que un capitulo con
   la pista de al lado, y durante una tanda de musica a medias eso pasa por definicion.
-- La musica va con `predecode = false`, o sea **streaming**: 27 pistas cargadas no cuestan
+- La musica va con `predecode = false`, o sea **streaming**: las 47 pistas cargadas no cuestan
   RAM, solo descriptores.
 - **`play_music` loguea `Music: <idx> '<fichero>'`** en cada cambio. Sin eso, un guion de
   autoplay puede comprobar que el fichero se CARGO pero no que suene el del capitulo en

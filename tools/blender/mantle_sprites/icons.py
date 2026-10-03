@@ -696,12 +696,99 @@ def _frame(tmp_dir):
     return cam
 
 
+# -----------------------------------------------------------------------------
+# Luz de "figurita brillante" (2026-10-03): EEVEE en vez de la luz de estudio
+# -----------------------------------------------------------------------------
+# Con Workbench cada icono era plastico mate con la misma luz plana que los props del
+# tileset. Un icono de objeto se mira de cerca y se lee por su BRILLO: luz principal calida
+# desde arriba a la izquierda, un contraluz frio y fuerte desde atras que recorta el borde
+# (lo que separa la pieza del fondo oscuro de la celda), relleno suave del cielo, sombras
+# propias blandas y materiales con laca (coat). El oro y el bronce, metalicos; el fuego, las
+# estrellas y la luz, emisivos. Los modelos, el encuadre y el contorno no cambian.
+EEVEE = True
+METAL_KEYS = ('gold', 'oro', 'metal', 'spear', 'blade', 'coin', 'bronze', 'iron', 'hd', 'brass',
+              'shield', 'boss', 'ark', 'arca', 'crown', 'buckle', 'reloj_dial')
+GLOW_KEYS = ('fire', 'flame', 'glow', 'sun', 'ray', 'star', 'light', 'spark', 'ember', 'halo',
+             'llama', 'fuego', 'wick', 'drop_l', 'eye_glow')
+
+
+def _light(name, kind, rot_deg, energy, color, angle=None, size=None):
+    ld = bpy.data.lights.new(name, kind)
+    ld.energy = energy
+    ld.color = color
+    if angle is not None and kind == 'SUN':
+        ld.angle = math.radians(angle)
+    if size is not None and kind == 'AREA':
+        ld.size = size
+    ob = bpy.data.objects.new(name, ld)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.rotation_euler = tuple(math.radians(a) for a in rot_deg)
+    return ob
+
+
+def _eevee_look():
+    sc = bpy.context.scene
+    sc.render.engine = 'BLENDER_EEVEE_NEXT'
+    ee = sc.eevee
+    ee.taa_render_samples = 48
+    for attr, val in (('use_shadows', True), ('use_gtao', True), ('gtao_distance', 0.4),
+                      ('use_raytracing', False), ('shadow_ray_count', 2), ('shadow_step_count', 8)):
+        if hasattr(ee, attr):
+            try:
+                setattr(ee, attr, val)
+            except (AttributeError, TypeError):
+                pass
+    sc.view_settings.view_transform = 'Standard'
+    sc.view_settings.look = 'None'
+    # Ambiente: el "cielo" ilumina por debajo de la luz principal (fondo transparente igual)
+    w = sc.world
+    w.use_nodes = True
+    bg = w.node_tree.nodes.get('Background')
+    if bg is not None:
+        bg.inputs[0].default_value = (0.62, 0.64, 0.74, 1.0)
+        bg.inputs[1].default_value = 0.70
+    # Tres luces. Rotaciones de un SOL: el rayo baja por -Z local y la camara mira hacia +Y,
+    # asi que una X POSITIVA manda la luz hacia +Y (de cara, desde la camara) y una NEGATIVA
+    # hacia la camara (contraluz). La primera version giraba el contraluz 205 en Z, que lo
+    # devolvia de cara: dos luces frontales y ningun borde.
+    _light('ic_key', 'SUN', (50, 0, -38), 3.5, (1.0, 0.95, 0.86), angle=12)
+    _light('ic_rim', 'SUN', (-58, 0, 30), 6.5, (0.88, 0.93, 1.0), angle=3)
+    _light('ic_fill', 'SUN', (70, 0, 60), 0.8, (0.70, 0.78, 1.0), angle=20)
+    # Materiales: los planos de parts.get_mat pasan a nodos con laca
+    for m in list(bpy.data.materials):
+        name = m.name.lower()
+        col = tuple(m.diffuse_color)
+        m.use_nodes = True
+        nt = m.node_tree
+        nt.nodes.clear()
+        out = nt.nodes.new('ShaderNodeOutputMaterial')
+        bsdf = nt.nodes.new('ShaderNodeBsdfPrincipled')
+        nt.links.new(bsdf.outputs[0], out.inputs[0])
+        bsdf.inputs['Base Color'].default_value = col
+        metal = any(k in name for k in METAL_KEYS)
+        glow = any(k in name for k in GLOW_KEYS)
+        # Metal a medias: sin entorno que reflejar, un metal pleno sale OSCURO (el oro del
+        # Arca se apagaba). Medio metalico conserva el color y gana el brillo.
+        bsdf.inputs['Metallic'].default_value = 0.5 if metal else 0.0
+        bsdf.inputs['Roughness'].default_value = 0.30 if metal else 0.42
+        if 'Coat Weight' in bsdf.inputs and not metal:
+            bsdf.inputs['Coat Weight'].default_value = 0.35
+            bsdf.inputs['Coat Roughness'].default_value = 0.12
+        if glow:
+            bsdf.inputs['Emission Color'].default_value = col
+            bsdf.inputs['Emission Strength'].default_value = 1.6
+
+
 def render_icon(builder, tmp_dir):
     parts.clear_scene()
     builder()
     _frame(tmp_dir)
+    if EEVEE:
+        _eevee_look()
     hi = render._render_to_array()
-    return render.post_soft(hi, CELL, SS, outline=True, outline_px=OUTLINE_PX)
+    # gain 1.0 con EEVEE: el 1.7 por defecto compensa la luz de estudio de Workbench
+    return render.post_soft(hi, CELL, SS, outline=True, outline_px=OUTLINE_PX,
+                            gain=1.08 if EEVEE else None)
 
 
 def _load(path, shape):

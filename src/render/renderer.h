@@ -172,8 +172,9 @@ struct Renderer {
     bool init(SDL_Renderer* renderer, SDL_Texture* render_target);
     void shutdown();
 
-    // Texture management. smooth = linear filtering (sprites); false = nearest (tile atlas:
-    // cells abut each other and linear sampling would bleed across cell edges)
+    // Texture management. smooth = linear filtering; false = nearest, solo para un atlas cuyas
+    // celdas se toquen (en lineal sangrarian). Hoy nadie lo usa: el tileset lleva un margen
+    // extruido por celda (rooms.h TILESET_GUTTER) y va en lineal como todo lo demas.
     u32 load_texture(const char* path, bool smooth = true);
     // Libera una textura cargada (intros de capitulo: se ven una vez por partida y
     // dejarlas en la cache acumula VRAM en movil). El id queda como hueco estable en
@@ -189,6 +190,16 @@ struct Renderer {
     // Disco blanco con el borde antialiaseado. Con `inner_frac` > 0 se recorta el agujero y
     // sale un anillo. Es lo unico redondo que tiene el Renderer aparte del panel en 9 trozos.
     u32 create_disc_texture(const char* name, int size, f32 inner_frac);
+    // Copia DESENFOCADA de un PNG (profundidad de campo de las cinematicas: el primer plano
+    // va fuera de foco). Desenfoque de caja x3 en alfa premultiplicado, en CPU y una sola vez
+    // al cargar; se cachea como "<path>#b<radio>" y se libera con unload_texture de esa clave.
+    u32 load_texture_blurred(const char* path, int radius_px);
+    // Objetivo de render fuera de pantalla (fundidos encadenados de las cinematicas): mismo
+    // tamano que `target`. begin_target/end_target cambian a el y vuelven al de siempre con
+    // la escala de juego puesta (en SDL3 la escala va por objetivo).
+    u32 create_target_texture(const char* name, int w, int h);
+    void begin_target(u32 id);
+    void end_target();
     TextureEntry* get_texture(u32 id);
 
     // Frame lifecycle

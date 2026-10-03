@@ -18,8 +18,10 @@ tools/
                             disappears again. Smoothing: `parts.box(round=..., taper=...)` bevels every edge
                             (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
                             rings (helmet band, hood cowl) and soft cap edges.
-                            tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=64,
-                            TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
+                            tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=128 =
+                            8 texels/unit, GUTTER=2 px extruded per side so the engine filters it
+                            LINEAR without bleeding (pitch 132; `BASE_CELL`=64 keeps the world size of
+                            every model), TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
                             top-down FLAT cells, DETAILS = transparent top-down decals, SMALL/PROPS/PROPS_TALL = 30 deg.
                             cine.py renders the 8 prologue panels AND the 10 chapter-intro
@@ -196,6 +198,31 @@ y mirar los 22 en dos hojas de contacto ANTES de copiar nada.
   (`libegl1 libegl-mesa0 libgl1-mesa-dri`) con `EGL_PLATFORM=surfaceless`. Workbench renderiza
   por software (llvmpipe) sin cambiar el aspecto; el aviso `EGL_BAD_MATCH` sale y no importa.
   Runner: `sys.path.insert(0, 'tools/blender')` e `icons.main(out, tmp)` / `chariot.main(out, tmp)`.
+- **Iconos con luz de EEVEE (2026-10-03, `icons.EEVEE = True`)**: con Workbench cada icono era
+  plastico mate con la luz plana de los props, y un icono se mira de cerca. Ahora `_eevee_look`
+  monta tres soles —principal calido arriba a la izquierda, CONTRALUZ frio y fuerte que recorta
+  el borde contra el fondo oscuro de la celda, relleno del cielo— y pasa los materiales planos
+  de `parts.get_mat` a Principled con laca (coat); los de `METAL_KEYS` (oro, bronce, lanzas)
+  van MEDIO metalicos y los de `GLOW_KEYS` (fuego, estrellas, luz) emiten. Modelos, encuadre y
+  contorno no cambian; `gain` 1,08 en el post (el 1,7 por defecto compensa a Workbench).
+  Dos trampas que costaron pasadas: **la rotacion del contraluz** (la camara mira a +Y; una X
+  POSITIVA del sol manda la luz hacia +Y, o sea DE CARA; el contraluz va con X negativa y sin
+  girar 180 en Z, que lo devolvia de cara) y **el metal pleno sale oscuro** sin entorno que
+  reflejar (el oro del Arca se apagaba): 0,5 conserva el color y gana el brillo. EEVEE corre
+  sin GPU en el mismo venv (llvmpipe), ~40 s por icono: las 32 son unos 20 minutos.
+
+## Jefes con hoja propia y retratos al doble (2026-10-03)
+
+- **`bosses.py`**: nueve recetas (`SPECS` + una funcion `_extras_*` por jefe) sobre
+  `build_humanoid`; `characters.build` las despacha antes de mirar `characters.SPECS`. Lo que
+  hace JEFE a un jefe es la silueta: escudo torre, tiara con cuernos, cuernos enormes y dos
+  cuchillos, espectro sin piernas (`_float_robe` quita muslos y pies), columna de agua con
+  corona de espuma, prestamista ensanchado (`_widen`) con turbante y cadena, la Muerte con
+  calavera, alas y guadana, Guiezi con lepra y dos talentos, Ben-adad con tiara asiria. Los
+  cuernos que pasaban de 0,35 de largo salian del cuadro de 128 px en el ataque.
+- **`portraits.py` a 192 px** (antes 96: el motor los pinta a 32 unidades = 128 px a 720p) y
+  con los nueve jefes al final de `LAYOUT` (35..43, `Portrait::BOSS_*`). Los dialogos de jefe
+  de `scenes.h` ya hablan con su cara y no con la de un enemigo raso.
 
 ## Efectos: `vfx.py` (el unico que NO usa el pipeline de personajes)
 

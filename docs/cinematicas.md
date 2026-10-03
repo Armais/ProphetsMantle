@@ -182,3 +182,44 @@ porque al final del paseo la camara lo dejaba justo detras del boton de SALTAR.
 Guiones: **`scripts/escenas_check.txt`** (`escena 1` / `escena 1 1` ensenan el paseo; el log
 dice `Apertura 2: paseo tras la parada 1/5` y `paseo de escena terminado`) y
 **`scripts/intros_check.txt`**.
+
+## Fundidos encadenados, luz y post-proceso (2026-10-03)
+
+Peticion del usuario: «las escenas quiero que tengan mejores graficos y mejores
+transiciones». Las estampas ya salian de EEVEE con luz y niebla (`look.py`); lo que faltaba
+estaba en el MOTOR, que pintaba cada escena sobre un degradado plano y pasaba de una a otra
+por negro. Todo lo nuevo es procedural (regla de `assets/`):
+
+- **Fundido encadenado** (`CineCut::Dissolve`, por defecto): al pasar de escena se apunta lo
+  que se veia (escena, instante, texto ya envuelto) y el primer render lo CONGELA en un
+  objetivo fuera de pantalla (`Renderer::create_target_texture` / `begin_target` /
+  `end_target`); luego se pinta encima de la nueva, cada vez mas transparente, durante
+  `XFADE` = 1,1 s. Es una disolucion de verdad: pintar la escena vieja y la nueva con alfa
+  capa a capa dejaba ver la vieja por donde la nueva tiene cielo. `CineCut::Black` pasa por
+  negro (cambio fuerte de hora o lugar: la caceria nocturna, el amanecer en Querit) y
+  `CineCut::White` entra desde un fogonazo (el carro de fuego). Un salto directo
+  (`go_to`, comando `cine`) es un corte. Solo la primera escena entra desde negro y solo la
+  ultima sale a negro.
+- **Cielo con luz** (`CineScene::sun/sun_k/moon`, por tabla en las tres cinematicas): astro
+  con halo DETRAS de la capa lejana, dos bancos de nubes lentos (la textura de
+  `ambience_cloud_texture`), niebla de horizonte entre la capa lejana y la media (`haze`),
+  un abanico de rayos que la figura tapa (contraluz) y un velo de luz encima de todo (el
+  bloom barato). `sun_k = 0` en los interiores (el trono, el aposento sunamita).
+- **Profundidad de campo**: la capa lejana y la cercana se cargan YA desenfocadas
+  (`Renderer::load_texture_blurred`, caja x3 en alfa premultiplicado, 2 y 7 px); el foco es
+  la capa media. Se cachean como `<path>#b<radio>` y `unload_art` descarga esa clave.
+- **Grano** a 24 fotogramas por segundo, **bandas de cine** de 11 unidades (el rotulo empieza
+  en y=14 y la ultima linea de texto acaba en ~164: caben) y un **rotulo** con sombra, halo
+  del acento y un filete dorado que se abre desde el centro.
+- El **haz** del silbo apacible y del monte son ahora tres rayos de textura encajados con
+  motas dentro, y las **pavesas** brillan (ADD) en vez de ser cuadrados de 1,2 unidades.
+
+Las **escenas guionizadas** (aperturas y dialogos de jefe) y la **entrada del jefe** llevan
+las mismas bandas negras, que entran al abrirse y salen al volver a jugar
+(`Engine::scene_bars`), y el escenario entra desde negro (`room_fade` en `start_scene`).
+
+Guiones: `intro_check`, `intros_check`, `asccine_check` y `escenas_check`. Ojo con
+`escenas_check`: sus `wait` suman 637 s, asi que un `timeout 600` lo mata justo al final y
+parece un cuelgue. Y `intros_check` tiene deriva ANTERIOR a esto: su primer `press confirm`
+cae ahora en el selector de idioma, de modo que la primera `chintro 1` (pasada ES) no
+encuentra la partida y la cuenta da 19 en vez de 20.

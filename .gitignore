@@ -66,5 +66,14 @@ __pycache__/
 tools/audio/sonicpi/ports.json
 tools/audio/sonicpi/tmp/
 
+# Orquesta sintetica: WAV crudos (float, 32 kHz) y espectrogramas de revision
+tools/audio/orquesta/tmp/
+
 # Binario de Linux (build/linux, SDL sin ventana: guiones en contenedores)
 /MANTLE
+tools/estampas/tmp/
+tools/estampas/figs/_tmp/
+tools/estampas/figs/
+
+# Worktrees de agentes de Claude Code (temporales)
+.claude/worktrees/

@@ -56,6 +56,9 @@ bool check_circle_overlap(Vec2 pos_a, f32 radius_a, Vec2 pos_b, f32 radius_b,
 // test let body separation shove the player's feet into a River tile and freeze them there.
 // Sliding: if the full push is blocked, try each axis alone.
 static void push(ECSWorld& world, Entity e, Vec2 delta) {
+    // Lo que no tiene Movement es ESTATICO (los idolos de Baal del cap. 2): no se empuja.
+    // Hasta hoy no habia ningun cuerpo con colisionador y sin Movement.
+    if (!world.has(e, Component::Movement)) return;
     Vec2& pos = world.transforms[e].position;
     if (!world.active_room) { pos = pos + delta; return; }
     Vec2 foot = world.has(e, Component::Collider) ? world.colliders[e].offset : Vec2{0, 0};
@@ -169,6 +172,19 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                 Entity proj = i_proj ? i : j;
                 Entity enemy = i_proj ? j : i;
                 auto& pr = world.projectiles[proj];
+                // ESCUDO (Capitan de Acab): el tiro que entra por su frente rebota. Lo que
+                // decide es por donde ENTRA el tiro contra hacia donde mira el escudo, no
+                // donde esta el profeta: un tiro de rebote o de la Vara cuenta igual.
+                const auto& eai = world.enemy_ais[enemy];
+                if (eai.shield_cos > -1.5f && pr.direction.length_sq() > 0.01f &&
+                    (pr.direction * -1.0f).dot(eai.face_dir) > eai.shield_cos) {
+                    const Vec2 at = world.transforms[proj].position;
+                    spawn_particles(world, at, {255, 245, 200, 255}, 6, 90.0f, 0.25f);
+                    spawn_fx(world, at, FxID::Sparks, {230, 240, 255, 235}, 16.0f, 0.18f);
+                    world.shield_blocks++;
+                    world.destroy(proj);
+                    continue;
+                }
                 if (pr.damage > 0.0f && !pr.already_hit(enemy)) {
                     pr.mark_hit(enemy);
                     knock(world, enemy, pr.direction, ENEMY_KNOCKBACK);
@@ -282,6 +298,10 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
             spawn_particles(world, world.transforms[target].position, {170, 160, 200, 255}, 3, 45.0f, 0.2f);
         return false;
     }
+    // Ventana del jefe (aturdido, de rodillas, el silbo apacible): dano x vuln_mult
+    if (world.has(target, Component::EnemyAI) && !world.enemy_ais[target].ally &&
+        world.enemy_ais[target].vuln_mult > 0.0f)
+        damage *= world.enemy_ais[target].vuln_mult;
     f32 before = health.current;
     health.take_damage(damage);
     health.hit_flash = HIT_FLASH_TIME;
@@ -387,7 +407,13 @@ void on_enemy_killed(ECSWorld& world, FaithSystem& faith, Entity enemy, CombatEv
 
     // Conducta de muerte del Acto II (explotar, dividirse). Va antes que los drops y
     // siempre antes de Engine::update_room_state: los hijos deben contar como vivos.
+    const u8 prop = world.has(enemy, Component::EnemyAI) ? world.enemy_ais[enemy].prop_kind : 0;
     on_enemy_death_behavior(world, enemy, pos);
+
+    // Los props de un jefe no sueltan botin (los senuelos de Guiezi saldrian cada 5 s).
+    // Un idolo de Baal derribado vale lo que un profeta de Baal: es fe, no botin.
+    if (prop == static_cast<u8>(BossProp::Idol)) { faith.on_kill_prophet(); return; }
+    if (prop != 0) return;
 
     if (boss) {
         events.boss_kills++;
@@ -426,7 +452,12 @@ Entity pick_target(const ECSWorld& world, Vec2 from, f32 max_range) {
         // Higher score wins: distance dominates, then "is attacking me", boss, and low HP
         f32 score = -dist;
         if (world.has(e, Component::Combat) && world.combats[e].attack_timer > 0.0f) score += 40.0f;
-        if (world.enemy_ais[e].is_boss) score += 90.0f;
+        // El jefe primero... salvo que sea intocable (idolos, corro, la Muerte de lejos):
+        // entonces lo que hay que tumbar es lo otro. Los senuelos de Guiezi se le parecen
+        // tambien a la auto-mira: si no, el movil leeria la marca por el jugador.
+        const auto& tai = world.enemy_ais[e];
+        if (tai.is_boss || tai.prop_kind == static_cast<u8>(BossProp::Decoy)) score += 90.0f;
+        if (world.healths[e].invulnerable) score -= 600.0f;   // cualquier blanco tocable antes
         score += (1.0f - world.healths[e].ratio()) * 25.0f;
         if (score > best_score) { best_score = score; best = static_cast<Entity>(e); }
     }

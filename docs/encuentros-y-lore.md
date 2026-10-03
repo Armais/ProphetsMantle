@@ -4,6 +4,25 @@ Viene del `CLAUDE.md` de la raiz. Pertenece a **`src/game/`** (`events.h`, `lore
 caja de dialogo de **`src/ui/`**. El arte de los retratos y las vinetas lo genera
 `tools/blender/` (ver su `CLAUDE.md`).
 
+### Cada relato con su estampa, y la caja de encuentro rediseñada (2026-10-03)
+
+Peticion del usuario: «los encuentros con los personajes secundarios tambien deben de tener
+mejores graficos y los eventos secundarios deben de tener un grafico representativo de cada
+uno». Cada id de `Ev::` (los 39 del pozo, las 4 paradas del Ascenso y las 3 del epilogo) tiene
+su lamina en `assets/sprites/estampas/ev_NN.png` (`tools/estampas`, ver `tools/CLAUDE.md`).
+
+- `Engine::open_dialogue` llama a `load_event_plate`: carga la del relato y descarga la
+  anterior (solo hay una viva). Las cajas de escena (`Sc::LINE_BASE` en adelante) no llevan.
+- `DialogueView::plate` + `open_t`: con lamina, `draw_dialogue` la enmarca ARRIBA en el hueco
+  que deja la caja (alto 44-88, proporcion de la textura), con fundido y acercamiento de
+  entrada (0,45 s), un brillo que recorre la moldura y un Ken Burns lentisimo mientras se lee.
+  El titulo del relato va en una cinta roja sobre el borde inferior del marco y deja de
+  repetirse en la placa del nombre.
+- **La geometria del TEXTO no se movio ni una unidad** (mismo `text_x`, `text_w`, alto de
+  caja): el gate de cero `TEXT TRUNCATED` de los guiones sigue valiendo tal cual. Lo que
+  cambio es el aspecto: caja con filo dorado y degradado (`draw_text_box`), retrato con
+  marco y halo, placa del nombre y banda de la opcion elegida en paneles redondeados.
+
 ### Las consecuencias se VEN, y obedecer sube la fe (2026-09-24)
 
 Informe del usuario tras jugar el cap. 1: *"en la parte del arroyo, al seguir la voluntad de

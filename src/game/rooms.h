@@ -48,7 +48,15 @@ enum class TileType : u8 {
 // Cells are one tile (16 game units) = TILE_SIZE * ASSET_SCALE texels (64 px at x4),
 // 8 columns. Keep in sync with tiles.LAYOUT / tiles.CELL.
 // =============================================================================
-constexpr int TILESET_CELL = Config::TILE_SIZE * Config::ASSET_SCALE;
+// 2026-10-03: el tileset va al DOBLE (128 px por celda = 8 texeles por unidad) y se muestrea
+// en LINEAL. Cada bloque lleva 2 px de margen con su borde extruido (tiles.py, GUTTER): sin
+// el, el filtro lineal leeria la celda vecina del atlas en el borde de las celdas opacas. A
+// 64 px y con `nearest` los props (arboles, rocas, hierba) se veian pixelados en cuanto la
+// ventana pasaba de 1280x720.
+constexpr int TILESET_TEXELS_PER_UNIT = Config::ASSET_SCALE * 2;                 // 8
+constexpr int TILESET_CELL   = Config::TILE_SIZE * TILESET_TEXELS_PER_UNIT;      // 128
+constexpr int TILESET_GUTTER = 2;
+constexpr int TILESET_PITCH  = TILESET_CELL + 2 * TILESET_GUTTER;                // 132
 
 enum class TileSprite : u8 {
     FloorA, FloorB, FloorC, FloorD, PathA, PathB, WaterA, WaterB,
@@ -130,7 +138,8 @@ inline TileSpriteDef get_tile_sprite_def(TileSprite s) {
 
 inline Rect get_tile_src(TileSprite s) {
     auto d = get_tile_sprite_def(s);
-    return { static_cast<f32>(d.col * TILESET_CELL), static_cast<f32>(d.row * TILESET_CELL),
+    return { static_cast<f32>(d.col * TILESET_PITCH + TILESET_GUTTER),
+             static_cast<f32>(d.row * TILESET_PITCH + TILESET_GUTTER),
              static_cast<f32>(d.cells_w * TILESET_CELL), static_cast<f32>(d.cells_h * TILESET_CELL) };
 }
 
@@ -480,6 +489,28 @@ inline ChapterDef get_chapter_def(int chapter) {
         case 9:  return {tr("Naamán el Sirio", "Naaman the Syrian"),      tr("Campamento / Jordán", "Camp / Jordan"), 9, 6, 4, EnemyType::GeneralSirio,    tr("Guiezi el Codicioso", "Gehazi the Covetous"),      BossPattern::Guiezi};
         case 10: return {tr("El Ejército Celestial", "The Heavenly Host"),tr("Ciudad sitiada", "Besieged city"), 10, 6, 5, EnemyType::GeneralSirio,    tr("Ben-adad de Siria", "Ben-hadad of Syria"),        BossPattern::BenAdad};
         default: return {"???",                  "???",                  0, 3, 3, EnemyType::SoldadoDeAcab,  "???",                      BossPattern::CapitanDeAcab};
+    }
+}
+
+// La HOJA PROPIA de cada jefe (2026-10-03): mismo formato que toda hoja de personaje
+// (896x1920, 7x15 celdas de 128 px, fila = AnimID, pies en la fila 112). `which` = 0 la
+// cabeza, 1 su pareja (solo el cap. 5: Jezabel). En el cap. 3 es la del SUMO SACERDOTE: el
+// corro sigue con profeta_baal.png. Si el fichero aun no existe el Engine cae, en silencio
+// salvo una linea de log, a la hoja del enemigo base (`boss_type`) — igual que antes.
+inline const char* get_boss_sheet(int chapter, int which = 0) {
+    if (which == 1) return (chapter == 5) ? "sprites/jezabel.png" : nullptr;
+    switch (chapter) {
+        case 1:  return "sprites/boss_capitan.png";
+        case 2:  return "sprites/boss_sacerdote.png";
+        case 3:  return "sprites/boss_sumo_sacerdote.png";
+        case 4:  return "sprites/boss_desesperacion.png";
+        case 5:  return "sprites/acab.png";
+        case 6:  return "sprites/boss_espiritu.png";
+        case 7:  return "sprites/boss_acreedor.png";
+        case 8:  return "sprites/boss_muerte.png";
+        case 9:  return "sprites/boss_guiezi.png";
+        case 10: return "sprites/boss_benadad.png";
+        default: return nullptr;
     }
 }
 

@@ -4,38 +4,41 @@ Registro de procedencia de **todo** lo que hay en `assets/`. La regla del proyec
 un asset sin procedencia anotada aquí es un asset que hay que sacar, así que este fichero
 se actualiza **al meter** el asset, no después.
 
-Estado a 2026-08-26: **no hay ningún asset de terceros con obligaciones, salvo la
-tipografía (OFL).** La música hornea samples de percusión que Sonic Pi trae de serie, en
-**CC0 1.0 (dominio público, sin atribución obligatoria)**; todo lo demás se genera con las
-herramientas del propio repositorio. El juego se puede distribuir comercialmente sin más
-trámite que respetar la OFL de la fuente.
+Estado a 2026-10-03: **no hay ningún asset de terceros, salvo la tipografía (OFL).** Todo
+el audio —música, efectos y voz— es síntesis propia, sin muestras de terceros; todo lo demás
+se genera con las herramientas del propio repositorio. El juego se puede distribuir
+comercialmente sin más trámite que respetar la OFL de la fuente.
 
 ## Audio — 100 % generado por el proyecto
 
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
-| 47 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/sonicpi/*.rb` + `record.py` (Sonic Pi) |
+| 47 pistas de música | `assets/audio/music/*.ogg` | `tools/audio/orquesta/` (`render.py`, síntesis numpy/scipy) |
 | 37 efectos de sonido | `assets/audio/sfx/*.ogg` | `tools/audio/gen_audio.py` |
 | 15 exclamaciones de voz | `assets/audio/sfx/voz_*.ogg` | `tools/audio/gen_audio.py` (132 KB) |
 
-**Música (2026-09-14): compuesta por el proyecto en Sonic Pi.** Las 47 partituras viven en
-`tools/audio/sonicpi/*.rb` y son composición original: **siete globales y cuatro por
+**Música (2026-10-03): compuesta y sintetizada por el proyecto, sin una sola muestra.** Las
+47 partituras son composición original y viven como código en `tools/audio/orquesta/`
+(`tracks_global.py`, `tracks_act1.py`, `tracks_act2.py`): **siete globales y cuatro por
 capítulo** —el tema de juego, el del diálogo y la carta de apertura, y una por cada una de
-las dos estampas de la cinemática—, cada capítulo con su propio modo, su solista y su
-percusión, y cada tramo de la apertura con instrumentos que no se repiten entre ellos. `record.py` arranca el daemon de Sonic
-Pi sin GUI, graba la salida de
-SuperCollider bit a bit, corta el periodo exacto del bucle y encodea el `.ogg`. Sonic Pi y
-SuperCollider son **herramientas de generación** (como Blender o ffmpeg): no se distribuye ni
-se enlaza nada suyo con el juego. La percusión usa samples que Sonic Pi trae de serie
-(tablas, bombos, platos, cabasa, y también `ambi_choir` para las voces, `misc_crow` para los
-cuervos de Querit y `drum_cowbell` para las yuntas del cap. 5), publicados bajo **CC0 1.0
-(dominio público)**, sin obligación de atribución; el resto es síntesis de los sintetizadores
-de Sonic Pi. Las versiones anteriores
-(síntesis numpy) quedan en `tools/audio/music_backup/` y `gen_audio.py` sigue pudiendo
-regenerarlas.
+las dos estampas de la cinemática—, cada capítulo con su propio modo y su solista, y cada
+tramo de la apertura con instrumentos que no se repiten entre ellos. La orquesta entera es
+**síntesis propia en numpy/scipy**: cuerdas por secciones con cuerpos de resonancia
+sintéticos, coro de pulso glotal y formantes, duduk, ney, kaval y shofar con ruido de soplo,
+oud, kanun, arpa y lira por Karplus-Strong, percusión modal (tar, daf, darbuka, riq, taikos,
+timbales, zils), campanas, tanpura y ambientes de ruido filtrado, todo en salas cuya
+respuesta al impulso también se SINTETIZA (ruido decorrelado con caída por bandas). **No hay
+samples, ni soundfonts, ni respuestas al impulso grabadas, ni material con licencia ajena.**
+La transcodificación la hace ffmpeg (herramienta de compilación, ver abajo).
 
-Los SFX y las voces siguen siendo síntesis propia con numpy: cuerdas Karplus-Strong, flauta
-de caña (*ney*), percusión sintetizada, sala tipo Schroeder y compresor de bus. **En SFX y
+Historia: entre el 2026-09-13 y el 2026-10-02 las pistas salían de **Sonic Pi**
+(`tools/audio/sonicpi/`, conservado como histórico), que horneaba en ellas samples que Sonic
+Pi trae de serie (CC0 1.0: tablas, platos, cabasa, `ambi_choir`, `misc_crow`,
+`drum_cowbell`). **Ninguna pista actual contiene ya esas muestras.** Las versiones
+anteriores a Sonic Pi (síntesis numpy) quedan en `tools/audio/music_backup/`.
+
+Los SFX y las voces son síntesis propia con numpy: cuerdas Karplus-Strong, flauta de caña
+(*ney*), percusión sintetizada, sala tipo Schroeder y compresor de bus. **En música, SFX y
 voz no hay muestras de terceros, ni samples de bibliotecas, ni material con licencia ajena.**
 
 **Las voces también son síntesis, no grabaciones ni TTS.** Modelo fuente-filtro: pulso
@@ -50,13 +53,10 @@ python tools/audio/gen_audio.py            # SFX y voz, salida .ogg
 python tools/audio/gen_audio.py all wav    # .wav sin comprimir (depuración)
 python tools/audio/gen_audio.py voz_       # solo un grupo, por prefijo de nombre
 
-# Música (Sonic Pi): arrancar el daemon y grabar cada pista
-python tools/audio/sonicpi/record.py boot            # proceso de larga vida
-python tools/audio/sonicpi/record.py capture <pista> <periodo_s>   # y mandar el .rb por el MCP
-python tools/audio/sonicpi/record.py batch <pista>:<periodo> ...  # en cadena, sin MCP
-python tools/audio/sonicpi/record.py reprocess <pista> <periodo>  # rehacer la mezcla sin regrabar
+# Música: la orquesta sintética (las 47 pistas, ~9 min en 4 núcleos)
+python tools/audio/orquesta/render.py                # todas -> assets/audio/music/*.ogg
+python tools/audio/orquesta/render.py cap03 boss     # solo las que empiezan por esos prefijos
 python tools/audio/sonicpi/analyze.py assets/audio/music          # gates de calidad
-python tools/audio/sonicpi/check_names.py                         # nombres de sample/synth
 ```
 
 La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compilación
@@ -70,6 +70,8 @@ La transcodificación a Vorbis usa **ffmpeg** como herramienta externa de compil
 | Qué | Dónde | Cómo se genera |
 |---|---|---|
 | 12 hojas de personaje | `assets/sprites/*.png` | `tools/blender/mantle_sprites/` (Blender 4.1) |
+| 46 estampas de relato (768x384, paleta 256) | `assets/sprites/estampas/ev_NN.png` | `tools/estampas/` (numpy + figuras de Blender 4.2, 2026-10-03) |
+| 9 hojas de jefe (`boss_*.png`, mismo formato) | `assets/sprites/boss_*.png` | `tools/blender/mantle_sprites/bosses.py` (Blender 4.2, 2026-10-03) |
 | Tileset de terreno | `assets/sprites/tiles.png` | `tools/blender/mantle_sprites/tiles.py` |
 | 8 estampas del prólogo + 10 intros de capítulo + 4 estampas del Ascenso (x3 capas) | `assets/sprites/cine/` | `tools/blender/mantle_sprites/cine.py` |
 | 22 retratos y viñetas | `assets/sprites/portraits.png` | `tools/blender/mantle_sprites/portraits.py` |

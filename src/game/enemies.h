@@ -30,17 +30,38 @@ enum class EnemyType : u32 {
 // =============================================================================
 // Patron de jefe: cada capitulo pelea distinto (GDD 7.2 / 1-2 Reyes)
 // =============================================================================
+// Desde el 2026-10-03 cada patron es una ESTRATEGIA propia con fases y telegrafos (la
+// implementacion y las cifras viven en game/bosses.cpp; el diseno, en src/game/CLAUDE.md,
+// seccion "Los diez jefes"). El patron va 1:1 con el capitulo.
 enum class BossPattern : u8 {
-    CapitanDeAcab,    // Cap 1: cargas en linea, pide refuerzos a media vida
-    SacerdoteBaal,    // Cap 2: invoca profetas menores y se cura
-    ProfetasDeBaal,   // Cap 3: la multitud; 2a fase "se sajaban con cuchillos"
-    Desesperacion,    // Cap 4: viento -> terremoto -> fuego -> silbo apacible
-    AcabYJezabel,     // Cap 5: duo; al caer uno, el otro se enfurece
-    EspirituCorrupto, // Cap 6: se divide al perder vida
-    Acreedor,         // Cap 7: cobra en sangre (se cura con cada ronda)
-    LaMuerte,         // Cap 8: intocable de lejos; solo cede en cuerpo a cuerpo
-    Guiezi,           // Cap 9: teleporta y dispara al llegar
-    BenAdad           // Cap 10: asedio, oleadas de sirios sin fin
+    CapitanDeAcab,    // Cap 1: carga en carril; contra el muro queda aturdido; escudo frontal
+    SacerdoteBaal,    // Cap 2: idolos que le hacen intocable + lluvia de fuego
+    ProfetasDeBaal,   // Cap 3: el corro le protege; ritual en el centro; "se sajaban"
+    Desesperacion,    // Cap 4: viento -> terremoto -> fuego -> silbo apacible (1 R 19:11-12)
+    AcabYJezabel,     // Cap 5: duo de verdad; ella le cura, el barre; el que queda se enfurece
+    EspirituCorrupto, // Cap 6: charcas, se sumerge y emerge bajo el profeta, se divide
+    Acreedor,         // Cap 7: la cadena tira de ti y cobra fe; la deuda se cierra
+    LaMuerte,         // Cap 8: oscuridad; intocable de lejos; la guadana y su resuello
+    Guiezi,           // Cap 9: senuelos; la plata le hace arrodillarse
+    BenAdad           // Cap 10: artilleria de asedio, carro, flechas; la hueste celestial
+};
+
+// Lo que un jefe pone en la arena y NO es el jefe (EnemyAIComponent::prop_kind). Es hostil
+// —se le dispara y cuenta como vivo— pero no va en la barra y muere con su dueno.
+enum class BossProp : u8 {
+    None = 0,
+    Idol,     // idolo de Baal (cap. 2): mientras quede uno en pie, el sacerdote es intocable
+    Decoy,    // senuelo de Guiezi (cap. 9): 1 de vida, dispara, revienta en plata
+};
+
+// Hojas propias de cada jefe (rooms.h get_boss_sheet). `own` = la hoja es del jefe; si es
+// false el Engine paso la del enemigo base (la hoja del jefe aun no existe) y el jefe se
+// dibuja como siempre, a 1,6 en vez de a 1,4.
+struct BossSheets {
+    u32  main        = TEXTURE_NONE;
+    bool main_own    = false;
+    u32  partner     = TEXTURE_NONE;   // Jezabel (cap. 5)
+    bool partner_own = false;
 };
 
 struct EnemyDef {
@@ -110,18 +131,53 @@ inline EnemyDef get_enemy_def(EnemyType type) {
 Entity spawn_enemy(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id = TEXTURE_NONE,
                    int chapter = 1);
 
-// Chapter boss: same sprite family, much tougher, bigger. `pattern` decide como pelea.
-Entity spawn_boss(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id,
+// Jefe del capitulo: hoja propia (o la del enemigo base si aun no existe), mucha mas vida,
+// mas grande. `pattern` decide como pelea (game/bosses.cpp).
+Entity spawn_boss(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id, bool own_sheet,
                   int chapter, const char* boss_name, BossPattern pattern);
 
-// Jefe en GRUPO (cap. 3, 1 R 18:26-29: sumo sacerdote + corro de profetas con barra
-// compartida). Crea la cabeza con `spawn_boss` y, si el patron lo pide, sus miembros
-// (`EnemyAIComponent::boss_group`) bailando alrededor de `ring_center`. Devuelve la
-// cabeza. Para los demas patrones es exactamente `spawn_boss`.
+// Jefe con SEQUITO. Crea la cabeza con `spawn_boss` y, si el patron lo pide, sus miembros
+// (`EnemyAIComponent::boss_group`) con barra compartida: el corro del Carmelo (cap. 3,
+// 1 R 18:26-29) bailando alrededor de `ring_center`, o Jezabel junto a Acab (cap. 5).
+// Devuelve la cabeza. Para los demas patrones es exactamente `spawn_boss`.
 Entity spawn_boss_group(ECSWorld& world, EnemyType type, Vec2 position, Vec2 ring_center,
-                        u32 texture_id, int chapter, const char* boss_name, BossPattern pattern);
+                        const BossSheets& sheets, int chapter, const char* boss_name,
+                        BossPattern pattern);
 // Miembros del grupo vivos (sin la cabeza)
 int count_boss_group(const ECSWorld& world);
+
+// IA de jefes, miembros de grupo y props (bosses.cpp). update_enemy_ai la llama para toda
+// entidad con `is_boss`, `boss_group` o `prop_kind`.
+void update_boss_entity(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_player, f32 dist,
+                        f32 dmg, f32 dt);
+// Cae un jefe, un miembro o un prop: limpia sus peligros y, si era el jefe, sus props y su
+// plata. Lo llama on_enemy_death_behavior.
+void on_boss_death(ECSWorld& world, Entity e, Vec2 pos);
+// El aviso de la barra cuando el jefe es intocable (cada patron por un motivo distinto)
+const char* boss_invulnerable_hint(BossPattern pattern);
+
+// Marcas de los jefes: en el SUELO (aura, arco del escudo, "ahora si": el aro dorado) y
+// por ENCIMA de los personajes (ataduras de los idolos y del corro, la curacion de
+// Jezabel, la cadena del Acreedor, las estrellas del aturdido, la burbuja de intocable).
+struct Renderer;
+struct HazardArt;
+void render_boss_ground(Renderer& renderer, const ECSWorld& world, const HazardArt& art);
+void render_boss_overlays(Renderer& renderer, const ECSWorld& world, const HazardArt& art);
+
+// =============================================================================
+// Utilidades de IA compartidas (enemies.cpp las define; bosses.cpp las usa)
+// =============================================================================
+enum class ProjectileKind : u8;   // game/combat.h
+bool   enemy_has_los(const ECSWorld& world, Vec2 from, Vec2 to);
+void   enemy_shoot(ECSWorld& world, Entity e, Vec2 dir, ProjectileKind kind, f32 dmg, f32 speed, f32 range);
+void   enemy_volley(ECSWorld& world, Entity e, Vec2 to_player, int count, f32 spread,
+                    ProjectileKind kind, f32 dmg, f32 speed, f32 range);
+void   enemy_ring(ECSWorld& world, Entity e, Vec2 to_player, int count,
+                  ProjectileKind kind, f32 dmg, f32 speed, f32 range);
+// Punto pisable cerca de `around` (o `fallback` si ninguna de las ocho direcciones vale)
+Vec2   enemy_free_spot(const ECSWorld& world, Vec2 around, f32 radius, int seed, Vec2 fallback);
+// Hostiles vivos que NO son el jefe (techo de invocaciones, de divisiones...)
+int    count_alive_minions(const ECSWorld& world);
 
 // =============================================================================
 // Enemy AI Update

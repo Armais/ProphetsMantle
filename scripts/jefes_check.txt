@@ -1,0 +1,380 @@
+# ============================================================================
+# jefes_check.txt - Los diez jefes con estrategia propia (2026-10-03)
+# Uso:  MANTLE.exe --script scripts/jefes_check.txt
+#
+# Cada jefe pelea a su manera con telegrafos en el suelo (game/hazards.h) y una ventana
+# que se aprende a castigar (game/bosses.cpp; diseno en src/game/CLAUDE.md, "Los diez
+# jefes"). Este guion entra en las diez arenas con `god`, deja correr cada pelea un rato,
+# salta de fase con `bosshp <fraccion> [quien]` y fotografia telegrafos y cambios de fase.
+#
+# GATES DEL LOG (exit 0 NO es un gate):
+#   1. "Boss sheets cap N: propia" en los diez (las nueve hojas boss_*.png + acab.png y
+#      jezabel.png del cap. 5: "propia + pareja propia"). Sin la hoja, "prestada" y una
+#      linea "Boss sheet ausente: ..." — y CERO "Failed to load".
+#   2. "Boss <nombre> spawned: hp N, hoja propia, escala 1.40" una vez por capitulo (dos
+#      en el 5: Acab y Jezabel).
+#   3. Una linea "Hazard <Tipo> spawned (...)" por lo menos de: Lane (1, 5, 7, 10),
+#      Circle (2, 3, 5, 6, 9, 10), Ring (3, 4, 6, 7), Push (4), Cone (5, 8), Pool (6, 9).
+#   4. Fases: "Boss Capitan de Acab phase 1", "Boss Sacerdote de Baal phase 1", "Boss Sumo
+#      sacerdote de Baal phase 1", "Boss Tu Propia Desesperacion phase 1/2/3" (las tres),
+#      "Boss Acab phase 1 (enfurecido...)", "Boss Espiritu de Corrupcion phase 1",
+#      "Boss El Acreedor phase 1 (la deuda)", "Boss La Muerte phase 1", "Boss Guiezi el
+#      Codicioso phase 1", "Boss Ben-adad de Siria phase 2 (la hueste celestial...)" y
+#      "soldados cegados 6 s".
+#   5. Los estados de cada estrategia: "stunned" (cap. 1), "idolos en pie" e "idolos
+#      derribados" (cap. 2), "ritual del corro" (cap. 3), "canaliza la curacion" (cap. 5),
+#      "se sumerge" y "emerge" (cap. 6), "la deuda se cierra" (cap. 7), "sin resuello"
+#      (cap. 8), "se teletransporta (2 senuelos)" y "lanza la plata" (cap. 9),
+#      "artilleria" y "lluvia de flechas" (cap. 10).
+#   6. Diez "Boss <nombre> defeated in T s" y diez "Cell N cleared (Boss)": la arena se
+#      cierra aunque haya idolos, senuelos o plata (mueren con el jefe).
+#   7. Cero "Hazard ... DESCARTADO" (la piscina de 64 no se llena).
+#
+# CAPTURAS (mirar CADA una): jNN_* — telegrafos en el suelo (relleno que se llena, borde
+# que late), el aro dorado de las ventanas, las ataduras (idolos -> sacerdote, corro ->
+# sumo sacerdote, la curacion de Jezabel), la oscuridad de la Muerte, los senuelos
+# translucidos de Guiezi y los sirios cegados (palidos) del cap. 10.
+# ============================================================================
+
+defaults
+wait 1.0
+press confirm
+wait 3.2
+press confirm
+wait 3.2
+press confirm
+wait 1.4
+god
+lang 0
+
+# ---------------------------------------------------------------- Cap. 1
+say ---- cap 1: el Capitan de Acab (carga, muro, escudo) ----
+goto boss
+wait 0.5
+walkarena 50
+wait 1.4
+shot j01_a_carril
+wait 0.1
+wait 0.5
+shot j01_b_carga
+wait 0.1
+wait 0.5
+shot j01_c_aturdido
+wait 0.1
+bot 5
+shot j01_d_pelea
+wait 0.1
+bosshp 0.45
+wait 1.2
+shot j01_e_arqueros
+wait 0.1
+bot 4
+killall
+wait 0.5
+killall
+wait 0.6
+shot j01_f_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 2
+say ---- cap 2: el Sacerdote de Baal (idolos, lluvia de fuego) ----
+chapter 2
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 2.4
+shot j02_a_idolos
+wait 0.1
+wait 1.6
+shot j02_b_lluvia
+wait 0.1
+bot 14
+shot j02_c_ventana
+wait 0.1
+bosshp 0.45
+bot 3
+shot j02_d_fase2
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.6
+shot j02_e_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 3
+say ---- cap 3: los 450 (el corro le protege, el ritual) ----
+chapter 3
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 1.5
+shot j03_a_corro_ataduras
+wait 0.1
+wait 6.6
+shot j03_b_ritual
+wait 0.1
+wait 2.0
+shot j03_c_onda
+wait 0.1
+bosshp 0.45 1
+bot 4
+shot j03_d_frenesi
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.5
+killall
+wait 0.6
+shot j03_e_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 4
+say ---- cap 4: tu propia desesperacion (viento, terremoto, fuego, silbo) ----
+chapter 4
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 3.0
+shot j04_a_viento
+wait 0.1
+wait 1.2
+shot j04_b_viento_onda
+wait 0.1
+bosshp 0.70
+wait 1.4
+shot j04_c_cambio_fase
+wait 0.1
+wait 2.4
+shot j04_d_terremoto
+wait 0.1
+wait 1.6
+shot j04_e_grietas
+wait 0.1
+bosshp 0.45
+wait 2.3
+shot j04_f_fuego
+wait 0.1
+wait 0.5
+shot j04_g_fuego_marcha
+wait 0.1
+bosshp 0.20
+wait 2.0
+shot j04_h_silbo
+wait 0.1
+bot 3
+killall
+wait 0.6
+shot j04_i_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 5
+say ---- cap 5: Acab y Jezabel (el duo) ----
+chapter 5
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 1.2
+shot j05_a_duo
+wait 0.1
+bosshp 0.60 1
+wait 2.0
+shot j05_b_maldicion
+wait 0.1
+wait 2.6
+shot j05_c_curacion
+wait 0.1
+# Cae Jezabel (por el camino normal) y Acab se enfurece. Antes del `bot`: con el botin de
+# los cuatro jefes anteriores el bot tumba a Acab en dos segundos.
+bosshp 0 2
+wait 1.0
+shot j05_d_acab_enfurecido
+wait 0.1
+bot 2
+shot j05_e_pelea
+wait 0.1
+killall
+wait 0.6
+shot j05_f_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 6
+say ---- cap 6: el Espiritu de Corrupcion (charcas, se sumerge) ----
+chapter 6
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+# Charcas primero: la primera inmersion llega a los 6 s de pelea (0,45 s hundiendose,
+# 2 s bajo el agua, 0,8 s de aviso donde emerge)
+wait 2.5
+shot j06_a_charcas
+wait 0.1
+wait 4.6
+shot j06_b_sumergido
+wait 0.1
+wait 1.6
+shot j06_c_emerge_aviso
+wait 0.1
+wait 0.8
+shot j06_d_emerge_onda
+wait 0.1
+bosshp 0.60
+wait 1.0
+shot j06_e_division
+wait 0.1
+learn 5 0
+faith 100
+press m1
+wait 0.6
+shot j06_f_sanar_aguas
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.5
+killall
+wait 0.6
+shot j06_g_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 7
+say ---- cap 7: el Acreedor (cadena, monedas, la deuda) ----
+chapter 7
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 1.6
+shot j07_a_cadena_aviso
+wait 0.1
+wait 0.6
+shot j07_b_cadena
+wait 0.1
+wait 0.5
+shot j07_c_recoge
+wait 0.1
+bosshp 0.45
+wait 2.4
+shot j07_d_deuda
+wait 0.1
+wait 1.4
+shot j07_e_deuda_cierra
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.6
+shot j07_f_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 8
+say ---- cap 8: la Muerte (oscuridad, guadana) ----
+chapter 8
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 2.5
+shot j08_a_oscuridad
+wait 0.1
+wait 1.0
+shot j08_b_guadana
+wait 0.1
+wait 0.5
+shot j08_c_sin_resuello
+wait 0.1
+bosshp 0.45
+bot 4
+shot j08_d_fase2
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.6
+shot j08_e_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 9
+say ---- cap 9: Guiezi (senuelos, plata, lepra) ----
+chapter 9
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 3.4
+shot j09_a_senuelos
+wait 0.1
+# La primera codicia llega a los 8 s: circulos plateados, plata en el suelo, de rodillas
+wait 5.0
+shot j09_b_plata
+wait 0.1
+wait 1.4
+shot j09_c_de_rodillas
+wait 0.1
+bosshp 0.45
+# La lepra sale donde se teletransporta (cada 4,5 s en esta fase, y nunca de rodillas)
+wait 6.0
+shot j09_d_lepra
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.6
+shot j09_e_derrotado
+wait 1.2
+
+# ---------------------------------------------------------------- Cap. 10
+say ---- cap 10: Ben-adad (asedio, carro, la hueste celestial) ----
+chapter 10
+wait 1.0
+press confirm
+wait 1.2
+goto boss
+wait 0.5
+walkarena 50
+wait 3.3
+shot j10_a_artilleria
+wait 0.1
+wait 1.1
+shot j10_b_flechas
+wait 0.1
+wait 2.5
+shot j10_c_oleada
+wait 0.1
+bosshp 0.25
+wait 0.3
+shot j10_d_hueste
+wait 0.1
+wait 1.5
+shot j10_e_cegados
+wait 0.1
+killall
+wait 0.5
+killall
+wait 0.6
+shot j10_f_derrotado
+wait 0.5
+say ---- fin: mirar los gates del log ----
+quit

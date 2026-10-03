@@ -8,6 +8,14 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 > etiquetas de consecuencia de cada opcion (`EffectChip`, `DialogueView::chips`) salen de
 > `get_event_effect` via `Engine::build_event_chips`: nunca se escriben a mano en la vista.
 
+## Caja de encuentro con estampa (2026-10-03)
+
+`draw_dialogue` con `DialogueView::plate` pinta la lamina del relato enmarcada arriba (marco
+dorado `draw_gold_frame`, cinta del titulo `draw_title_ribbon`) y la caja de texto debajo
+(`draw_text_box`). Todo con `draw_panel`/`draw_disc`: ni un PNG para el marco. **La geometria
+del texto es la de siempre a proposito** (cero `TEXT TRUNCATED`); el detalle de por que y de
+la carga de la lamina esta en `docs/encuentros-y-lore.md`.
+
 ## Codice
 
 - **El Códice** (`ui/codex.h`): cinco pestañas — Capítulos / Bestiario / **Milagros** / **Objetos** / **Logros** (ver la sección de Logros). La de milagros se llamaba "Reliquias" y listaba milagros (nombre equivocado); las reliquias son objetos y viven en la de Objetos, que lista los 16 de `ItemRegistry` (incluidos los dos `event_only`) con el color de rareza en la fila y, abajo, el efecto + el pasaje **sin referencia**. El contador "Descubierto X/Y" cuenta las cuatro pestañas y ahora cuadra con lo que se puede ver. El contador va arriba a la derecha y la ayuda de teclas abajo: en 180 unidades de alto no caben las dos bajo el panel del pasaje.

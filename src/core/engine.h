@@ -18,6 +18,7 @@
 #include "game/player.h"
 #include "game/enemies.h"
 #include "game/combat.h"
+#include "game/hazards.h"
 #include "game/rooms.h"
 #include "game/items.h"
 #include "game/events.h"
@@ -84,6 +85,7 @@ struct DialogueState {
     // El Ascenso se juega sobre NEGRO y no sobre el mundo: pasa fuera de una sala, y
     // dejar detras la arena del jefe del capitulo 5 seria mentir sobre donde estas.
     bool dark = false;
+    f32  t = 0.0f;           // segundos desde que se abrio la caja (entrada animada de la estampa)
 };
 
 enum class Act : u8 {
@@ -225,11 +227,27 @@ struct Engine {
     u32 icons_texture   = TEXTURE_NONE;   // assets/sprites/icons.png (render/sprites.h, namespace Icon)
     u32 chariot_texture = TEXTURE_NONE;   // assets/sprites/chariot.png (Carro de Fuego visible)
     u32 portrait_texture = TEXTURE_NONE;  // assets/sprites/portraits.png (Bestiario del Códice)
+    // La ESTAMPA del relato abierto (assets/sprites/estampas/ev_NN.png, tools/estampas). Se carga
+    // al abrir el relato y se descarga al abrir el siguiente: solo hay una viva, 1,2 MB de VRAM.
+    u32 plate_texture = TEXTURE_NONE;
+    int plate_event   = -1;
     u32 npc_texture = TEXTURE_NONE;       // assets/sprites/npcs.png (quien espera en la sala Event)
     // Hojas de Acab y Jezabel (896x1920, como las de los profetas): solo las usan las escenas
     // guionizadas (start_scene), donde estan de pie en el escenario.
     u32 acab_texture    = TEXTURE_NONE;
     u32 jezabel_texture = TEXTURE_NONE;
+    // Hoja propia del jefe del capitulo (rooms.h get_boss_sheet), cargada al empezar el
+    // capitulo. Sin el fichero, la del enemigo base y `own` a false (bosses.cpp lo dibuja
+    // entonces como siempre, a 1,6). Ver load_boss_sheets.
+    BossSheets boss_sheets;
+    void load_boss_sheets(int chapter);
+    // Texturas procedurales de los telegrafos de suelo (game/hazards.h)
+    HazardArt hazard_art;
+    // La oscuridad de La Muerte (cap. 8): 0..1 suavizado, y el radio de la luz que deja
+    // alrededor del profeta. La pide el jefe cada frame (ECSWorld::darkness_req).
+    f32 darkness_level  = 0.0f;
+    f32 darkness_radius = 76.0f;
+    void render_darkness();
 
     // Frame draw list (reused)
     std::vector<DrawCmd> draw_list;
@@ -239,6 +257,9 @@ struct Engine {
     f32 banner_timer = 0.0f;
     f32 message_timer = 0.0f;
     f32 room_fade = 0.0f;        // 1 -> 0 fade-in after a room/chapter load (black veil under the HUD)
+    // Bandas de cine (0..1) en las escenas guionizadas y en la entrada del jefe: entran al
+    // abrirse la escena y salen al volver a jugar. Lo que dice "esto es una escena" sin texto.
+    f32 scene_bars = 0.0f;
     f32 world_flash = 0.0f;      // Fogonazo blanco de milagro (Player::flash_request)
     u32 chapter_seed = 0;        // RNG seed the current chapter map was generated with (saved)
     u32 pending_seed = 0;        // != 0: use this seed for the next start_chapter (loading a save)
@@ -475,6 +496,7 @@ struct Engine {
     void reset_boss_bar();
     void update_boss_bar();      // Cada frame: suma cabeza + corro y loguea las bajas del grupo
     void open_dialogue(int event_id);           // Encuentro biblico -> GameScene::Dialogue
+    void load_event_plate(int event_id);        // La estampa del relato (assets/sprites/estampas)
     void update_dialogue(f32 dt);               // Avance de lineas + eleccion
     void apply_event_choice(int event_id, int option);  // Efecto de la decision
     // Etiquetas de consecuencia de una opcion, de la misma tabla que la aplica (events.h)

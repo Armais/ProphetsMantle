@@ -186,7 +186,94 @@ struct EnemyAIComponent {
     // el dano por contacto y las recompensas al morir.
     bool ally            = false;
     f32  life_left       = 0.0f;   // > 0: se desvanece al agotarse (invocacion temporal)
+
+    // --- Jefes con estrategia propia (2026-10-03, game/bosses.cpp) -------------------
+    // Cada patron es una maquina de estados pequena: `boss_state` dice en que paso esta
+    // (perseguir, telegrafiar, cargar, aturdido...) y `state_timer` cuanto le queda. Los
+    // significados de cada valor viven en bosses.cpp, al lado del patron que los usa.
+    u8   boss_state   = 0;
+    f32  state_timer  = 0.0f;
+    f32  aux_timer    = 0.0f;      // segunda cadencia (anillos, monedas, oleadas...)
+    f32  aux2_timer   = 0.0f;      // tercera (curacion de Jezabel, codicia de Guiezi...)
+    int  counter      = 0;         // cargas encadenadas, piezas por recoger...
+    Vec2 act_dir      = {0, 1};    // rumbo de la carga / del barrido / de la cadena
+    Vec2 act_pos      = {0, 0};    // punto objetivo (fin de la carga, emerger, la plata)
+    Vec2 face_dir     = {0, 1};    // hacia donde mira el ESCUDO (Capitan de Acab)
+    // > -1: los tiros del profeta que entran por el frente (coseno de la semiapertura,
+    // contra `face_dir`) rebotan en el escudo. -2 = sin escudo (lo normal).
+    f32  shield_cos   = -2.0f;
+    f32  vuln_mult    = 1.0f;      // dano recibido x esto: aturdido, de rodillas, el silbo
+    f32  fight_time   = 0.0f;      // segundos de pelea, para el log del final
+    f32  hp_mark      = 0.0f;      // vida apuntada al empezar a canalizar (Jezabel)
+    // PROP del jefe (BossProp en enemies.h): idolos de Baal, senuelos de Guiezi. Son
+    // hostiles —se les dispara y cuentan como vivos— pero NO son el jefe: no van en la
+    // barra y mueren con el (on_enemy_death_behavior -> on_boss_death).
+    u8   prop_kind    = 0;
+    Entity owner      = ENTITY_NONE;   // el jefe al que sirve un prop o un miembro del corro
+    // Cegado por la hueste celestial (cap. 10, 2 Reyes 6:18): ni ataca ni apunta, vaga.
+    f32  blind_timer  = 0.0f;
 };
+
+// =============================================================================
+// Peligros de suelo TELEGRAFIADOS (2026-10-03, game/hazards.h)
+// =============================================================================
+// La caja de herramientas de los jefes: lo que va a doler se PINTA en el suelo antes de
+// doler. Un peligro no es una entidad (no ocupa ids del ECS, no tiene sprite): es una fila
+// de una piscina fija de ECSWorld, y su vida son tres tramos — AVISO (`warn`: el dibujo se
+// llena y se enciende), EFECTO (`active`: aqui y solo aqui hace dano) y una COLA corta sin
+// dano para el fogonazo. Los respeta todo lo que respeta un proyectil: i-frames del golpe y
+// del dash y el modo dios.
+enum class HazardKind : u8 {
+    Circle,   // aviso y estallido en un circulo
+    Lane,     // rectangulo desde un punto en un rumbo: cargas, cadenas, lluvia de flechas
+    Cone,     // barrido en abanico (guadana, espada)
+    Ring,     // onda que se abre (o se CIERRA) con un hueco por donde pasar o dashear
+    Pool,     // charca persistente: dano por contacto mientras dura
+    Push,     // viento: empuja al profeta mientras esta dentro
+    COUNT
+};
+
+// Lo que significa el impacto para quien lo lanzo (lo resuelve update_hazards)
+enum class HazardTag : u8 {
+    None,
+    Chain,     // la cadena del Acreedor: tira del profeta hacia el y le cobra fe
+    Debt,      // el anillo de la deuda: cobra fe
+    Ripple,    // la sombra del Espiritu sumergido: solo dibujo, sigue al dueno
+    Ritual,    // el fuego que pide el corro de Baal
+    Shield,    // el arco del escudo (dibujo)
+};
+
+// Como se ve el estallido (spawn_fx + particulas del color del peligro)
+enum class HazardFx : u8 { None, Fire, Dark, Holy, Water, Dust, Coin };
+
+struct Hazard {
+    bool       used   = false;
+    HazardKind kind   = HazardKind::Circle;
+    HazardTag  tag    = HazardTag::None;
+    HazardFx   fx     = HazardFx::None;
+    Vec2 pos    = {0, 0};     // centro (Circle/Ring/Pool) u origen (Lane/Cone/Push)
+    Vec2 dir    = {1, 0};     // rumbo (Lane/Cone/Push); en Ring, el centro del HUECO
+    f32  radius = 16.0f;      // Circle/Pool: radio; Cone: alcance; Ring: radio FINAL
+    f32  r_from = 0.0f;       // Ring: radio al empezar (mayor que `radius` = anillo que se cierra)
+    f32  length = 0.0f;       // Lane/Push
+    f32  width  = 0.0f;       // Lane/Push: ancho; Ring: grosor de la banda
+    f32  angle  = 0.0f;       // Cone: semiapertura (rad); Ring: semiapertura del hueco (0 = sin hueco)
+    f32  warn   = 0.8f;       // segundos de aviso
+    f32  active = 0.12f;      // segundos de efecto
+    f32  t      = 0.0f;       // reloj desde que nacio
+    f32  damage = 0.0f;
+    f32  force  = 0.0f;       // Push: unidades/s de empuje
+    f32  faith_drain = 0.0f;  // Chain / Debt
+    f32  tick   = 0.0f;       // Pool: espera hasta el siguiente mordisco
+    bool hits_player  = true;
+    bool hits_enemies = false;
+    bool hit_done     = false;   // el golpe de un solo uso ya conecto
+    bool burst_done   = false;   // el fogonazo del inicio del efecto ya salio
+    bool follow_owner = false;   // la posicion se pega a los pies del dueno cada frame
+    Color color  = {255, 120, 60, 255};
+    Entity owner = ENTITY_NONE;
+};
+constexpr int MAX_HAZARDS = 64;
 
 struct ProjectileComponent {
     Vec2 direction   = {0, 0};
@@ -219,7 +306,10 @@ struct ItemComponent {
     enum class Type : u8 { Weapon, Passive, Relic, Consumable, Heredable, Pickup };
     // `Offering` es la unica recogida que SOBREVIVE A LA PARTIDA: va derecha a la
     // meta-progresion. Es lo que hace que explorar de mas pague aunque mueras.
-    enum class Pickup : u8 { None, Heart, FaithOrb, Offering };
+    // `Silver` son los talentos de plata de Guiezi (cap. 9): estan en el suelo pero NO
+    // tienen colisionador — no son para el profeta, son el cebo por el que Guiezi se
+    // arrodilla (game/bosses.cpp).
+    enum class Pickup : u8 { None, Heart, FaithOrb, Offering, Silver };
     Type   type         = Type::Passive;
     Pickup pickup       = Pickup::None;
     u32    item_id      = 0;
@@ -277,6 +367,9 @@ struct ECSWorld {
     u32 tileset = TEXTURE_NONE;
     // Hoja de efectos propia (assets/sprites/vfx.png). TEXTURE_NONE = spawn_fx no dibuja.
     u32 vfx_sheet = TEXTURE_NONE;
+    // Disco blanco de borde suave (Renderer::disc_tex): las monedas del Acreedor. El tileset
+    // va con filtrado al vecino y a tamano de proyectil se escalona.
+    u32 disc_tex = TEXTURE_NONE;
     // Hojas por EnemyType, para que los jefes puedan invocar secuaces con su sprite
     // correcto sin conocer al Engine (lo rellena Engine::load_sprites).
     u32 enemy_textures[8] = {TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE, TEXTURE_NONE,
@@ -307,6 +400,15 @@ struct ECSWorld {
 
     // Global status effects
     f32 enemy_slow_timer = 0.0f;   // "Palabra de Sequia": enemies at half speed while > 0
+
+    // Peligros telegrafiados de los jefes (game/hazards.h). Se vacian con el mundo
+    // (clear), al cargar sala, al recolocar al profeta y al morir su dueno.
+    Hazard hazards[MAX_HAZARDS];
+    // Peticiones de los jefes al Engine, que es quien tiene pantalla y altavoz:
+    f32 flash_request  = 0.0f;   // fogonazo blanco (cambio de fase, la hueste celestial)
+    f32 darkness_req   = 0.0f;   // La Muerte apaga la luz: radio de la luz alrededor del profeta (0 = no)
+    u32 hazard_bursts  = 0;      // peligros que estallaron este frame (un golpe sordo)
+    u32 shield_blocks  = 0;      // tiros que rebotaron en un escudo (un "clinc")
 
     void init();
     void clear();
