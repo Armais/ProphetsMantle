@@ -518,23 +518,6 @@ void CinematicSystem::render(Renderer& r) {
         r.draw_sprite_rect(g_grain, {gx, gy, 448.0f, 252.0f}, {0.0f, 0.0f, W, H}, with_alpha(Color::white(), 0.045f));
     }
 
-    // --- bandas de cine: entran al empezar y no se mueven entre escenas
-    {
-        const f32 bh = BAR_H * smoothstep(clock / 0.9f);
-        r.draw_rect({0.0f, 0.0f, W, bh}, Color::black());
-        r.draw_rect({0.0f, H - bh, W, bh}, Color::black());
-    }
-
-    // --- aviso (discreto, parpadeante). En un telefono no hay ENTER ni ESC: el aviso habla
-    // de dedos y el "saltar" es el boton de arriba a la derecha.
-    if (t > 1.6f) {
-        const f32 a = 0.30f + 0.16f * std::sin(clock * 2.4f);
-        r.draw_text(touch_ui ? tr("toca para seguir", "tap to continue")
-                             : tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip"),
-                    8.0f, H - 9.0f, with_alpha(Color{214, 204, 190, 255}, a), 0.6f);
-    }
-    if (touch_ui) draw_skip_button(r, clock, skip_pressed);
-
     // --- velos: entrada de la primera escena (o de una que entra por negro / por blanco) y
     // salida de la ultima. Entre escenas encadenadas no hay negro: lo hace el fundido.
     f32 veil = 0.0f;
@@ -556,6 +539,24 @@ void CinematicSystem::render(Renderer& r) {
     if (veil > 0.001f) {
         r.draw_rect({0.0f, 0.0f, W, H}, with_alpha(veil_col, veil));
     }
+
+    // --- bandas de cine ENCIMA del velo: un fogonazo blanco que las aclarara dejaria ver
+    // que son un recuadro pintado. Entran al empezar y no se mueven entre escenas.
+    {
+        const f32 bh = BAR_H * smoothstep(clock / 0.9f);
+        r.draw_rect({0.0f, 0.0f, W, bh}, Color::black());
+        r.draw_rect({0.0f, H - bh, W, bh}, Color::black());
+    }
+
+    // --- aviso (discreto, parpadeante). En un telefono no hay ENTER ni ESC: el aviso habla
+    // de dedos y el "saltar" es el boton de arriba a la derecha.
+    if (t > 1.6f) {
+        const f32 a = (0.30f + 0.16f * std::sin(clock * 2.4f)) * (1.0f - veil);
+        r.draw_text(touch_ui ? tr("toca para seguir", "tap to continue")
+                             : tr("[ENTER] seguir    [ESC] saltar", "[ENTER] continue    [ESC] skip"),
+                    8.0f, H - 9.0f, with_alpha(Color{214, 204, 190, 255}, a), 0.6f);
+    }
+    if (touch_ui) draw_skip_button(r, clock, skip_pressed);
 }
 
 // =============================================================================
