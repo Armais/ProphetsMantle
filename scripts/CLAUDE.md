@@ -391,3 +391,22 @@ Guiones:
   "Volver" es la 11 y se llega con seis tramos de arrastre).
 - **Con `--touch`, las capturas de partida leen la VENTANA** (los controles van en la
   superposicion): con `--window 2400x1080` salen a 2400x1080 con los pilares.
+
+### El dedo mantenido en los guiones, y `apuntado_tactil_check` (2026-10-03)
+
+**El arnes soltaba el Ataque de un dedo sintetico.** `update_autoplay` pone a cero cada tick
+las acciones que gobierna el guion (`driven`, Ataque incluido) y vuelve a afirmar solo lo que
+mantiene un `hold`. Un `touch` mantenido en la mitad de disparo disparaba por tanto UNA vez y
+nada mas: en un telefono el dedo apoyado mantiene la rafaga. Ahora, tras el reset, se
+re-afirma el Ataque si hay dedo de disparo (`Input::touch_aim_active`) y DASH / ARMA si su
+boton tactil sigue pulsado. Solo afecta al modo guion. Los guiones tactiles de siempre dan
+las mismas lineas que antes.
+
+**`apuntado_tactil_check.txt`** (`--touch`) responde a "¿se apunta y se dispara a la vez con
+el pulgar derecho?" con la auto-mira APAGADA y la geometria de `mira_check`: arrastrar hacia
+el soldado lo mata (3 tiros, 20 de dano), arrastrar al lado contrario hace 0, empezar mal y
+corregir SIN soltar hace 13, y con el Joystick de apuntar, 13. Trampa que costo la primera
+version: hay que llegar al puesto de tiro por el MISMO camino que `mira_check`
+(`walks 536 200` -> `walks 536 312`); desde otro sitio el `walk` se atasca 94 unidades a la
+izquierda y un arbol seco tapa la linea de tiro, y parecia que el apuntado no funcionaba.
+`joylog` imprime ahora tambien `AIM dedo apuntando ataque aim_axis` del dedo de disparo.

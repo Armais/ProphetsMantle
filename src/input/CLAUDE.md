@@ -381,3 +381,15 @@ cada relayout. Guiones: **`movil_check.txt`** (`--touch --window 2400x1080`) y l
 re-pinneados `tactil_check` (ahora con `tbtn`), `tactil_ancho_check` (la sonda en píxeles,
 con el DASH en el pilar), `vertical_check` y `menus_tactil_check` (Opciones tiene 12 filas en
 táctil). Comandos nuevos en `scripts/CLAUDE.md`.
+
+### Apuntar y disparar con el mismo pulgar: comprobado (2026-10-03)
+
+El dedo apoyado en la mitad de disparo mantiene el Ataque (rafaga a la cadencia del cayado)
+y, si arrastra, el tiro sigue al arrastre: se apunta y se dispara a la vez, y se corrige sin
+levantar el dedo. Medido con la auto-mira apagada en `scripts/apuntado_tactil_check.txt`.
+
+**El primer tiro sale al BAJAR el dedo**, antes de que el arrastre exista, con la direccion
+que haya en ese instante: con la auto-mira encendida (lo normal en movil) va al objetivo de
+`pick_target`, que suele ser lo que se queria; con ella apagada, hacia donde mira el profeta.
+Si algun dia molesta, la alternativa conocida es la de Brawl Stars (apuntar y disparar al
+SOLTAR), pero cambia el tacto de todo el disparo tactil y no se ha tocado.

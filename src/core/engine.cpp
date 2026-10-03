@@ -6102,6 +6102,15 @@ void Engine::update_autoplay(f32 dt) {
                                     Action::Belt1, Action::Belt2, Action::Belt3, Action::Belt4,
                                     Action::BeltNext, Action::BeltPrev};
     for (Action a : driven) input.actions[static_cast<u32>(a)] = false;
+    // Lo que mantiene un DEDO sintetico (`touch`/`drag`) no lo gobierna el guion: en un
+    // telefono el dedo apoyado en la mitad de disparo mantiene el Ataque, y DASH / ARMA
+    // pulsados se quedan pulsados. Sin esto el reset de arriba los soltaba al tick siguiente
+    // y un toque mantenido de guion solo disparaba UNA vez — lo que hizo creer que apuntar
+    // y disparar con el mismo pulgar no funcionaba (2026-10-03).
+    if (input.touch_aim_active) input.actions[static_cast<u32>(Action::Attack)] = true;
+    for (const TouchButton& b : input.touch_buttons)
+        if (b.down && (b.action == Action::Dash || b.action == Action::AttackSecondary))
+            input.actions[static_cast<u32>(b.action)] = true;
 
     if (ap.timer > 0.0f) {
         ap.timer -= dt;
@@ -6414,6 +6423,11 @@ void Engine::update_autoplay(f32 dt) {
                 SDL_Log("JOY activo=%d base=(%.1f,%.1f) dedo=(%.1f,%.1f) radio=%.1f eje=(%.2f,%.2f) reposo=(%.1f,%.1f)",
                         j.active ? 1 : 0, j.origin.x, j.origin.y, j.current.x, j.current.y, j.radius,
                         ax.x, ax.y, input.joy_rest.x, input.joy_rest.y);
+                // Y el dedo de DISPARAR: si apunta y hacia donde va el tiro de verdad
+                SDL_Log("AIM dedo=%d apuntando=%d ataque=%d aim_axis=(%.2f,%.2f)",
+                        input.touch_aim_active ? 1 : 0, input.joystick_aim.active ? 1 : 0,
+                        input.actions[static_cast<u32>(Action::Attack)] ? 1 : 0,
+                        input.aim_axis.x, input.aim_axis.y);
                 continue;
             }
             // Frames PINTADOS por segundo desde la marca anterior: la sonda del ritmo de frames
