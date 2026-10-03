@@ -4,7 +4,7 @@ Quien GENERA todo esto es `tools/` (ver `tools/CLAUDE.md`): ni un asset se edita
 
 ```
 assets/
-  audio/music/          - 10 loops sintetizados (.ogg Vorbis, tools/audio/gen_audio.py; el loader cae .ogg -> .wav)
+  audio/music/          - 47 bucles de musica (.ogg Vorbis 32 kHz, orquesta sintetica de tools/audio/orquesta/; el loader cae .ogg -> .wav)
   audio/sfx/            - 37 SFX sintetizados (.ogg, mismo generador; incluye variantes _2/_3 por sonido)
   sprites/cine/         - Prologue panels: 8 escenas x 3 capas (1600x720 PNG con alfa, ver ui/cinematic.h)
   sprites/vfx.png       - Hoja de efectos propia: 8 fotogramas x 7 filas, celda 128 px (ver spawn_fx)

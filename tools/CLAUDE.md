@@ -5,7 +5,7 @@ Ni un asset se edita a mano: todo sale de aqui y se copia a `assets/`.
 | Pipeline | Que genera | Reglas |
 |---|---|---|
 | `tools/blender/mantle_sprites/` | hojas de personaje, tileset, efectos, retratos, PNJ y los 22 paneles cinematicos | `tools/blender/CLAUDE.md` |
-| `tools/audio/sonicpi/` | las 47 pistas de musica (Sonic Pi headless + `record.py`) | `tools/audio/CLAUDE.md` |
+| `tools/audio/orquesta/` | las 47 pistas de musica (orquesta sintetica propia en numpy/scipy, sin muestras; `render.py`). `tools/audio/sonicpi/` es el pipeline anterior, historico | `tools/audio/CLAUDE.md` |
 | `tools/audio/gen_audio.py` | los 52 `.ogg` de SFX y voz (sintesis numpy) | `tools/audio/CLAUDE.md` |
 | `tools/branding/` | `mantle.ico` y `mark_256.png` | `tools/branding/CLAUDE.md` |
 | `tools/estampas/` | las 46 estampas de los relatos (`assets/sprites/estampas/ev_NN.png`) | seccion de abajo |

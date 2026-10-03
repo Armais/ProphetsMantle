@@ -4,10 +4,15 @@ Lo que el motor hace con los ficheros ya generados esta en `src/audio/CLAUDE.md`
 
 ```
 tools/
-  audio/gen_audio.py      - sintetizador numpy de TODO el audio -> .ogg via ffmpeg
+  audio/gen_audio.py      - sintetizador numpy de los SFX y la voz -> .ogg via ffmpeg
                             (`python tools/audio/gen_audio.py`; `all wav` deja los .wav).
                             Cuerdas Karplus-Strong, flauta ney, dos buses estereo,
                             humanizacion y compresor de bus. Ver seccion "Audio".
+  audio/orquesta/         - LA MUSICA (47 pistas): orquesta sintetica propia en numpy/scipy
+                            (`python tools/audio/orquesta/render.py [prefijos]`).
+                            Ver seccion "Musica: la orquesta sintetica".
+  audio/sonicpi/          - HISTORICO: las partituras de Sonic Pi de la tanda 2026-09-13.
+                            Ya no generan nada; `analyze.py` sigue siendo el gate.
 ```
 
 ### Audio (`tools/audio/gen_audio.py` -> `.ogg`, pasada del 2026-08-25)
@@ -47,7 +52,179 @@ Guion: `scripts/audio_check.txt` (menu -> prologo -> combate -> muertes con soni
 -> milagros -> jefe -> Ascension -> victoria). Su criterio es **negativo**: cero lineas
 `Failed to load` en el log. Procedencia y licencias de todo: `assets/CREDITS.md`.
 
-### Musica: Sonic Pi (`tools/audio/sonicpi/`, tanda del 2026-09-13)
+### Musica: la orquesta sintetica (`tools/audio/orquesta/`, tanda del 2026-10-03)
+
+**Es lo que genera hoy las 47 pistas.** El usuario pidio "dar el salto de calidad... a un
+nivel ultra profesional": banda sonora cinematografica de Oriente Proximo antiguo (la
+referencia es *El Principe de Egipto*, *Assassin's Creed Origins*, *Journey*). Sonic Pi no
+llegaba (sintes de fabrica y samples ajenos) y ademas no corre en Linux sin cabeza, asi que
+la musica pasa a ser **sintesis propia de principio a fin, sin una sola muestra**: ni
+samples, ni soundfonts, ni IR grabadas. Mismos nombres de fichero, mismos `.ogg`, el motor
+no cambia.
+
+```bash
+python tools/audio/orquesta/render.py                  # las 47 (~10 min en 4 nucleos)
+python tools/audio/orquesta/render.py cap03 boss       # por PREFIJO de nombre
+python tools/audio/orquesta/render.py menu --wav-only --spectro   # sin encodear + PNG
+python tools/audio/orquesta/spectro.py <pista.ogg|wav> [salida.png] [--seam]
+```
+
+`render.py` escribe `assets/audio/music/<pista>.ogg` (Vorbis, 32 kHz, `-q:a 3`), deja el
+WAV crudo (float32) y el espectrograma en `tools/audio/orquesta/tmp/` (fuera del repo por
+.gitignore), decodifica el `.ogg` para medir pico y sonoridad reales y al final pasa
+**`tools/audio/sonicpi/analyze.py`** a cada pista. **Determinista**: las semillas salen de
+`crc32(nombre de pista, nombre de parte)` — NUNCA de `hash()`, que en Python cambia en
+cada proceso para las cadenas (dos pasadas tienen que dar ficheros identicos).
+
+| fichero | que hay |
+|---|---|
+| `dsp.py` | biquads RBJ, ruido lento, tablas de onda limitadas en banda, IR sinteticas, convolucion circular, BS.1770 (LUFS), compresor, cinta, limitador de pico verdadero |
+| `instruments.py` | los modelos (abajo) |
+| `compose.py` | modos y maqamat, notacion de melodias, `Score`/`Part`, conduccion de voces, humanizacion |
+| `arrange.py` | el MOTIVO, tesituras, secciones, bordones, tanpura |
+| `mix.py` | partes -> cuerpos -> buses de reverb -> bus maestro; tabla `CAL` |
+| `tracks_global.py`, `tracks_act1.py`, `tracks_act2.py` | las 47 partituras |
+| `render.py`, `spectro.py` | CLI (multiproceso) y espectrogramas |
+
+**Los instrumentos** (todos con humanizacion de ataque y dinamica):
+
+- **Cuerdas** (`vln1 vln2 vla vc cb` y solistas `solo_vln solo_vla solo_vc`): tabla de
+  onda con el espectro de Helmholtz del arco (1/n con las muescas del punto de contacto),
+  **6-8 voces por seccion** con vibrato, deriva y desafinacion independientes (eso es lo
+  que la hace "lush"), legato con portamento y bajada de arco, ruido de arco, brillo que
+  sigue a la dinamica, tremolo/picado/spiccato, y un **cuerpo de convolucion**: envolvente
+  disenada (picos ~285/460/560 Hz y joroba del puente ~2,6 kHz en el violin, mas graves en
+  viola/chelo/contrabajo) por encima de una estructura fina de ~70 resonancias aleatorias.
+  El vibrato barre esa estructura fina: es el brillo vivo que separa una cuerda de una
+  sierra filtrada.
+- **Coro** (`choir_s/a/t/b`, `voice` solista): pulso glotal en tabla con jitter, shimmer y
+  vibrato por cantante (9-10 voces por cuerda), banco de **formantes** por tesitura y vocal
+  (tablas clasicas soprano/contralto/tenor/bajo), morph entre dos vocales, aliento.
+- **Vientos** (`duduk ney kaval shofar`): fuente en tabla + ruido de soplo (parte ancha y
+  parte enganchada al periodo), cuerpo formantico, entradas desde abajo, vibrato que ENTRA
+  tarde en las notas largas, mordentes/trinos/apoyaturas desde la notacion.
+- **Metales** (`horns lowbrass`): seccion de 4 con el filtro que se ABRE con la dinamica
+  (filtro variable por bloques).
+- **Pulsadas** (`oud kanun harp lyre pizz`): Karplus-Strong de verdad con filtro de lazo
+  simetrico de 3 coeficientes, calculado por FILAS de un periodo (numpy, no Python por
+  muestra) y afinado exacto leyendo la cuerda a velocidad f*N/SR; posicion de pulsacion,
+  ruido de pua, cuerpo de convolucion. Cache por (altura, capa, variante).
+- **Percusion modal** (`frame daf darbuka riq taiko timp zills shaker clap gong`): modos de
+  membrana circular (ceros de Bessel), golpe de centro vs. borde, glissando de tension,
+  anillas inarmonicas que repican, redobles.
+- **Metalofonos** (`bells celesta crotales`), **bordon** (`tanpura`, con el pico del
+  jawari bajando por los armonicos) y **ambientes** (`wind sea fire water`).
+
+**Reverb**: cuatro salas con IR SINTETICAS estereo verdadero (LL/LR/RL/RR): ruido
+decorrelado por bandas con su propio T60 (los agudos mueren antes, la piedra los alarga),
+reflexiones tempranas dispersas y rampa de entrada. `hall` (2,5 s), `temple` (3,6 s,
+reflexiones separadas), `cave` (5 s, oscura) y `room` (0,9 s). Convolucion FFT CIRCULAR.
+
+**El bucle exacto, sin grabar dos vueltas**: todo lo lineal (notas, cuerpos, reverb) se
+calcula sobre el "one-shot" y se **pliega modulo el periodo**, que es exactamente el
+regimen estacionario de tocarlo en bucle; lo no lineal (compresor, cinta, limitador,
+nivelador) se precalienta con el propio final del bucle (`dsp.circular`). La costura empalma
+a la muestra (no hace falta crossfade). Es equivalente a "grabar dos periodos y cortar el
+segundo", a mitad de coste.
+
+**Bus maestro** (`mix.master`): paso alto 35 Hz -> shelves ADAPTATIVOS de aire (hasta
++7,5 dB desde 2,6 kHz si la pista no llega al 5% sobre 2 kHz) y de cuerpo (si no llega al
+11% bajo 200 Hz) -> balance L/R estatico (+-2 dB como mucho) -> **nivelador** (solo si el
+arco pasa de 12,5 dB entre el tramo mas fuerte y el mas flojo: "lleva el fader" alrededor
+de la mediana con una envolvente lentisima) -> compresor de pegamento 2:1 (~0,5 dB) ->
+cinta (tanh x2 sobremuestreada) -> -18 LUFS (BS.1770 propio; `ffmpeg ebur128` lo confirma
+sobre el `.ogg`) -> limitador de pico verdadero a -1,5 dBTP. Tras el Vorbis ningun pico
+pasa de -1,4 dBFS. Los retornos de sala (`* 0.72` en `render_score`) dejan la relacion
+directo/reverb en ~+3 dB: con +6/+7 sonaba a toma de microfono cercano, seca.
+
+**El motivo del juego** (`arrange.MOTIF`, Hijaz en MI: MI FA SOL# SI, la llamada, y la caida
+por la segunda aumentada) vuelve transformado: el duduk lo presenta en el titulo, el arpa lo
+dice en eolico en el Santuario, las trompas lo convierten en desafio en el Carmelo y lo dicen
+en LIDIO en el Llamado, en MAYOR en Samaria y en la victoria, AUMENTADO en la gloria de la
+Ascension e INVERTIDO en la derrota. Cada capitulo tiene su modo y su solista, y sus cuatro
+pistas no repiten solista ni fondo (tablas en los docstrings de `tracks_act1.py` y
+`tracks_act2.py`).
+
+**Notacion de melodias** (`compose.parse_mel`): `"0:1.5^ 1:.5 2:1 4:1g | 3:.75 ..."` =
+grado:pulsos + adornos (`^` entra desde abajo, `g`/`h` apoyatura, `m`/`w` mordente, `t`
+trino, `v` caida, `~` vibrato ancho, `>` acento, `.` picado, `!` re-articula), `'`/`,`
+octava, `#`/`b` semitono y `q`/`d` cuarto de tono (los maqamat `bayati`, `rast`, `saba`
+existen). **`check_bars` avisa si un compas no suma 4 pulsos**: un error de duracion no da
+excepcion, desplaza todo lo que viene detras y la melodia acaba a contratiempo de la armonia.
+Cazo dos en la primera pasada.
+
+**`CAL` (mix.py) es la calibracion de cada modelo**: con ella una nota tenida a dinamica 0,6
+sale a ~-20 LUFS (pulsadas -22, campanas -24, percusion medida por patron), y las ganancias
+de las partituras hablan de EQUILIBRIO musical. **Si se toca un modelo, hay que remedir su
+`CAL`**, o la pieza entera se descompensa sin que ningun gate lo note.
+
+**Trampas que costaron una pasada (mirarlas ANTES de tocar nada):**
+
+- **Una nota larga en el compas 0 se pliega al FINAL.** Si su ataque humanizado cae unos ms
+  antes del cero, el modulo la manda entera a la cola del buffer; con una cola fija mas
+  corta que la nota, el final del bucle se quedaba sin ella (el contrabajo de 16 s de una
+  estampa desaparecia en sus ultimos 2 s). La cola se dimensiona ahora con los eventos.
+- **Karplus-Strong con ruido blanco sale CHILLON.** Excitacion plana = todos los armonicos
+  igual de fuertes al pulsar: el oud tenia su maximo en 2 kHz y el fundamental 11 dB por
+  debajo. Paso bajo en la excitacion y posicion de pulsacion realista (oud 0,22, junto a la
+  roseta) lo dejan con el maximo en el fundamental.
+- **Cuerpos modales aleatorios: +-10 dB por banda entre semillas.** Con resonancias al azar
+  el violin segundo salia 9 dB por debajo del primero. La envolvente se disena; el azar solo
+  pone la estructura fina, con profundidad 0,55 en secciones y 0,95 en solistas.
+- **El formante no puede dejar fuera al fundamental**: los cantantes suben F1 con la nota
+  (sintonia de formante), y el banco lo hace (`F1 >= 1,12 f0`) mas un camino de "pecho".
+- **Costura**: el bucle empalma a la muestra, pero `analyze` mide el NIVEL de los ultimos 2 s
+  contra los 2 primeros. Lo que la rompia: un crescendo hasta el final de una estampa (vuelve
+  a empezar en piano), un arpegio que sube y se apaga cada compas de 4 s (el final siempre
+  cae en la parte floja) y el viento con rafagas demasiado profundas. Los gestos se escriben
+  por medio compas o en arco (sube y vuelve).
+- **Chasquidos de fuego de una muestra = clic digital** (factor de cresta 120, el limitador
+  bajaba 6 dB toda la pista). Son rafagas de 1-4 ms con saturacion suave.
+- Las texturas oscuras (duduk, tremolo, coro en 'u') no llegan al 4% sobre 2 kHz ni con
+  +10 dB de shelf, y ese shelf solo sube el soplido. El aire se ORQUESTA (crotalos, anillas,
+  shaker, ruido de arco, el viento o el agua del sitio) y el shelf queda en +7,5 dB como
+  mucho. `cap05_cine1`, `cap08_cine1` y `cap09_intro` son las que van mas justas (4,6-6%).
+- **La cuerda grave tiraba la mezcla a la derecha** (hasta 8,6 dB en una ventana de 4 s en
+  las intros de `cap06`): la energia grave manda en el RMS. Contrabajos y chelos van casi al
+  centro, como en una mezcla de cine, y el maestro corrige el balance global.
+- **Fraseo automatico** (`Part._shape_phrases`): cada `mel()` hace un arco de dinamica por
+  frase, las notas agudas pesan un poco mas y la nota final se suelta. Sin eso, todas las
+  notas de una melodia salian a la misma dinamica: secuenciador. `shape=False` lo apaga
+  (riffs, cantos en ostinato).
+- **Timbre medido por octavas, no a ojo**: el violin de seccion salia con la banda de 2 kHz
+  tan fuerte como el fundamental (zumbido de sierra) hasta bajar la joroba del puente a
+  +2,5 dB y cortar por encima de 4,8 kHz. Para comprobarlo: renderizar una escala de cada
+  instrumento y medir la energia por octava (el fundamental o el 2o armonico deben mandar;
+  4 kHz, 10-15 dB por debajo).
+
+**Periodos** (todos son bucles; las estampas duran 12-16 s y lo que importa pasa en los
+primeros 10):
+
+| pista | BPM x compases | s | | pista | BPM x compases | s |
+|---|---|---|---|---|---|---|
+| main_theme | 80 x 32 | 96 | | menu | 64 x 24 | 90 |
+| boss_theme | 132 x 32 | 58,2 | | victory | 80 x 16 | 48 |
+| death | 60 x 12 | 48 | | ascension | 76 x 24 | 75,8 |
+| prologue | 66 x 24 | 87,3 | | | | |
+
+| cap | tema | apertura | estampa A | estampa B |
+|---|---|---|---|---|
+| 01 | 80 x 32 = 96 | 60 x 12 = 48 | 60 x 4 = 16 | 80 x 4 = 12 |
+| 02 | 88 x 32 = 87,3 | 72 x 16 = 53,3 | 16 | 72 x 4 = 13,3 |
+| 03 | 96 x 32 = 80 | 80 x 16 = 48 | 16 | 12 |
+| 04 | 60 x 28 = 112 | 60 x 12 = 48 | 16 | 60 x 4 = 16 |
+| 05 | 92 x 32 = 83,5 | 80 x 16 = 48 | 16 | 12 |
+| 06 | 100 x 32 = 76,8 | 48 | 16 | 12 |
+| 07 | 96 x 32 = 80 | 48 | 16 | 12 |
+| 08 | 76 x 32 = 101,1 | 48 | 16 | 12 |
+| 09 | 104 x 32 = 73,8 | 48 | 16 | 12 |
+| 10 | 112 x 32 = 68,6 | 48 | 16 | 12 |
+
+### Musica: Sonic Pi (HISTORICO — `tools/audio/sonicpi/`, tanda del 2026-09-13)
+
+> **Ya no genera las pistas** (desde el 2026-10-03 las genera `tools/audio/orquesta/`).
+> Se conserva como historia del pipeline anterior y porque `analyze.py` sigue siendo el
+> gate de la orquesta. Lo de abajo describe como ERA.
 
 Las pistas NO salen de `gen_audio.py` (eso quedo para SFX y voz): salen de Sonic Pi.
 **Una partitura por pista, 27 en total**: siete globales (`main_theme`, `menu`, `boss_theme`,
