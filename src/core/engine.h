@@ -244,6 +244,9 @@ struct Engine {
     f32 banner_timer = 0.0f;
     f32 message_timer = 0.0f;
     f32 room_fade = 0.0f;        // 1 -> 0 fade-in after a room/chapter load (black veil under the HUD)
+    // Bandas de cine (0..1) en las escenas guionizadas y en la entrada del jefe: entran al
+    // abrirse la escena y salen al volver a jugar. Lo que dice "esto es una escena" sin texto.
+    f32 scene_bars = 0.0f;
     f32 world_flash = 0.0f;      // Fogonazo blanco de milagro (Player::flash_request)
     u32 chapter_seed = 0;        // RNG seed the current chapter map was generated with (saved)
     u32 pending_seed = 0;        // != 0: use this seed for the next start_chapter (loading a save)

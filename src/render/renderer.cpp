@@ -7,8 +7,10 @@
 #include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <set>
+#include <vector>
 
 bool Renderer::init(SDL_Renderer* renderer, SDL_Texture* render_target) {
     sdl = renderer;
@@ -391,6 +393,118 @@ u32 Renderer::load_texture(const char* path, bool smooth) {
 
     SDL_Log("Loaded texture [%d]: %s (%dx%d)", id, path, entry.width, entry.height);
     return id;
+}
+
+// Desenfoque de caja separable, tres pasadas (~gaussiana), sobre RGBA premultiplicado:
+// sin premultiplicar, el borde transparente (negro con alfa 0) ensucia de oscuro la silueta.
+static void box_blur_rgba(std::vector<f32>& px, int w, int h, int r) {
+    if (r <= 0) return;
+    std::vector<f32> tmp(px.size());
+    const f32 inv = 1.0f / static_cast<f32>(2 * r + 1);
+    for (int pass = 0; pass < 3; pass++) {
+        for (int y = 0; y < h; y++) {           // horizontal: px -> tmp
+            const f32* row = &px[static_cast<size_t>(y) * w * 4];
+            f32* out = &tmp[static_cast<size_t>(y) * w * 4];
+            for (int c = 0; c < 4; c++) {
+                f32 acc = 0.0f;
+                for (int k = -r; k <= r; k++) acc += row[std::clamp(k, 0, w - 1) * 4 + c];
+                for (int x = 0; x < w; x++) {
+                    out[x * 4 + c] = acc * inv;
+                    acc += row[std::min(x + r + 1, w - 1) * 4 + c] - row[std::max(x - r, 0) * 4 + c];
+                }
+            }
+        }
+        for (int x = 0; x < w; x++) {           // vertical: tmp -> px
+            for (int c = 0; c < 4; c++) {
+                f32 acc = 0.0f;
+                for (int k = -r; k <= r; k++) acc += tmp[(static_cast<size_t>(std::clamp(k, 0, h - 1)) * w + x) * 4 + c];
+                for (int y = 0; y < h; y++) {
+                    px[(static_cast<size_t>(y) * w + x) * 4 + c] = acc * inv;
+                    acc += tmp[(static_cast<size_t>(std::min(y + r + 1, h - 1)) * w + x) * 4 + c]
+                         - tmp[(static_cast<size_t>(std::max(y - r, 0)) * w + x) * 4 + c];
+                }
+            }
+        }
+    }
+}
+
+u32 Renderer::load_texture_blurred(const char* path, int radius_px) {
+    if (!path) return TEXTURE_NONE;
+    char key[256];
+    std::snprintf(key, sizeof(key), "%s#b%d", path, radius_px);
+    auto it = texture_map.find(key);
+    if (it != texture_map.end() && it->second < textures.size() && textures[it->second].texture)
+        return it->second;
+
+    const std::string full_path = std::string(get_asset_path()) + path;
+    SDL_Surface* loaded = IMG_Load(full_path.c_str());
+    if (!loaded) {
+        SDL_Log("Failed to load texture '%s': %s", full_path.c_str(), SDL_GetError());
+        return TEXTURE_NONE;
+    }
+    SDL_Surface* surf = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(loaded);
+    if (!surf) return TEXTURE_NONE;
+    const int w = surf->w, h = surf->h;
+    std::vector<f32> px(static_cast<size_t>(w) * h * 4);
+    for (int y = 0; y < h; y++) {
+        const u8* row = static_cast<const u8*>(surf->pixels) + y * surf->pitch;
+        for (int x = 0; x < w; x++) {
+            const f32 a = row[x * 4 + 3] / 255.0f;
+            f32* p = &px[(static_cast<size_t>(y) * w + x) * 4];
+            p[0] = row[x * 4 + 0] * a; p[1] = row[x * 4 + 1] * a; p[2] = row[x * 4 + 2] * a; p[3] = a;
+        }
+    }
+    SDL_DestroySurface(surf);
+    box_blur_rgba(px, w, h, radius_px);
+    std::vector<u8> out(px.size());
+    for (size_t i = 0; i < px.size(); i += 4) {
+        const f32 a = px[i + 3];
+        const f32 ia = a > 1e-4f ? 1.0f / a : 0.0f;
+        out[i + 0] = static_cast<u8>(std::min(255.0f, px[i + 0] * ia + 0.5f));
+        out[i + 1] = static_cast<u8>(std::min(255.0f, px[i + 1] * ia + 0.5f));
+        out[i + 2] = static_cast<u8>(std::min(255.0f, px[i + 2] * ia + 0.5f));
+        out[i + 3] = static_cast<u8>(std::min(255.0f, a * 255.0f + 0.5f));
+    }
+    const u32 id = create_texture_from_rgba(key, w, h, out.data(), true);
+    SDL_Log("Loaded texture [%d]: %s (%dx%d, desenfoque %d px)", id, key, w, h, radius_px);
+    return id;
+}
+
+u32 Renderer::create_target_texture(const char* name, int w, int h) {
+    auto it = texture_map.find(name);
+    if (it != texture_map.end() && it->second < textures.size() && textures[it->second].texture)
+        return it->second;
+    SDL_Texture* tex = SDL_CreateTexture(sdl, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+    if (!tex) {
+        SDL_Log("create_target_texture '%s' failed: %s", name, SDL_GetError());
+        return TEXTURE_NONE;
+    }
+    SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    TextureEntry entry;
+    entry.texture = tex; entry.width = w; entry.height = h;
+    if (it != texture_map.end() && it->second < textures.size()) {
+        textures[it->second] = entry;
+        return it->second;
+    }
+    const u32 id = static_cast<u32>(textures.size());
+    textures.push_back(entry);
+    texture_map[name] = id;
+    return id;
+}
+
+void Renderer::begin_target(u32 id) {
+    if (id >= textures.size() || !textures[id].texture) return;
+    SDL_SetRenderTarget(sdl, textures[id].texture);
+    const f32 rs = static_cast<f32>(Config::RENDER_SCALE);
+    SDL_SetRenderScale(sdl, rs, rs);
+}
+
+void Renderer::end_target() {
+    SDL_SetRenderTarget(sdl, target);
+    const f32 rs = static_cast<f32>(Config::RENDER_SCALE);
+    SDL_SetRenderScale(sdl, rs, rs);
 }
 
 void Renderer::unload_texture(const char* path) {

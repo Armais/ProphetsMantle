@@ -36,3 +36,7 @@ void ambience_draw_world(Renderer& renderer, const Room& room, int chapter, Rect
 
 // En PANTALLA (despues de end_world, antes de la vineta): luz y motas.
 void ambience_draw_screen(Renderer& renderer, const Room& room, int chapter, Vec2 camera, f32 time);
+
+// La textura de nubes (blanca con alfa, periodica, 256 px). La reusan las cinematicas para
+// sus bancos de nubes; TEXTURE_NONE antes de ambience_init.
+u32 ambience_cloud_texture();

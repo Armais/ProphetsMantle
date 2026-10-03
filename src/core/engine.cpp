@@ -469,6 +469,11 @@ void Engine::update(f32 dt) {
     if (message_timer > 0.0f) message_timer -= dt;
     if (room_fade > 0.0f)     room_fade = std::max(0.0f, room_fade - dt / 0.3f);
     if (scene_fade > 0.0f)    scene_fade = std::max(0.0f, scene_fade - dt / SCENE_FADE_TIME);
+    {
+        const bool scripted = (state.scene == GameScene::Dialogue && (scene_step >= 0 || scene_walk_t > 0.0f)) ||
+                              (state.scene == GameScene::Playing && boss_approach_t > 0.0f);
+        scene_bars = scripted ? std::min(1.0f, scene_bars + dt / 0.45f) : std::max(0.0f, scene_bars - dt / 0.35f);
+    }
     if (world_flash > 0.0f)   world_flash = std::max(0.0f, world_flash - dt);
 
     // Menu navigation blips (any scene showing a menu)
@@ -1165,6 +1170,15 @@ void Engine::render() {
         if (world_flash > 0.0f) {
             renderer.draw_rect({0, 0, static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)},
                                {255, 250, 235, static_cast<u8>(235.0f * std::min(1.0f, world_flash / 0.38f))});
+        }
+
+        // Bandas de cine de las escenas guionizadas (bajo el HUD y bajo la caja de dialogo)
+        if (scene_bars > 0.0f) {
+            const f32 k = scene_bars * scene_bars * (3.0f - 2.0f * scene_bars);
+            const f32 bh = 11.0f * k;
+            renderer.draw_rect({-8, -8, static_cast<f32>(Config::GAME_WIDTH) + 16, bh + 8}, {0, 0, 0, 255});
+            renderer.draw_rect({-8, static_cast<f32>(Config::GAME_HEIGHT) - bh, static_cast<f32>(Config::GAME_WIDTH) + 16, bh + 8},
+                               {0, 0, 0, 255});
         }
 
         // Room/chapter change: short fade-in over the world, under the HUD
@@ -2054,6 +2068,7 @@ void Engine::start_scene(int id) {
         room.door_north = room.door_south = room.door_east = room.door_west = false;
         room.has_doorway = false;
         room.enemy_spawns.clear();
+        room_fade = 1.0f;   // el escenario entra desde negro: un corte seco al decorado se leia como un salto
         room.cells[0].cleared = true;
         room.cells[0].visited = true;
         world.active_room = &room;

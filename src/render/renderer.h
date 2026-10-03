@@ -190,6 +190,16 @@ struct Renderer {
     // Disco blanco con el borde antialiaseado. Con `inner_frac` > 0 se recorta el agujero y
     // sale un anillo. Es lo unico redondo que tiene el Renderer aparte del panel en 9 trozos.
     u32 create_disc_texture(const char* name, int size, f32 inner_frac);
+    // Copia DESENFOCADA de un PNG (profundidad de campo de las cinematicas: el primer plano
+    // va fuera de foco). Desenfoque de caja x3 en alfa premultiplicado, en CPU y una sola vez
+    // al cargar; se cachea como "<path>#b<radio>" y se libera con unload_texture de esa clave.
+    u32 load_texture_blurred(const char* path, int radius_px);
+    // Objetivo de render fuera de pantalla (fundidos encadenados de las cinematicas): mismo
+    // tamano que `target`. begin_target/end_target cambian a el y vuelven al de siempre con
+    // la escala de juego puesta (en SDL3 la escala va por objetivo).
+    u32 create_target_texture(const char* name, int w, int h);
+    void begin_target(u32 id);
+    void end_target();
     TextureEntry* get_texture(u32 id);
 
     // Frame lifecycle

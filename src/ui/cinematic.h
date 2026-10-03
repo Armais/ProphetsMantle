@@ -44,6 +44,12 @@ enum CineFx : u8 {
     CineFx_Title   = 1 << 5,   // El titulo del juego
 };
 
+// Como ENTRA una escena desde la anterior (2026-10-03). Por defecto un FUNDIDO ENCADENADO:
+// la escena que sale se congela en un objetivo fuera de pantalla y se disuelve sobre la que
+// entra. Black = pasar por negro (cambio de hora o de lugar fuerte); White = entrar desde un
+// fogonazo (el carro de fuego).
+enum class CineCut : u8 { Dissolve, Black, White };
+
 struct CineLayer {
     u32   tex      = TEXTURE_NONE;
     f32   parallax = 1.0f;
@@ -68,6 +74,17 @@ struct CineScene {
     u8  fx    = CineFx_None;
     f32 fx_at = 0.0f;
 
+    // Luz de la escena (2026-10-03): un astro DETRAS de la capa lejana con halo, bancos de
+    // nubes, niebla de horizonte entre la capa lejana y la media, rayos que la figura tapa
+    // (contraluz) y el velo que se escapa por encima de las siluetas. sun_k = 0 = sin astro
+    // (interiores). La posicion va en fraccion de pantalla y se mueve poco con el paneo.
+    Vec2    sun    = {0.72f, 0.32f};
+    f32     sun_k  = 0.0f;
+    bool    moon   = false;
+    f32     haze   = 0.30f;
+    f32     clouds = 0.5f;
+    CineCut cut    = CineCut::Dissolve;
+
     // Rotulo bajo CineFx_Title. Vacio = el titulo del juego (prologo); con texto, el
     // rotulo del capitulo ("CAPÍTULO 3" / "El Monte Carmelo") en el color de su acto.
     std::string title;
@@ -81,6 +98,7 @@ struct CinematicSystem {
     static constexpr f32 FADE       = 0.65f;
     static constexpr f32 LINE_FADE  = 0.55f;
     static constexpr f32 TEXT_SCALE = 0.85f;
+    static constexpr f32 XFADE      = 1.1f;   // fundido encadenado entre escenas
 
     CineScene scenes[MAX_SCENES];
     int  scene_count = 0;
@@ -106,6 +124,18 @@ struct CinematicSystem {
     int         wrap_src[MAX_LINES] = {};   // Frase original de la que sale cada linea
     int         wrap_count = 0;
 
+    // Fundido encadenado: al pasar de escena se apunta lo que se veia (escena, tiempo y
+    // texto ya envuelto) y el primer render lo congela en `snap_tex`; luego se pinta encima
+    // de la escena nueva, cada vez mas transparente.
+    u32  snap_tex     = TEXTURE_NONE;
+    bool snap_pending = false;
+    bool snap_valid   = false;
+    int  prev_scene   = -1;
+    f32  prev_t       = 0.0f;
+    std::string prev_wrapped[MAX_LINES];
+    int         prev_src[MAX_LINES] = {};
+    int         prev_count = 0;
+
     void begin();
     void add(const CineScene& s);
     void load_art(Renderer& r);                  // Carga las texturas de todas las capas
@@ -113,7 +143,9 @@ struct CinematicSystem {
     void layout(const Renderer& r);              // Envuelve el texto de la escena actual
     void go_to(int index, const Renderer& r);
     bool update(Input& in, f32 dt, const Renderer& r);   // true = terminada
-    void render(Renderer& r) const;
+    void render(Renderer& r);
+    // Una escena entera (cielo, luz, capas, efectos, rotulo y texto) en su instante `st`.
+    void draw_scene(Renderer& r, int idx, f32 st, const std::string* lines, const int* src, int n) const;
 
     const CineScene& current() const { return scenes[scene]; }
 };

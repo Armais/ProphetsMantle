@@ -173,6 +173,8 @@ void ambience_init(Renderer& renderer) {
     SDL_Log("Ambiente: texturas %s", (g_cloud != TEXTURE_NONE && g_light != TEXTURE_NONE) ? "listas" : "NO disponibles");
 }
 
+u32 ambience_cloud_texture() { return g_cloud; }
+
 void ambience_draw_world(Renderer& renderer, const Room& room, int chapter, Rect view, f32 time) {
     if (g_cloud == TEXTURE_NONE || interior_of(room)) return;
     const Amb amb = get_amb(chapter, false);
