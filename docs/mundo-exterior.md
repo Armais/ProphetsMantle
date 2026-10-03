@@ -380,6 +380,35 @@ mejor la celda: `game/ground.h/.cpp` genera el suelo por codigo en texturas de T
 
 Guiones: `mapas_check`, `secretos_check` e `interiores_check` pasan sus gates.
 
+**Tileset al doble y en lineal (mismo dia).** Junto al suelo horneado, los props del tileset
+(arboles, palmeras, matas, rocas, hierba) se veian pixelados al lado de personajes suaves: el
+atlas iba a 4 texels por unidad y en `nearest`. Ahora va a 8 (`TILESET_TEXELS_PER_UNIT`,
+celda de 128 px) con un margen extruido de 2 px por celda (`TILESET_GUTTER`, paso 132) que
+deja filtrarlo en lineal sin sangrado. `get_tile_src` ya devuelve el rectangulo con el margen
+descontado; quien calcule a mano un `src` del tileset tiene que pasar por ahi.
+
+### Ambiente: nubes, luz y motas (2026-10-03)
+
+`game/ambience.h/.cpp`. Tres capas que no tocan el gameplay y que quitan la sensacion de
+"foto quieta":
+
+- **Sombras de nubes** (solo exterior), dentro de la pasada de mundo justo despues de
+  `draw_sorted`: oscurecen el suelo Y lo que hay encima. Textura de ruido PERIODICO de 256 px
+  que se repite cada 640 unidades y se desplaza con el viento del capitulo. **Las juntas van
+  ajustadas a la rejilla de pixeles del objetivo**: con el borde en fraccion de pixel las dos
+  baldosas pintan la misma fila y sale una raya oscura de lado a lado (paso, se vio y se mato).
+- **Luz** en pantalla, bajo la vineta: calida (ADD) desde arriba a la izquierda —de donde
+  vienen las sombras de los sprites— y penumbra fresca en la esquina contraria. Un color y una
+  fuerza por capitulo (`get_amb`): atardecer naranja en el Carmelo, luna fria en Horeb, luz
+  apagada en Jerico y Samaria. Los interiores, mas oscuros en las esquinas.
+- **Motas** ancladas al mundo con envoltura alrededor de la camara (no se van con el profeta,
+  nunca se acaban, sin estado): polvo (Querit, Sarepta, Horeb, la aldea pobre), vilanos que
+  destellan (El Llamado, Sunem, el Jordan), ceniza que cae (Jerico, Samaria), pavesas que suben
+  (Carmelo) y polvo quieto en los interiores.
+
+Todo son texturas procedurales de `ambience_init` (log `Ambiente: texturas listas`); sin ellas
+no se pinta nada.
+
 ### Deuda visual del exterior (2026-08-26)
 
 Cinco defectos que **solo se ven desde que la sala mide cuatro pantallas**, y ninguno era un

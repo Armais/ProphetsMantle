@@ -6,6 +6,7 @@
 #include "core/i18n.h"
 #include "render/sprites.h"
 #include "game/scenes.h"
+#include "game/ambience.h"
 #include "platform/platform.h"
 #include <cstdio>
 #include <cstdlib>
@@ -241,6 +242,8 @@ void Engine::load_sprites() {
     if (tileset_texture == TEXTURE_NONE) {
         SDL_Log("WARNING: tileset missing (assets/sprites/tiles.png) - using placeholder tiles");
     }
+    // Nubes, luz y motas: texturas procedurales (game/ambience.h)
+    ambience_init(renderer);
 
     // Hoja de efectos propia. Va con filtrado SUAVE (al reves que el tileset): sus celdas
     // son halos degradados, y el vecino mas proximo los convierte en escalones. El sangrado
@@ -1122,6 +1125,8 @@ void Engine::render() {
         world.collect_draws(draw_list, renderer);
         collect_chariot_draws(draw_list);
         renderer.draw_sorted(draw_list);
+        // Sombras de nubes: sobre el suelo Y lo que hay en el (una nube no distingue)
+        ambience_draw_world(renderer, current_room_data, state.current_chapter, view, world.time);
 
         current_room_data.render_exit_barriers(renderer, world.time);
         {
@@ -1142,6 +1147,9 @@ void Engine::render() {
             renderer.draw_text(buf, p.pos.x - w * 0.5f, p.pos.y - 10.0f - 14.0f * p.life, c, scale);
         }
         renderer.end_world();
+
+        // Luz del capitulo y motas (polvo, vilanos, ceniza, pavesas), bajo la vineta
+        ambience_draw_screen(renderer, current_room_data, state.current_chapter, camera.position, world.time);
 
         // Soft vignette over the world (under the HUD); margin covers camera shake
         if (renderer.vignette_tex != TEXTURE_NONE) {

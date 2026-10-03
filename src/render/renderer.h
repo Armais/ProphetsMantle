@@ -172,8 +172,9 @@ struct Renderer {
     bool init(SDL_Renderer* renderer, SDL_Texture* render_target);
     void shutdown();
 
-    // Texture management. smooth = linear filtering (sprites); false = nearest (tile atlas:
-    // cells abut each other and linear sampling would bleed across cell edges)
+    // Texture management. smooth = linear filtering; false = nearest, solo para un atlas cuyas
+    // celdas se toquen (en lineal sangrarian). Hoy nadie lo usa: el tileset lleva un margen
+    // extruido por celda (rooms.h TILESET_GUTTER) y va en lineal como todo lo demas.
     u32 load_texture(const char* path, bool smooth = true);
     // Libera una textura cargada (intros de capitulo: se ven una vez por partida y
     // dejarlas en la cache acumula VRAM en movil). El id queda como hueco estable en
