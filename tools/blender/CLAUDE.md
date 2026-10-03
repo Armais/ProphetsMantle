@@ -197,6 +197,19 @@ y mirar los 22 en dos hojas de contacto ANTES de copiar nada.
   por software (llvmpipe) sin cambiar el aspecto; el aviso `EGL_BAD_MATCH` sale y no importa.
   Runner: `sys.path.insert(0, 'tools/blender')` e `icons.main(out, tmp)` / `chariot.main(out, tmp)`.
 
+## Jefes con hoja propia y retratos al doble (2026-10-03)
+
+- **`bosses.py`**: nueve recetas (`SPECS` + una funcion `_extras_*` por jefe) sobre
+  `build_humanoid`; `characters.build` las despacha antes de mirar `characters.SPECS`. Lo que
+  hace JEFE a un jefe es la silueta: escudo torre, tiara con cuernos, cuernos enormes y dos
+  cuchillos, espectro sin piernas (`_float_robe` quita muslos y pies), columna de agua con
+  corona de espuma, prestamista ensanchado (`_widen`) con turbante y cadena, la Muerte con
+  calavera, alas y guadana, Guiezi con lepra y dos talentos, Ben-adad con tiara asiria. Los
+  cuernos que pasaban de 0,35 de largo salian del cuadro de 128 px en el ataque.
+- **`portraits.py` a 192 px** (antes 96: el motor los pinta a 32 unidades = 128 px a 720p) y
+  con los nueve jefes al final de `LAYOUT` (35..43, `Portrait::BOSS_*`). Los dialogos de jefe
+  de `scenes.h` ya hablan con su cara y no con la de un enemigo raso.
+
 ## Efectos: `vfx.py` (el unico que NO usa el pipeline de personajes)
 
 El arte lo genera `tools/blender/mantle_sprites/vfx.py`, que **no usa nada del pipeline

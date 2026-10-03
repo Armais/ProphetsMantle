@@ -138,7 +138,7 @@ struct SpriteSheet {
 // Retratos (assets/sprites/portraits.png)
 // =============================================================================
 //
-// 6 col x 4 fil, celda de 96 px = 24 unidades. El orden es el de `LAYOUT` en
+// 6 col x 8 fil, celda de 192 px (el motor la pinta a 24-34 unidades). El orden es el de `LAYOUT` en
 // tools/blender/mantle_sprites/portraits.py, y los OCHO PRIMEROS van en el orden de
 // EnemyType a proposito: asi el Bestiario indexa por tipo sin tabla de traduccion.
 //
@@ -146,9 +146,9 @@ struct SpriteSheet {
 // retratos, y game/ no puede incluir ui/.
 // =============================================================================
 namespace Portrait {
-    constexpr int CELL = 96;    // texeles por retrato
+    constexpr int CELL = 192;   // texeles por retrato (2026-10-03: el doble, ver portraits.py)
     constexpr int COLS = 6;
-    constexpr int COUNT = 35;
+    constexpr int COUNT = 44;
     constexpr int NONE = -1;    // "este locutor no tiene cara"
     // Retratos nombrados, para quien los pide fuera del Bestiario
     constexpr int GENERAL_SIRIO = 5;
@@ -198,6 +198,17 @@ namespace Portrait {
     // cinematica del Ascenso y su encuentro de cap 6 se sustituyo por los cincuenta de
     // Jerico (2 R 2:16-18). La celda sigue dibujada en la hoja; no reordenar.
     constexpr int MANTO_JORDAN      = 34;   // vineta libre
+    // Los nueve jefes con hoja propia (bosses.py, 2026-10-03). Hasta hoy hablaban con la cara
+    // de un enemigo raso: el Capitan era el soldado, el Acreedor un sirio, La Muerte nadie.
+    constexpr int BOSS_CAPITAN        = 35;   // cap 1
+    constexpr int BOSS_SACERDOTE      = 36;   // cap 2
+    constexpr int BOSS_SUMO_SACERDOTE = 37;   // cap 3
+    constexpr int BOSS_DESESPERACION  = 38;   // cap 4
+    constexpr int BOSS_ESPIRITU       = 39;   // cap 6
+    constexpr int BOSS_ACREEDOR       = 40;   // cap 7
+    constexpr int BOSS_MUERTE         = 41;   // cap 8
+    constexpr int BOSS_GUIEZI         = 42;   // cap 9 (con la lepra de Naaman)
+    constexpr int BOSS_BENADAD        = 43;   // cap 10
 
     inline Rect src(int index) {
         return {static_cast<f32>((index % COLS) * CELL),

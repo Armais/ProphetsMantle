@@ -677,7 +677,7 @@ inline EventDef get_scene_line(int line) {
          tr("El rey te quiere vivo, profeta. Vivo, o en pedazos.",
             "The king will have thee alive, prophet. Alive, or in pieces."),
          nullptr},
-        {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
+        {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_CAPITAN
     };
     case Sc::J1_CAPITAN_ALT: return {
         tr("Capitán de Acab", "Ahab's Captain"),
@@ -686,7 +686,7 @@ inline EventDef get_scene_line(int line) {
          tr("El rey te quiere vivo, profeta. Vivo, o en pedazos.",
             "The king will have thee alive, prophet. Alive, or in pieces."),
          nullptr},
-        {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
+        {"1 Reyes 18:10", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_CAPITAN
     };
     case Sc::J1_ELIAS: return {
         tr("Elías", "Elijah"),
@@ -702,7 +702,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Cincuenta hombres por un tisbita. Al rey le parecerán pocos.",
             "Fifty men for one Tishbite. The king will count them too few."),
          nullptr, nullptr},
-        {"2 Reyes 1:9", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
+        {"2 Reyes 1:9", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_CAPITAN
     };
 
     // Cap. 2 - El Sacerdote de Baal. La amenaza a la viuda se apoya en 18:4.
@@ -711,7 +711,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Baal está airado, y en Sarepta todos saben con quién. Sarepta es de Baal, tisbita.",
             "Baal is wroth, and all Zarephath knoweth with whom. Zarephath is Baal's, Tishbite."),
          nullptr, nullptr},
-        {"1 Reyes 17:9", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
+        {"1 Reyes 17:9", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_SACERDOTE
     };
     case Sc::J2_ELIAS: return {
         tr("Elías", "Elijah"),
@@ -725,7 +725,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Sidón sabe qué hacer con las viudas que esconden profetas. Cuando acabe contigo, iré a su casa.",
             "Sidon knoweth what to do with widows that hide prophets. When I have done with thee, I go to her house."),
          nullptr, nullptr},
-        {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
+        {"1 Reyes 18:4", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_SACERDOTE
     };
 
     // Cap. 3 - Los 450 profetas de Baal (1 R 18:26-29, 36). El jefe es un GRUPO (sumo
@@ -739,7 +739,7 @@ inline EventDef get_scene_line(int line) {
          tr("Somos muchos, y desde la mañana clamamos. El altar sigue frío. Pero Baal oirá.",
             "We are many, and since morning we have cried. The altar is yet cold. But Baal will hear."),
          nullptr},
-        {"1 Reyes 18:26", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
+        {"1 Reyes 18:26", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_SUMO_SACERDOTE
     };
     // Variante si el jugador se encontro con Abdias camino del monte (Ev::ABDIAS): el sumo
     // sacerdote sabe de los cien escondidos. Vale para las dos opciones (subirlos al Carmelo
@@ -751,7 +751,7 @@ inline EventDef get_scene_line(int line) {
          tr("Abdías, el mayordomo, esconde profetas de Jehová en las cuevas de este monte. Cuando Baal hable, iremos también por ellos.",
             "Obadiah the steward hideth prophets of the Lord in the caves of this mount. When Baal hath spoken, we go for them also."),
          nullptr},
-        {"1 Reyes 18:4, 26", nullptr}, SC_NO_OPTIONS, P_PROFETA_BAAL
+        {"1 Reyes 18:4, 26", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_SUMO_SACERDOTE
     };
     case Sc::J3_ELIAS_BURLA: return {
         tr("Elías", "Elijah"),
@@ -790,7 +790,7 @@ inline EventDef get_scene_line(int line) {
          tr("Un día de fuego en el Carmelo, y luego cuarenta de huida. ¿De qué sirvió?",
             "One day of fire on Carmel, and then forty of flight. What did it serve?"),
          nullptr},
-        {"1 Reyes 19:4", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
+        {"1 Reyes 19:4", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_DESESPERACION
     };
     case Sc::J4_ELIAS: return {
         tr("Elías", "Elijah"),
@@ -808,7 +808,7 @@ inline EventDef get_scene_line(int line) {
          tr("Échate al fondo de la cueva, tisbita. Aquí nadie te busca.",
             "Lie thee down in the back of the cave, Tishbite. Here no man seeketh thee."),
          nullptr},
-        {"1 Reyes 19:2", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
+        {"1 Reyes 19:2", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_DESESPERACION
     };
     case Sc::J4_ELIAS_2: return {
         tr("Elías", "Elijah"),
@@ -862,7 +862,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Yo soy lo que Hiel enterró bajo los cimientos. Bebe de esta agua, hijo de Safat.",
             "I am what Hiel buried under the foundations. Drink of this water, son of Shaphat."),
          nullptr, nullptr},
-        {"1 Reyes 16:34", nullptr}, SC_NO_OPTIONS, P_AGUA_CORRUPTA
+        {"1 Reyes 16:34", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_ESPIRITU
     };
     case Sc::J6_ELISEO: return {
         tr("Eliseo", "Elisha"),
@@ -876,7 +876,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Elías subió en el carro. ¿Y tú quién eres, labrador de Abel-mehola?",
             "Elijah went up in the chariot. And who art thou, ploughman of Abel-meholah?"),
          nullptr, nullptr},
-        {"2 Reyes 2:11", nullptr}, SC_NO_OPTIONS, P_AGUA_CORRUPTA
+        {"2 Reyes 2:11", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_ESPIRITU
     };
     case Sc::J6_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
@@ -895,7 +895,7 @@ inline EventDef get_scene_line(int line) {
         {tr("El profeta murió debiendo. La ley me da a sus dos hijos por siervos, y traigo dos hombres para llevárselos.",
             "The prophet died in debt. The law giveth me his two sons for bondmen, and I have brought two men to take them."),
          nullptr, nullptr},
-        {"2 Reyes 4:1", nullptr}, SC_NO_OPTIONS, P_SOLDADO_SIRIO
+        {"2 Reyes 4:1", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_ACREEDOR
     };
     case Sc::J7_ELISEO: return {
         tr("Eliseo", "Elisha"),
@@ -909,7 +909,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Vasijas prestadas y una viuda a puerta cerrada. Cuando se abra, entrarán mis hombres.",
             "Borrowed vessels and a widow behind a shut door. When it openeth, my men go in."),
          nullptr, nullptr},
-        {"2 Reyes 4:5", nullptr}, SC_NO_OPTIONS, P_SOLDADO_SIRIO
+        {"2 Reyes 4:5", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_ACREEDOR
     };
     case Sc::J7_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
@@ -930,7 +930,7 @@ inline EventDef get_scene_line(int line) {
          tr("Su madre lo acostó en tu cama y cerró la puerta. Yo ya estaba dentro, hijo de Safat.",
             "His mother laid him on thy bed and shut the door. I was already within, son of Shaphat."),
          nullptr},
-        {"2 Reyes 4:20-21", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+        {"2 Reyes 4:20-21", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_MUERTE
     };
     case Sc::J8_ELISEO: return {
         tr("Eliseo", "Elisha"),
@@ -944,7 +944,7 @@ inline EventDef get_scene_line(int line) {
         {tr("¿Y qué traes, hijo de Safat? Elías devolvió un niño en Sarepta. Tú aún no has devuelto a nadie.",
             "And what bringest thou, son of Shaphat? Elijah gave back a child in Zarephath. Thou hast given back no man yet."),
          nullptr, nullptr},
-        {"1 Reyes 17:22", nullptr}, SC_NO_OPTIONS, Portrait::NONE
+        {"1 Reyes 17:22", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_MUERTE
     };
     case Sc::J8_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
@@ -965,7 +965,7 @@ inline EventDef get_scene_line(int line) {
          tr("Sólo hasta la puerta, a despedir al sirio. Se fue con la carne nueva y los carros llenos.",
             "Only to the gate, to see the Syrian off. He went away with his new flesh and his chariots full."),
          nullptr},
-        {"2 Reyes 5:25", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
+        {"2 Reyes 5:25", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_GUIEZI
     };
     case Sc::J9_ELISEO: return {
         tr("Eliseo", "Elisha"),
@@ -981,7 +981,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Naamán se ríe de nosotros con su carne nueva. Tú no quisiste tomar de su mano lo que era tuyo. Yo sí.",
             "Naaman laugheth at us with his new flesh. Thou wouldest not take of his hand what was thine. I would."),
          nullptr, nullptr},
-        {"2 Reyes 5:20", nullptr}, SC_NO_OPTIONS, Portrait::CRIADO_ELISEO
+        {"2 Reyes 5:20", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_GUIEZI
     };
     case Sc::J9_ELISEO_2: return {
         tr("Eliseo", "Elisha"),
@@ -1004,7 +1004,7 @@ inline EventDef get_scene_line(int line) {
          tr("Toda Siria está a la puerta de Samaria por un solo hombre. Entrégate, y la ciudad comerá mañana.",
             "All Syria is at the gate of Samaria for one man. Yield thyself, and the city shall eat to morrow."),
          nullptr},
-        {"2 Reyes 6:22-24", nullptr}, SC_NO_OPTIONS, Portrait::GENERAL_SIRIO
+        {"2 Reyes 6:22-24", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_BENADAD
     };
     case Sc::J10_ELISEO: return {
         tr("Eliseo", "Elisha"),
@@ -1018,7 +1018,7 @@ inline EventDef get_scene_line(int line) {
         {tr("Desde aquí no se ve ningún carro de fuego. Se ve el hambre de Samaria: una cabeza de asno por ochenta siclos de plata.",
             "From here no chariot of fire is seen. What is seen is the hunger of Samaria: an ass's head for fourscore pieces of silver."),
          nullptr, nullptr},
-        {"2 Reyes 6:25", nullptr}, SC_NO_OPTIONS, Portrait::GENERAL_SIRIO
+        {"2 Reyes 6:25", nullptr}, SC_NO_OPTIONS, Portrait::BOSS_BENADAD
     };
     case Sc::J10_ELISEO_2: return {
         tr("Eliseo", "Elisha"),

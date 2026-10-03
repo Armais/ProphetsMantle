@@ -8,7 +8,7 @@ assets/
   audio/sfx/            - 37 SFX sintetizados (.ogg, mismo generador; incluye variantes _2/_3 por sonido)
   sprites/cine/         - Prologue panels: 8 escenas x 3 capas (1600x720 PNG con alfa, ver ui/cinematic.h)
   sprites/vfx.png       - Hoja de efectos propia: 8 fotogramas x 7 filas, celda 128 px (ver spawn_fx)
-  sprites/portraits.png - 28 celdas, 6x5, celda 96 px (Bestiario del Códice + los locutores del pozo)
+  sprites/portraits.png - 44 celdas, 6x8, celda 192 px (Bestiario, locutores del pozo y los nueve jefes)
   sprites/icons.png     - 32 iconos: 22 objetos (celda = ItemDef::id) + 10 milagros (22 + MiracleID), 8x4 de 128 px (render/sprites.h, Icon)
   sprites/estampas/     - 46 estampas de relato, ev_NN.png = id de Ev:: (768x384, tools/estampas), una viva a la vez
   sprites/boss_*.png    - 9 hojas de jefe (mismo formato que las de personaje, tools/blender/mantle_sprites/bosses.py)
