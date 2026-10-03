@@ -1053,8 +1053,10 @@ inline EventDef get_dialogue_def(int event_id) {
 // centro, con un claro de 15x8 tiles alrededor para que la decoracion no tape a nadie; en
 // la arena (`Live`) es el tile del jefe (W/2, 3), y el profeta se planta tres filas por
 // debajo, cara a cara: donde entro por el borde sur (fila 9) la caja lo tapaba entero.
-// Las figuras de una escena `Live` se retiran al cerrarse (finish_scene): Acab y Jezabel
-// flanquean a su arquero mientras hablan, y la pelea es con la guardia.
+// Las figuras de una escena `Live` se retiran al cerrarse (finish_scene). Desde el
+// 2026-10-03 el jefe del cap. 5 SON Acab y Jezabel (dos entidades de verdad, de pie a dx -2
+// y +2 del ancla: game/bosses.cpp spawn_boss_group), asi que su escena ya no planta
+// figuras: hablan los mismos que luego pelean, con sus hojas acab.png y jezabel.png.
 inline SceneDef get_scene_def(int id) {
     constexpr int E_SOLDADO_ACAB = static_cast<int>(EnemyType::SoldadoDeAcab);
     constexpr int E_PROFETA_BAAL = static_cast<int>(EnemyType::ProfetaDeBaal);
@@ -1153,7 +1155,7 @@ inline SceneDef get_scene_def(int id) {
                                  Sc::J3_PROFETAS_ALT, Ev::ABDIAS};
     case Scene::JEFE_4:  return {"Jefe 4",  "Dialogo con el jefe 4: tu propia desesperacion (1 Reyes 19:4-10)", 4, StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J4_DESESPERACION, 4, SceneThen::Play};
     case Scene::JEFE_5:  return {"Jefe 5",  "Dialogo con el jefe 5: Acab y Jezabel (1 Reyes 21:20-23)",        5,  StageKind::Live, 0, 0, 3, Direction::Up,
-                                 {{FK::Acab, 0, -2, 0, Direction::Down}, {FK::Jezabel, 0, 2, 0, Direction::Down}, none}, Sc::J5_ACAB, 4, SceneThen::Play};
+                                 {none, none, none}, Sc::J5_ACAB, 4, SceneThen::Play};
     case Scene::JEFE_6:  return {"Jefe 6",  "Dialogo con el jefe 6: el Espiritu de Corrupcion (2 Reyes 2:21)", 6,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J6_ESPIRITU,      4, SceneThen::Play};
     case Scene::JEFE_7:  return {"Jefe 7",  "Dialogo con el jefe 7: el Acreedor (2 Reyes 4:1-7)",              7,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J7_ACREEDOR,      4, SceneThen::Play};
     case Scene::JEFE_8:  return {"Jefe 8",  "Dialogo con el jefe 8: la Muerte (2 Reyes 4:19-33)",              8,  StageKind::Live, 0, 0, 3, Direction::Up, {none, none, none}, Sc::J8_MUERTE,        4, SceneThen::Play};

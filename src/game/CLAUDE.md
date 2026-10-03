@@ -100,7 +100,7 @@ toca. El jefe ya no sale en el mapa: se aprende con pistas (`get_boss_intel`). L
 - **Working**: movement (feet-point tile collision with axis sliding; `Room::is_walkable_world` is the single world→tile walkability test used by movement, `combat.cpp push()` body separation and spawns; `system_movement` has an `unstick()` safety net that snaps a body whose feet are inside a solid tile to the nearest walkable tile and logs it), shooting toward the last movement direction (hold K), projectiles with tileset sprites, enemy AI (melee packs, archers/casters/generals shoot with line-of-sight, lions leap), contact damage with player i-frames (1 s), knockback, hit flash, particles, camera shake, drops (hearts / faith orbs), faith system.
 - **Conductas de muerte del Acto II** (`game/enemies.h`): `on_enemy_death_behavior` se llama desde `on_enemy_killed`, **antes** de `Engine::update_room_state`, para que lo que nazca al morir cuente ya como vivo (si no, la sala se declara limpia con enemigos dentro). El **Idólatra de Rimón** suelta al caer su brasero de brasas, que prende tras una mecha (`EnemyAIComponent::death_fuse`, 0.35 s de telegrafiado sobre el cadáver); `update_death_fuses` — que el Engine llama una vez por frame justo después de `system_collision` — la apura y detona: daño en radio 28 a jugador **y** enemigos. La cadena NO recursa: son dos pasadas (apurar mechas, luego detonar), así que una explosión que mata a otro Idólatra le enciende una mecha que se consume el frame siguiente. El **Agua Corrupta** se parte en 2 hijos al 55% de vida y escala (`split_generation`, máximo 2 generaciones, y no se divide con ≥18 enemigos vivos); los hijos dan fe reducida y ningún drop. El **General Sirio** arenga cada 4 s: +30% daño y +15% velocidad en radio 70 durante 5 s. Los valores base se guardan **una vez** en el aliado (`base_damage`/`base_speed`), así que refrescar el aura no acumula; el aliado late en rojo en `ECSWorld::collect_draws`. Sin nadie a quien arengar no gasta la arenga.
 - **Working**: rooms — cliff borders with 6/5-tile openings on connected sides, trails carved from a jittered hub to every opening (guaranteed reachable; river → bridge, obstacles → path), rivers with fords, biome look per chapter (`get_biome_style`: floor family sand/meadow/paving via `floor_base`, 3 ground decals + `detail_pct` scattered by `tile_hash` on plain Floor tiles in `render_ground`, plus tints/props/buildings), estado por celda en `Room::cells` (zona continua, 2026-09-10; `FloorMap::room_cache` son dos ranuras: zona e interior), la arena del jefe sellada mientras vive (`Room::arena_sealed`, ya no se sellan salas), Start cell Baal altar (shoot it: +8 Fe), Treasure chest, Altar prayer, Elite reward.
-- **Working**: progression — room clear detection, boss per chapter (`spawn_boss`: volleys, ring, charge, HP bar), exit arch after the boss (`Room::place_exit`), `advance_chapter()`, Ascension screen → Eliseo (faith halved, 2 slots), Victory after chapter 10, Game Over with `[R]` retry chapter.
+- **Working**: progression — room clear detection, boss per chapter (`game/bosses.cpp`: una estrategia propia por capitulo con telegrafos de suelo, ver "Los diez jefes" al final; HP bar), exit arch after the boss (`Room::place_exit`), `advance_chapter()`, Ascension screen → Eliseo (faith halved, 2 slots), Victory after chapter 10, Game Over with `[R]` retry chapter.
 - **Working**: miracles with effects (`Player::cast_miracle`) — all 10 are reachable **y cada uno hace lo suyo** (ya no queda ningun placeholder): praying at an `AltarGod` opens a 3-card miracle choice (tier + faith cost + which slot it replaces). Eliseo can learn Elias' miracles and casts them at 70% (`inherit`). Starting sets: Elias = **Cuervos de Querit (Q, Tier 1)** + Fuego del Cielo (E, ch4+); Eliseo = Sanar Aguas + Ejercito Celestial.
 - **Ojos Abiertos** (2 Reyes 6:17): pone `Player::map_revealed` (todo el capitulo visible en el minimapa y en TAB, con sus etiquetas TESORO/ALTAR/ELITE/RELATO — lo lee `HUDContext::map_revealed` en `draw_minimap`) y `reveal_timer`, que durante la duracion suelta una marca dorada sobre cada enemigo y azul sobre cada drop desde `Player::update`. `Engine::start_chapter` apaga los dos: revela ESTE capitulo, no los siguientes.
 - **Carro de Fuego VISIBLE** (2026-09-24, "tiene que aparecer un carro de fuego de verdad"):
@@ -315,3 +315,97 @@ se re-discuten. Lo que hay que saber antes de tocarlo:
   podían abrir sin caminar hasta ellos.
 - Guiones: `tutorial_check.txt` (los 15 pasos + las dos pantallas nuevas + el camino a la
   partida), `tutorial_tactil_check.txt` (`--touch`) y `tutorial_en_check.txt`.
+
+### Los diez jefes: una estrategia por capitulo (2026-10-03)
+
+Queja del usuario, literal: *"Los jefes deben de ser distintos a los enemigos principales,
+cada jefe debe de tener una estrategia distinta."* Hasta hoy `spawn_boss` montaba cada jefe
+sobre un enemigo comun (la misma hoja a 1,6) y `update_boss_ai` les daba casi los mismos
+verbos: perseguir, rafaga o anillo de proyectiles, invocar. Ahora cada uno tiene su HOJA,
+su MAQUINA DE ESTADOS y una VENTANA que el jugador aprende a castigar.
+
+**Donde vive cada cosa:**
+
+- `game/hazards.h/.cpp` — la caja de herramientas: peligros de suelo TELEGRAFIADOS en una
+  piscina fija (`ECSWorld::hazards[64]`; `struct Hazard` en `core/ecs.h`; no son entidades).
+  Seis tipos: `Circle` (aviso y estallido), `Lane` (rectangulo en un rumbo: cargas, cadena,
+  lluvia de flechas), `Cone` (barrido), `Ring` (onda que se abre —o se CIERRA— con hueco),
+  `Pool` (charca con vida, muerde con su cadencia) y `Push` (viento). Tres tramos: AVISO
+  (`warn`: el relleno crece y el borde late mas deprisa segun se acaba), EFECTO (`active`: el
+  unico tramo con dano) y una cola de 0,24 s sin dano para el fogonazo. `HazardTag` dice que
+  significa el impacto para el dueno (`Chain` tira y cobra fe, `Debt` cobra fe, `Ripple` es
+  solo dibujo y sigue al dueno). Un peligro muere con su dueno.
+- `game/bosses.cpp` — los diez patrones, `spawn_boss` / `spawn_boss_group`, los props
+  (idolos, senuelos), las marcas (`render_boss_ground` / `render_boss_overlays`) y
+  `on_boss_death`. `enemies.cpp` se queda con los enemigos comunes y exporta sus utilidades
+  (`enemy_shoot`, `enemy_volley`, `enemy_ring`, `enemy_free_spot`, `count_alive_minions`).
+- `rooms.h` `get_boss_sheet(cap, cual)` — la hoja propia (`sprites/boss_*.png`; en el cap. 5
+  `acab.png` + `jezabel.png`). `Engine::load_boss_sheets` la carga al empezar el capitulo y,
+  si el fichero no esta, cae a la del enemigo base con UNA linea de log (`Boss sheet
+  ausente`) y sin pasar por `load_texture`, que loguearia "Failed to load" (gate negativo de
+  varios guiones). Con hoja propia el jefe va a 1,4; con la prestada, a 1,6 como antes.
+
+**Reglas que valen para los diez** (y para un jefe once):
+
+- El dano de un peligro al profeta respeta EXACTAMENTE lo mismo que un proyectil enemigo:
+  `invulnerable`, `iframes_timer` (golpe y DASH) y el modo dios. Un peligro esquivado con
+  i-frames ya no vuelve a morder aunque los i-frames se acaben a mitad: es lo que hace que
+  dashear A TRAVES de un barrido funcione.
+- `health.invulnerable` del jefe se escribe CADA frame en su patron (`system_combat_timers`
+  lo resetea antes de la IA). `EnemyAIComponent::vuln_mult` > 1 es la VENTANA (aturdido, de
+  rodillas, el silbo): `apply_damage` multiplica y en el suelo late un aro dorado. Intocable
+  = burbuja violeta + barra gris + un aviso propio de cada patron (`boss_invulnerable_hint`
+  -> `HUDContext::boss_invul_hint`; "acercate" solo tiene sentido para la Muerte).
+- Aviso x1,2 y embestidas x0,9 en movil (`wk()` / `sk()` en bosses.cpp): la pelea no es mas
+  dura en el telefono. El golpe de referencia de un peligro es `hit_unit(cap)` = 7,5 + 0,75
+  por capitulo; los proyectiles siguen con el dano de siempre del jefe.
+- Los PROPS (`EnemyAIComponent::prop_kind`: idolo, senuelo) son hostiles —se les dispara y
+  cuentan como vivos— pero no van en la barra, no sueltan botin (el idolo da la fe de un
+  profeta) y MUEREN CON SU DUENO (`on_boss_death`), igual que su plata y sus peligros: la
+  arena se cierra por `count_living_enemies` como siempre. Las invocaciones topan contra los
+  secuaces de SU celda (`count_boss_minions`), no contra los de toda la zona: con el recuento
+  global, los enemigos de las celdas vecinas llenaban el techo y Ben-adad no traia oleadas.
+- El ESCENARIO (`stage_of`): la parte de la arena que no tapa el HUD. Teletransportes, plata
+  y el "guardar distancia" (`keep_range` tira hacia dentro) se quedan ahi: en las capturas
+  Guiezi y el Acreedor se escondian bajo el minimapa o tras las celdas de milagro.
+- La auto-mira (`pick_target`) castiga lo intocable con -600 (con -160 el bot seguia
+  disparando al Sacerdote con los idolos en pie y la pelea duraba 111 s) y da a los
+  senuelos de Guiezi el mismo +90 que al jefe: si no, el movil leeria la marca por el jugador.
+- Los peligros se pintan en el SUELO (`render_hazards` justo despues de `render_ground`,
+  antes de `draw_sorted`): bajo sombras, props y personajes. Todo con texturas procedurales
+  blancas tintadas (`HazardArt`, generadas en `Engine::init`): disco con el borde vivo, una
+  capa OSCURA debajo para que se lean sobre la arena clara del desierto, y bordes de GROSOR
+  FIJO hechos con trozos de haz en rampa (el aro escalado con el radio quedaba de medio pixel
+  en un circulo de 13 unidades, y los trozos de canto duro hacian costuras "|||").
+- Se vacian en `load_room`, `place_player`, `start_scene` (escenario), al entrar en la arena,
+  con `world.clear()` (reintento) y al morir el ultimo del jefe.
+
+**Los diez** (vida = (200 + 50 x cap) x factor; "bot" = segundos con el bot de autoplay en
+partida limpia con `god`, punteria perfecta: un jugador de verdad, esquivando, tarda el doble
+o el triple):
+
+| Cap | Jefe | Estrategia | Como se gana (la ventana) | Factor | Bot |
+|---|---|---|---|---|---|
+| 1 | Capitan de Acab (1 R 18:10) | CARGA en carril (0,8 s de aviso, 270 u/s). Contra el muro queda ATURDIDO 1,6 s (estrellas). ESCUDO: rebotan los tiros que entran por un frente de 120 grados que gira despacio (2,6 rad/s; arco azul en el suelo, "clinc"). Al 50% dos arqueros a los bordes y cargas encadenadas | De espaldas a un muro, apartarse del carril y castigar el aturdido (x1,5, sin escudo); o rodearle | 1,40 | 29 s |
+| 2 | Sacerdote de Baal | Tres IDOLOS (celda del altar de Baal) con atadura morada: intocable mientras quede uno. Rotos, 7 s de ventana; 1,4 s antes de rebrotar se pintan sus sitios (y queman). LLUVIA DE FUEGO: 3 circulos (5 al 50%), uno siempre sobre el profeta; abanicos de rayos | Idolos primero (fe de profeta cada uno) y en la ventana, a el | 1,30 | 23 s |
+| 3 | Los 450 (1 R 18:26-29) | El corro de siempre + EL CORRO LE PROTEGE: con 3 o mas de pie la cabeza es intocable (ataduras rojas). Repone uno cada 6 s (4 en el frenesi). RITUAL cada 11 s (8): el corro se para y clama, gran circulo de fuego en el altar (2,2 s) y onda con hueco. Frenesi al 50% | Ralear el corro durante el ritual (quietos, sin disparar) y rematar la cabeza antes de que lo rellene | 0,75 | 22 s |
+| 4 | Tu Propia Desesperacion (1 R 19:11-12) | Fases por vida, cada cambio con fogonazo, sacudida, corona de su color y 1,2 s intocable: VIENTO (rafaga `Push` que cruza la arena + ondas con hueco), TERREMOTO (ondas de suelo + cinco grietas), FUEGO (tres lineas de circulos que MARCHAN hacia el profeta) y el SILBO APACIBLE: deja de atacar, dano x2 | Buscar el hueco (o dashear la onda), no pelear contra el viento | 1,70 | 21 s |
+| 5 | Acab y Jezabel (1 R 21) | DOS entidades con barra compartida (Jezabel es `boss_group`). Acab: barrido de espada en abanico (0,6 s) si estas cerca —tras el, 0,7 s abierto— y carga corta. Jezabel: guarda distancia, se teletransporta lejos si te acercas (deja una maldicion), circulos malditos, rayos, y cada ~8 s CURA a Acab un 10% con una atadura verde que se CORTA si ella recibe dano. Al caer uno, el otro se enfurece (x1,3 velocidad, cadencias x0,65) | Cortar cada curacion: ella se queda quieta canalizando | 0,90 + 0,65 | 20 s |
+| 6 | Espiritu de Corrupcion (2 R 2:19-22) | CHARCAS de 8 s por donde pasa. Cada ~9 s se SUMERGE: intocable, sombra con ondas que va hacia el profeta, y EMERGE donde estaba (circulo de 0,8 s) con una onda con hueco. Se parte al 66% y al 33%. Sanar Aguas disuelve las charcas que toca | Moverse cuando se sumerge y castigar la salida (1,1 s a x1,35) | 1,00 | 38 s |
+| 7 | El Acreedor (2 R 4:1-7) | CADENA en carril (0,7 s): si alcanza, tira de ti, cobra 6 de fe y le cura un 3%. Tras cada lanzamiento 1,2 s recogiendola (x1,5). Abanicos de MONEDAS. Al 50% LA DEUDA: un anillo de monedas se cierra sobre ti (2,6 s; cobra 5 de fe). Cobradores (soldados sirios) cada 14 s | Salir del carril y castigar la recogida; salir del anillo antes de que se cierre | 1,30 | 20 s |
+| 8 | La Muerte (2 R 4:32-35) | OSCURIDAD: solo hay luz alrededor del profeta (`ECSWorld::darkness_req` -> `Engine::render_darkness`; sus ojos brillan en lo oscuro). Intocable a mas de 40 u. Si te acercas, GUADANA en abanico de 140 grados (0,65 s); al 50% vuelve con un segundo tajo y la luz se estrecha. Idolatras de Rimon como sombras; anillos lentos si huyes | Tras el tajo queda SIN RESUELLO 1,6 s: tocable desde cualquier distancia | 1,00 | 36 s |
+| 9 | Guiezi el Codicioso (2 R 5:20-27) | Se teletransporta cada 5,5 s (4,5) y deja hasta dos SENUELOS (su hoja, translucidos, 1 de vida, disparan, revientan en plata). El de verdad lleva chispas blancas de lepra. CODICIA cada 12 s: lanza tres talentos (circulos plateados) y corre a arrodillarse junto a cada uno (1,2 s, x1,75). Al 50% charcas de lepra donde se teletransporta | Aprender la marca y castigarle de rodillas; reventar un senuelo siembra plata que le tienta | 1,50 | 20 s |
+| 10 | Ben-adad de Siria (2 R 6-7) | ARTILLERIA en patron sobre una rejilla 4x3 (columna libre, damero o dos filas: siempre queda camino), LLUVIA DE FLECHAS en tres carriles, CARRO en carril (330 u/s), oleadas de sirios por los bordes, generales al 60%. Al 30% LA HUESTE CELESTIAL (2 R 6:17-18): fogonazo, carros de fuego alrededor, sus soldados quedan CIEGOS 6 s (palidos, vagan, no atacan) y el rey se vuelve lento y vulnerable (x1,5 8 s, luego x1,2) | Leer los huecos de la artilleria y, cuando el cielo arde, ir a por el rey | 1,00 | 27 s |
+
+**Cap. 5: la escena del jefe ya no planta figuras.** Acab y Jezabel SON el jefe (nacen a dx -2
+y +2 del ancla, donde estaban sus figuras), asi que `get_scene_def(JEFE_5)` lleva
+`{none, none, none}`: hablan los mismos que luego pelean. El texto no cambio.
+
+**Fidelidad (regla del proyecto):** nada contradice 1-2 Reyes. Los idolos de Baal y el fuego
+que no baja son 1 R 18; el silbo apacible es 19:12 y por eso esa fase NO ataca; la curacion de
+Jezabel es licencia de juego sobre 1 R 21 (ella mueve los hilos: 21:7-8); el Acreedor cobra
+la fe porque viene a cobrar en hijos (2 R 4:1); la Muerte cede a quien se tiende encima
+(4:34); la plata de Guiezi son los dos talentos de 5:23; la ceguera de los sirios es 6:18.
+
+**Comando nuevo** `bosshp <fraccion> [quien]`, y `killall` ahora atraviesa lo intocable: ver
+`scripts/CLAUDE.md`. Guion: `scripts/jefes_check.txt`.

@@ -158,6 +158,7 @@ bool Engine::init(const char* title) {
     }
 
     load_sprites();
+    init_hazard_art(renderer, hazard_art, tileset_texture);
 
     input.init();
     // El reparto de los botones tactiles depende de cuanta banda negra deje el letterbox,
@@ -174,6 +175,7 @@ bool Engine::init(const char* title) {
 
     world.init();
     world.tileset = tileset_texture;
+    world.disc_tex = renderer.disc_tex;
     faith.init();
     save.init();          // lee el fichero: la meta-progresion tiene que estar viva ya
     apply_settings_from_save();   // idioma, volumenes, mira, sensibilidad y vibracion
@@ -284,6 +286,49 @@ void Engine::load_sprites() {
     menus.title_bg = renderer.load_texture("sprites/menu_bg.png", /*smooth=*/true);
     if (menus.title_bg == TEXTURE_NONE)
         SDL_Log("Fondo de menu ausente (assets/sprites/menu_bg.png) - titulo sin estampa");
+}
+
+// Hojas propias del jefe del capitulo (rooms.h get_boss_sheet). Se mira ANTES si el
+// fichero existe: `load_texture` loguea "Failed to load" con cada intento, y eso es un
+// gate negativo de varios guiones (escenas_check, audio_check). Una hoja que aun no se ha
+// entregado no es un fallo: una linea de log y la del enemigo base, como hasta ahora.
+void Engine::load_boss_sheets(int chapter) {
+    const EnemyType base = get_chapter_def(chapter).boss_type;
+    auto load_one = [this](const char* path, u32 fallback, u32& out, bool& own, const char* who) {
+        out = fallback;
+        own = false;
+        if (!path) return;
+        auto it = renderer.texture_map.find(path);
+        if (it != renderer.texture_map.end() && renderer.get_texture(it->second) &&
+            renderer.get_texture(it->second)->texture) {
+            out = it->second;
+            own = true;
+            return;
+        }
+        const std::string full = std::string(get_asset_path()) + path;
+        SDL_IOStream* io = SDL_IOFromFile(full.c_str(), "rb");
+        if (!io) {
+            SDL_Log("Boss sheet ausente: %s -> %s usa la hoja del enemigo base", path, who);
+            return;
+        }
+        SDL_CloseIO(io);
+        const u32 id = renderer.load_texture(path);
+        if (id == TEXTURE_NONE) return;
+        TextureEntry* tex = renderer.get_texture(id);
+        if (tex && (tex->width != SHEET_WIDTH || tex->height != SHEET_HEIGHT))
+            SDL_Log("WARNING: sprite sheet '%s' is %dx%d, expected %dx%d",
+                    path, tex->width, tex->height, SHEET_WIDTH, SHEET_HEIGHT);
+        out = id;
+        own = true;
+    };
+    // Cap. 5: Acab y Jezabel tienen hoja desde la audiencia; el resto, la del jefe
+    const u32 base_tex = enemy_textures[static_cast<u32>(base)];
+    load_one(get_boss_sheet(chapter, 0), (chapter == 5) ? enemy_textures[static_cast<u32>(EnemyType::SoldadoDeAcab)] : base_tex,
+             boss_sheets.main, boss_sheets.main_own, get_chapter_def(chapter).boss_name);
+    load_one(get_boss_sheet(chapter, 1), enemy_textures[static_cast<u32>(EnemyType::ProfetaDeBaal)],
+             boss_sheets.partner, boss_sheets.partner_own, "Jezabel");
+    SDL_Log("Boss sheets cap %d: %s%s", chapter, boss_sheets.main_own ? "propia" : "prestada",
+            get_boss_sheet(chapter, 1) ? (boss_sheets.partner_own ? " + pareja propia" : " + pareja prestada") : "");
 }
 
 // =============================================================================
@@ -664,6 +709,32 @@ void Engine::update(f32 dt) {
             // Braseros prendidos: despues de las colisiones (usa fe/eventos) y antes de
             // update_room_state (sus bajas tienen que contar ya)
             update_death_fuses(world, faith, combat_events, dt);
+            // Peligros telegrafiados de los jefes (game/hazards.h): mismo sitio y mismas
+            // razones que las mechas — usan fe y eventos, y sus bajas cuentan ya.
+            update_hazards(world, faith, combat_events, dt);
+            // Sanar Aguas disuelve las charcas que toca el agua sanada (2 Reyes 2:21)
+            if (player.heal_zone_timer > 0.0f) cleanse_pools(world, player.heal_zone_pos, 34.0f);
+            if (world.hazard_bursts > 0) {
+                audio.play_sfx(SfxID::CriticalHit, 0.35f);
+                input.rumble(Config::Feel::RUMBLE_HIT, 50);
+                world.hazard_bursts = 0;
+            }
+            if (world.shield_blocks > 0) {
+                audio.play_sfx(SfxID::CayadoHitEnemy, 0.8f);   // el "clinc" del escudo
+                world.shield_blocks = 0;
+            }
+            if (world.flash_request > 0.0f) {
+                world_flash = std::max(world_flash, world.flash_request);
+                world.flash_request = 0.0f;
+            }
+            // La oscuridad de la Muerte: la pide cada frame mientras vive, y se va sola
+            {
+                const bool dark = world.darkness_req > 0.0f;
+                if (dark) darkness_radius = world.darkness_req;
+                darkness_level = dark ? std::min(1.0f, darkness_level + dt * 1.2f)
+                                      : std::max(0.0f, darkness_level - dt * 0.8f);
+                world.darkness_req = 0.0f;
+            }
             if (world.shake_request > 0.0f) {
                 renderer.shake_camera(world.shake_request, Config::Feel::SHAKE_EXPLOSION.dur,
                                       Config::Feel::SHAKE_EXPLOSION.freq);
@@ -1123,6 +1194,9 @@ void Engine::render() {
                            camera.position.y - Config::GAME_HEIGHT * 0.5f,
                            static_cast<f32>(Config::GAME_WIDTH), static_cast<f32>(Config::GAME_HEIGHT)};
         current_room_data.render_ground(renderer, tileset_texture, world.time, view);
+        // Telegrafos EN EL SUELO: encima del terreno, debajo de sombras, props y personajes
+        render_boss_ground(renderer, world, hazard_art);
+        render_hazards(renderer, world, hazard_art, view);
 
         draw_list.clear();
         current_room_data.collect_props(draw_list, tileset_texture, renderer.shadow_tex,
@@ -1132,6 +1206,9 @@ void Engine::render() {
         renderer.draw_sorted(draw_list);
         // Sombras de nubes: sobre el suelo Y lo que hay en el (una nube no distingue)
         ambience_draw_world(renderer, current_room_data, state.current_chapter, view, world.time);
+        // Ataduras, curacion, cadena, aturdido: por ENCIMA de los personajes (y de las nubes,
+        // que no deben apagar una senal de combate)
+        render_boss_overlays(renderer, world, hazard_art);
 
         current_room_data.render_exit_barriers(renderer, world.time);
         {
@@ -1155,6 +1232,8 @@ void Engine::render() {
 
         // Luz del capitulo y motas (polvo, vilanos, ceniza, pavesas), bajo la vineta
         ambience_draw_screen(renderer, current_room_data, state.current_chapter, camera.position, world.time);
+        // La oscuridad de la Muerte (cap. 8): sobre el mundo (y sobre las motas), bajo el HUD
+        render_darkness();
 
         // Soft vignette over the world (under the HUD); margin covers camera shake
         if (renderer.vignette_tex != TEXTURE_NONE) {
@@ -1198,6 +1277,8 @@ void Engine::render() {
         ctx.boss_group = boss_group_max > 0.0f;
         ctx.boss_invulnerable = boss_bar_invulnerable;
         ctx.boss_name = boss_bar_name;
+        if (boss_entity != ENTITY_NONE && world.is_alive(boss_entity) && world.has(boss_entity, Component::EnemyAI))
+            ctx.boss_invul_hint = boss_invulnerable_hint(static_cast<BossPattern>(world.enemy_ais[boss_entity].boss_pattern));
         ctx.chapter = state.current_chapter;
         ctx.banner = banner_timer > 0.0f ? banner_text.c_str() : nullptr;
         ctx.subbanner = subbanner_text.empty() ? nullptr : subbanner_text.c_str();
@@ -1836,6 +1917,7 @@ void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
     restore_room_state = false;
 
     floor_map.generate(chapter);
+    load_boss_sheets(chapter);
 
     boss_entity = ENTITY_NONE;
     reset_boss_bar();
@@ -2032,6 +2114,7 @@ void Engine::start_scene(int id) {
         }
         boss_entity = ENTITY_NONE;
         reset_boss_bar();
+        clear_hazards(world);
         world.popups.clear();
 
         Room& room = current_room_data;
@@ -3466,6 +3549,7 @@ void Engine::place_player(Vec2 spawn_pos) {
     world.transforms[player.entity].position = spawn_pos;
     player.chariot_fx_t = -1.0f;   // un carro a medio despedirse no viaja con el teletransporte
     player.sky_fire_t = -1.0f;     // ni un Fuego del Cielo a medio caer (sus VFX ya se barrieron)
+    clear_hazards(world);          // ni un telegrafo de jefe pintado donde ya no esta el profeta
     if (world.has(player.entity, Component::Movement)) {
         world.movements[player.entity].knockback = {0, 0};
         world.movements[player.entity].velocity = {0, 0};
@@ -3507,6 +3591,8 @@ void Engine::load_room(int room_index) {
     }
     boss_entity = ENTITY_NONE;
     reset_boss_bar();
+    clear_hazards(world);   // ningun telegrafo sobrevive a una carga de sala
+    darkness_level = 0.0f;
     if (Room* z = zone_ptr()) {
         for (int i = 0; i < z->cell_count; i++) z->cells[i].active = false;
         z->arena_sealed = false;
@@ -3788,6 +3874,41 @@ void Engine::render_sky_fire() {
     renderer.end_world();
 }
 
+// La oscuridad de La Muerte (cap. 8, 2026-10-03). Se pinta en PANTALLA, despues de cerrar
+// la pasada de mundo: un velo casi negro con un agujero de luz alrededor del profeta. El
+// agujero es la vinieta del Renderer (alfa 0 en el centro -> 1 en el borde) estirada a un
+// cuadrado, y el resto de la pantalla, cuatro rectangulos lisos. Los ojos del jefe brillan
+// a traves: hay que poder saber DONDE esta aunque no se le vea.
+void Engine::render_darkness() {
+    if (darkness_level <= 0.01f) return;
+    if (player.entity == ENTITY_NONE || !world.has(player.entity, Component::Transform)) return;
+    const f32 W = static_cast<f32>(Config::GAME_WIDTH), H = static_cast<f32>(Config::GAME_HEIGHT);
+    const Vec2 view_o = {camera.position.x - W * 0.5f, camera.position.y - H * 0.5f};
+    const Vec2 pp = world.transforms[player.entity].position - view_o;
+    const f32 R = darkness_radius * 1.6f * (1.0f + 0.03f * std::sin(world.time * 2.1f));
+    const Color dark = {6, 4, 14, static_cast<u8>(228.0f * darkness_level)};
+    auto rect = [&](f32 x, f32 y, f32 w, f32 h) { if (w > 0.0f && h > 0.0f) renderer.draw_rect({x, y, w, h}, dark); };
+    if (renderer.vignette_tex != TEXTURE_NONE)
+        renderer.draw_sprite_rect(renderer.vignette_tex, {0, 0, 160, 90}, {pp.x - R, pp.y - R, R * 2.0f, R * 2.0f}, dark);
+    else
+        rect(pp.x - R, pp.y - R, R * 2.0f, R * 2.0f);
+    rect(-12.0f, -12.0f, W + 24.0f, pp.y - R + 12.0f);                       // arriba
+    rect(-12.0f, pp.y + R, W + 24.0f, H + 12.0f - (pp.y + R));               // abajo
+    rect(-12.0f, pp.y - R, pp.x - R + 12.0f, R * 2.0f);                      // izquierda
+    rect(pp.x + R, pp.y - R, W + 12.0f - (pp.x + R), R * 2.0f);              // derecha
+    // Los ojos de la Muerte se ven en lo oscuro
+    if (boss_entity != ENTITY_NONE && world.is_alive(boss_entity) && world.has(boss_entity, Component::Health) &&
+        world.healths[boss_entity].is_alive() && world.sprites[boss_entity].visible) {
+        const auto& bt = world.transforms[boss_entity];
+        const Vec2 eye = bt.position - view_o - Vec2{0.0f, 11.0f * bt.scale.y};
+        const f32 pulse = 0.6f + 0.4f * std::sin(world.time * 3.0f);
+        const u8 a = static_cast<u8>(200.0f * darkness_level * pulse);
+        renderer.draw_disc(eye, 7.0f, {120, 140, 255, static_cast<u8>(a / 4)});
+        renderer.draw_disc(eye + Vec2{-2.0f, 0.0f}, 1.2f, {200, 220, 255, a});
+        renderer.draw_disc(eye + Vec2{ 2.0f, 0.0f}, 1.2f, {200, 220, 255, a});
+    }
+}
+
 // =============================================================================
 // Pistas del jefe (2026-09-24)
 // =============================================================================
@@ -3839,8 +3960,11 @@ void Engine::enter_arena() {
     codex_see_enemy(save.data, def.boss_type);
     // Cap. 3: sumo sacerdote (la cabeza, en el ancla de la escena Live) + corro de profetas
     // bailando alrededor del centro de la arena, con barra compartida.
-    boss_entity = spawn_boss_group(world, def.boss_type, pos, pos + Vec2{0, 40},
-                                   enemy_textures[static_cast<u32>(def.boss_type)],
+    // La hoja del jefe se cargo al empezar el capitulo; si el capitulo se abrio por otro
+    // camino (escena forzada), se carga aqui.
+    if (boss_sheets.main == TEXTURE_NONE) load_boss_sheets(state.current_chapter);
+    clear_hazards(world);
+    boss_entity = spawn_boss_group(world, def.boss_type, pos, pos + Vec2{0, 40}, boss_sheets,
                                    state.current_chapter, def.boss_name, def.boss_pattern);
     // El encuentro del capitulo puede haber debilitado al jefe (agua sobre el altar, ojos
     // abiertos): se aplica al desangrarlo, no al definirlo. A TODO el grupo.
@@ -4808,6 +4932,7 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "walks") { ss >> c.num >> c.num2; }   // walk relativo al origen de la celda de INICIO
         else if (c.op == "walkarena") { ss >> c.num; }          // walk a `d` unidades del vano (+ = dentro)
         else if (c.op == "intel") { }                          // loguea el rastro del jefe
+        else if (c.op == "bosshp") { ss >> c.num >> c.num2; }  // fraccion de vida del jefe [0 todos, 1 cabeza, 2 sequito]
         else if (c.op == "seed")  { ss >> c.num; }
         else if (c.op == "chapter") { ss >> c.num; }
         else if (c.op == "event")   { ss >> c.num >> c.num2; }   // capitulo + indice en su pozo
@@ -5034,6 +5159,18 @@ void Engine::update_autoplay(f32 dt) {
                     }
                     scene_manual = (c.op == "audiencia") || c.num2 == 0;
                     start_scene(id);
+                    // En el juego real quien ASIENTA la camara sobre la arena es el paseo de
+                    // entrada (update_boss_approach), que bajo el comando no corre: la escena
+                    // del jefe se fotografiaba desde el nudo de FUERA del recinto, sin jefe ni
+                    // profeta en cuadro (visto el 2026-10-03 en escenas_check, es11..es20).
+                    if (def.stage == StageKind::Live && player.entity != ENTITY_NONE &&
+                        world.has(player.entity, Component::Transform)) {
+                        const Vec2 pp = world.transforms[player.entity].position;
+                        camera.room_bounds = camera.bounds_goal;
+                        camera.set_target(pp);
+                        camera.position = pp;
+                        camera.update(0.0f);
+                    }
                 }
                 continue;
             }
@@ -5351,6 +5488,14 @@ void Engine::update_autoplay(f32 dt) {
                     list[n++] = static_cast<Entity>(e);
                 }
                 for (int i = 0; i < n; i++) {
+                    // Atraviesa lo intocable (2026-10-03): desde que los jefes tienen fases
+                    // en las que no se les toca —el sumo sacerdote con su corro, el Espiritu
+                    // bajo el agua, el Sacerdote con sus idolos— un `killall` en el momento
+                    // malo dejaba al jefe vivo y la arena sin cerrar. Un prop que haya caido
+                    // con su jefe ya no tiene Health y se salta.
+                    if (!world.has(list[i], Component::Health)) continue;
+                    world.healths[list[i]].invulnerable = false;
+                    world.healths[list[i]].iframes_timer = 0.0f;
                     if (apply_damage(world, ENTITY_NONE, list[i], 100000.0f))
                         on_enemy_killed(world, faith, list[i], combat_events);
                 }
@@ -5387,6 +5532,33 @@ void Engine::update_autoplay(f32 dt) {
                     const BossIntel bi = get_boss_intel(*z, floor_map, player.map_revealed);
                     SDL_Log("INTEL nivel=%d pistas=%d visto=%d celda_jefe=%d", bi.level, bi.clues, bi.seen ? 1 : 0, z->boss_cell);
                 }
+                continue;
+            }
+            // `bosshp <fraccion> [quien]`: fija la vida del jefe (y/o de su sequito: el corro, Jezabel)
+            // a una fraccion de su maximo, para saltar a una FASE sin jugarse la pelea entera.
+            // quien: 0 todos (por defecto), 1 solo la cabeza, 2 solo el sequito. Con 0 los MATA
+            // por el camino normal (apply_damage + on_enemy_killed), aunque esten intocables.
+            if (c.op == "bosshp") {
+                const f32 frac = std::max(0.0f, std::min(1.0f, c.num));
+                const int who = static_cast<int>(c.num2);
+                int touched = 0;
+                for (u32 e = 0; e < world.entity_count; e++) {
+                    if (!world.is_alive(e) || !world.has(e, Component::EnemyAI) || !world.has(e, Component::Health)) continue;
+                    const auto& bai = world.enemy_ais[e];
+                    auto& bh = world.healths[e];
+                    if (!bh.is_alive()) continue;
+                    if (!(bai.is_boss && who != 2) && !(bai.boss_group && who != 1)) continue;
+                    if (frac <= 0.0f) {
+                        bh.invulnerable = false;
+                        bh.iframes_timer = 0.0f;
+                        if (apply_damage(world, ENTITY_NONE, e, 1.0e6f))
+                            on_enemy_killed(world, faith, e, combat_events);
+                    } else {
+                        bh.current = std::max(1.0f, bh.max * frac);
+                    }
+                    touched++;
+                }
+                SDL_Log("Autoplay: bosshp %.2f (quien %d) -> %d", frac, who, touched);
                 continue;
             }
             if (c.op == "god")  { god_mode = !god_mode; continue; }

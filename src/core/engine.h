@@ -18,6 +18,7 @@
 #include "game/player.h"
 #include "game/enemies.h"
 #include "game/combat.h"
+#include "game/hazards.h"
 #include "game/rooms.h"
 #include "game/items.h"
 #include "game/events.h"
@@ -235,6 +236,18 @@ struct Engine {
     // guionizadas (start_scene), donde estan de pie en el escenario.
     u32 acab_texture    = TEXTURE_NONE;
     u32 jezabel_texture = TEXTURE_NONE;
+    // Hoja propia del jefe del capitulo (rooms.h get_boss_sheet), cargada al empezar el
+    // capitulo. Sin el fichero, la del enemigo base y `own` a false (bosses.cpp lo dibuja
+    // entonces como siempre, a 1,6). Ver load_boss_sheets.
+    BossSheets boss_sheets;
+    void load_boss_sheets(int chapter);
+    // Texturas procedurales de los telegrafos de suelo (game/hazards.h)
+    HazardArt hazard_art;
+    // La oscuridad de La Muerte (cap. 8): 0..1 suavizado, y el radio de la luz que deja
+    // alrededor del profeta. La pide el jefe cada frame (ECSWorld::darkness_req).
+    f32 darkness_level  = 0.0f;
+    f32 darkness_radius = 76.0f;
+    void render_darkness();
 
     // Frame draw list (reused)
     std::vector<DrawCmd> draw_list;

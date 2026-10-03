@@ -85,40 +85,8 @@ Entity spawn_enemy(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_i
     return spawn_common(world, type, position, texture_id, chapter);
 }
 
-Entity spawn_boss(ECSWorld& world, EnemyType type, Vec2 position, u32 texture_id,
-                  int chapter, const char* boss_name, BossPattern pattern) {
-    Entity e = spawn_common(world, type, position, texture_id, chapter);
-    if (e == ENTITY_NONE) return e;
-
-    auto def = get_enemy_def(type);
-    f32 hp = 200.0f + 50.0f * chapter;
-    world.healths[e].max = hp;
-    world.healths[e].current = hp;
-    world.combats[e].damage = def.damage * 1.25f;
-    world.movements[e].speed = std::max(50.0f, def.speed * 0.72f);
-    world.transforms[e].scale = {1.6f, 1.6f};
-    world.colliders[e].radius = 11.0f;
-    world.colliders[e].offset = {0, 8};
-    world.enemy_ais[e].is_boss = true;
-    world.enemy_ais[e].name = boss_name ? boss_name : def.name;
-    world.enemy_ais[e].aggro_range = 400.0f;
-    world.enemy_ais[e].shoot_timer = 2.0f;
-    world.enemy_ais[e].leap_timer = 3.5f;
-    world.enemy_ais[e].boss_pattern = static_cast<u8>(pattern);
-    world.enemy_ais[e].phase = 0;
-    world.enemy_ais[e].special_timer = 3.0f;
-    world.enemy_ais[e].partner = ENTITY_NONE;
-
-    // La multitud del Carmelo y el asedio de Ben-adad pelean con numero, no con vida
-    if (pattern == BossPattern::ProfetasDeBaal || pattern == BossPattern::BenAdad) {
-        world.healths[e].max *= 0.75f;
-        world.healths[e].current = world.healths[e].max;
-    }
-    return e;
-}
-
 // -----------------------------------------------------------------------------
-static bool has_line_of_sight(const ECSWorld& world, Vec2 from, Vec2 to) {
+bool enemy_has_los(const ECSWorld& world, Vec2 from, Vec2 to) {
     if (!world.active_room) return true;
     Vec2 d = to - from;
     f32 len = d.length();
@@ -135,7 +103,7 @@ static bool has_line_of_sight(const ECSWorld& world, Vec2 from, Vec2 to) {
     return true;
 }
 
-static void shoot_at(ECSWorld& world, Entity e, Vec2 dir, ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
+void enemy_shoot(ECSWorld& world, Entity e, Vec2 dir, ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
     Vec2 from = world.transforms[e].position + Vec2{0, 2};
     spawn_projectile(world, from, dir, dmg, false, kind, speed, range);
     if (world.has(e, Component::Animation)) {
@@ -148,11 +116,9 @@ static void shoot_at(ECSWorld& world, Entity e, Vec2 dir, ProjectileKind kind, f
 }
 
 // =============================================================================
-// Jefes: un patron por capitulo
+// Utilidades de IA compartidas con los jefes (game/bosses.cpp)
 // =============================================================================
-// Utilidades compartidas. Todo lo que hacen sale del estado del mundo: ni el
-// jugador ni el Engine entran aqui.
-static int count_alive_enemies(const ECSWorld& world) {
+int count_alive_minions(const ECSWorld& world) {
     int n = 0;
     for (u32 i = 0; i < world.entity_count; i++) {
         if (!world.is_alive(i) || !is_hostile(world, i)) continue;
@@ -166,7 +132,7 @@ static int count_alive_enemies(const ECSWorld& world) {
 // Punto pisable cerca de `around` para invocaciones y teleports. Si ninguna de las ocho
 // direcciones sirve devuelve `fallback` (nunca `around`: teleportar encima del jugador
 // o dentro de un muro es peor que no teleportar).
-static Vec2 free_spot_near(const ECSWorld& world, Vec2 around, f32 radius, int seed, Vec2 fallback) {
+Vec2 enemy_free_spot(const ECSWorld& world, Vec2 around, f32 radius, int seed, Vec2 fallback) {
     for (int i = 0; i < 8; i++) {
         f32 a = (seed + i) * 0.7854f;
         Vec2 p = around + Vec2{std::cos(a), std::sin(a)} * radius;
@@ -175,158 +141,22 @@ static Vec2 free_spot_near(const ECSWorld& world, Vec2 around, f32 radius, int s
     return fallback;
 }
 
-static void volley(ECSWorld& world, Entity e, Vec2 to_player, int count, f32 spread,
-                   ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
+void enemy_volley(ECSWorld& world, Entity e, Vec2 to_player, int count, f32 spread,
+                  ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
     f32 base = std::atan2(to_player.y, to_player.x);
     for (int i = 0; i < count; i++) {
         f32 a = base + (i - (count - 1) * 0.5f) * spread;
-        shoot_at(world, e, {std::cos(a), std::sin(a)}, kind, dmg, speed, range);
+        enemy_shoot(world, e, {std::cos(a), std::sin(a)}, kind, dmg, speed, range);
     }
 }
 
-static void ring(ECSWorld& world, Entity e, Vec2 to_player, int count,
-                 ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
+void enemy_ring(ECSWorld& world, Entity e, Vec2 to_player, int count,
+                ProjectileKind kind, f32 dmg, f32 speed, f32 range) {
     f32 base = std::atan2(to_player.y, to_player.x);
     f32 step = 6.28318f / static_cast<f32>(count);
     for (int i = 0; i < count; i++) {
         f32 a = base + i * step;
-        shoot_at(world, e, {std::cos(a), std::sin(a)}, kind, dmg, speed, range);
-    }
-}
-
-static void chase(ECSWorld& world, Entity e, Vec2 to_player, f32 dist, f32 dt, f32 stop_at = 26.0f) {
-    auto& ai = world.enemy_ais[e];
-    auto& movement = world.movements[e];
-    if (ai.think_timer <= 0.0f) {
-        ai.think_timer = 0.25f;
-        movement.velocity = (dist > stop_at) ? to_player * movement.speed : Vec2{0, 0};
-    } else {
-        ai.think_timer -= dt;
-    }
-}
-
-// Invoca un secuaz si no hay demasiados en la sala. Devuelve la entidad creada.
-static Entity summon(ECSWorld& world, Entity boss, EnemyType type, int max_alive, int chapter, int seed) {
-    if (count_alive_enemies(world) >= max_alive) return ENTITY_NONE;
-    Vec2 boss_pos = world.transforms[boss].position;
-    Vec2 at = free_spot_near(world, boss_pos, 26.0f, seed, boss_pos);
-    Entity s = spawn_enemy(world, type, at, world.enemy_textures[static_cast<u32>(type)], chapter);
-    if (s != ENTITY_NONE) {
-        world.enemy_ais[s].home_cell = world.enemy_ais[boss].home_cell;   // hereda la celda del invocador
-        spawn_particles(world, at, {200, 120, 255, 255}, 8, 70.0f, 0.3f);
-    }
-    return s;
-}
-
-// =============================================================================
-// El corro del Carmelo (1 R 18:26-29)
-// =============================================================================
-// Un sumo sacerdote (la cabeza, `is_boss`) y sus profetas (`boss_group`) "saltando
-// alrededor del altar" (18:26). El capitulo termina cuando cae el ultimo: la sala se
-// limpia por `count_living_enemies() == 0`, asi que un grupo encaja por construccion.
-// "Los 450" se transmiten como REPOSICION — la cabeza rellena el corro desde el pueblo,
-// uno cada pocos segundos —, no como numero en pantalla.
-static constexpr int BAAL_RING_SLOTS  = 6;
-static constexpr f32 BAAL_RING_RADIUS = 44.0f;
-static constexpr f32 BAAL_RING_LEASH  = 120.0f;   // mas lejos del corro, lo persiguen
-
-static f32 ring_slot_angle(int slot) { return slot * (6.28318f / BAAL_RING_SLOTS); }
-
-int count_boss_group(const ECSWorld& world) {
-    int n = 0;
-    for (u32 i = 0; i < world.entity_count; i++) {
-        if (!world.is_alive(i) || !world.has(i, Component::EnemyAI)) continue;
-        if (!world.enemy_ais[i].boss_group) continue;
-        if (world.has(i, Component::Health) && !world.healths[i].is_alive()) continue;
-        n++;
-    }
-    return n;
-}
-
-// Primer hueco libre del corro (por fase): la reposicion ocupa el sitio del caido
-static int free_ring_slot(const ECSWorld& world) {
-    for (int s = 0; s < BAAL_RING_SLOTS; s++) {
-        const f32 want = ring_slot_angle(s);
-        bool taken = false;
-        for (u32 i = 0; i < world.entity_count && !taken; i++) {
-            if (!world.is_alive(i) || !world.has(i, Component::EnemyAI) || !world.enemy_ais[i].boss_group) continue;
-            if (world.has(i, Component::Health) && !world.healths[i].is_alive()) continue;
-            taken = std::fabs(world.enemy_ais[i].ring_phase - want) < 0.01f;
-        }
-        if (!taken) return s;
-    }
-    return -1;
-}
-
-static Entity spawn_baal_prophet(ECSWorld& world, Vec2 center, int slot, int chapter) {
-    const f32 a = ring_slot_angle(slot);
-    Vec2 want = center + Vec2{std::cos(a), std::sin(a)} * BAAL_RING_RADIUS;
-    Vec2 at = want;
-    if (world.active_room && !world.active_room->is_walkable_world(want + Vec2{0, 8}))
-        at = free_spot_near(world, want, 18.0f, slot, center);
-    Entity m = spawn_enemy(world, EnemyType::ProfetaDeBaal, at,
-                           world.enemy_textures[static_cast<u32>(EnemyType::ProfetaDeBaal)], chapter);
-    if (m == ENTITY_NONE) return m;
-    auto& ai = world.enemy_ais[m];
-    ai.boss_group   = true;
-    ai.boss_pattern = static_cast<u8>(BossPattern::ProfetasDeBaal);
-    ai.name         = tr("Profeta de Baal", "Prophet of Baal");
-    ai.ring_center  = center;
-    ai.ring_phase   = a;
-    ai.phase        = 0;
-    ai.shoot_timer  = 1.2f + 0.4f * slot;   // escalonados: el corro no dispara a la vez
-    world.transforms[m].scale = {1.15f, 1.15f};
-    world.healths[m].max *= 1.6f;
-    world.healths[m].current = world.healths[m].max;
-    SDL_Log("Baal prophet slot %d at (%.0f,%.0f)%s", slot, at.x, at.y,
-            (at.x != want.x || at.y != want.y) ? " (recolocado)" : "");
-    return m;
-}
-
-Entity spawn_boss_group(ECSWorld& world, EnemyType type, Vec2 position, Vec2 ring_center,
-                        u32 texture_id, int chapter, const char* boss_name, BossPattern pattern) {
-    Entity head = spawn_boss(world, type, position, texture_id, chapter, boss_name, pattern);
-    if (head == ENTITY_NONE || pattern != BossPattern::ProfetasDeBaal) return head;
-    // El nombre del GRUPO ("Los 450 Profetas de Baal") va en la barra; el de la cabeza, aqui
-    world.enemy_ais[head].name = tr("Sumo sacerdote de Baal", "High priest of Baal");
-    world.enemy_ais[head].ring_center = ring_center;
-    // Cinco de pie al abrir la pelea; el sexto hueco lo rellena la cabeza
-    for (int s = 0; s < BAAL_RING_SLOTS - 1; s++) spawn_baal_prophet(world, ring_center, s, chapter);
-    return head;
-}
-
-// Miembro del corro: baila alrededor del altar a velocidad angular constante con un
-// vaiven de radio, tira un Darkbolt cuando el profeta esta a tiro, y al flaquear entra
-// en el mismo frenesi que la cabeza (18:28: se hieren solos). Si el profeta se aleja del
-// corro lo persigue — sin esto se le tirotea desde fuera sin que nadie se mueva.
-static void update_baal_prophet(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_player,
-                                f32 dist, f32 dmg, f32 dt) {
-    auto& ai = world.enemy_ais[e];
-    auto& movement = world.movements[e];
-    auto& health = world.healths[e];
-    const bool frenzy = health.ratio() < 0.5f;
-    if (frenzy && ai.phase == 0) {
-        ai.phase = 1;
-        movement.speed *= 1.35f;
-        spawn_particles(world, world.transforms[e].position, {200, 40, 40, 255}, 12, 80.0f, 0.5f);
-    }
-    if (frenzy) health.current = std::max(1.0f, health.current - health.max * 0.012f * dt);
-
-    if (player_pos.distance_to(ai.ring_center) > BAAL_RING_LEASH) {
-        chase(world, e, to_player, dist, dt, 40.0f);
-    } else {
-        const f32 omega = frenzy ? 1.4f : 0.9f;
-        const f32 a = ai.ring_phase + world.time * omega;
-        const f32 r = BAAL_RING_RADIUS + 8.0f * std::sin(world.time * 3.0f + ai.ring_phase);
-        Vec2 target = ai.ring_center + Vec2{std::cos(a), std::sin(a)} * r;
-        Vec2 d = target - world.transforms[e].position;
-        f32 l = d.length();
-        movement.velocity = (l > 1.0f) ? d * (std::min(movement.speed, l * 4.0f) / l) : Vec2{0, 0};
-    }
-    if (dist < ai.attack_range * 1.5f && ai.shoot_timer <= 0.0f &&
-        has_line_of_sight(world, world.transforms[e].position, player_pos)) {
-        ai.shoot_timer = frenzy ? 1.8f : 2.6f;
-        shoot_at(world, e, to_player, ProjectileKind::Darkbolt, dmg, 120.0f, 260.0f);
+        enemy_shoot(world, e, {std::cos(a), std::sin(a)}, kind, dmg, speed, range);
     }
 }
 
@@ -366,236 +196,6 @@ static int buff_allies(ECSWorld& world, Entity general) {
         spawn_particles(world, at, {255, 120, 90, 255}, 6 + touched * 2, 70.0f, 0.4f);
     }
     return touched;
-}
-
-static void update_boss_ai(ECSWorld& world, Entity e, Vec2 player_pos, Vec2 to_player,
-                           f32 dist, f32 dmg, f32 dt) {
-    auto& ai = world.enemy_ais[e];
-    auto& movement = world.movements[e];
-    auto& health = world.healths[e];
-    const f32 ratio = health.ratio();
-    const int chapter = 1 + static_cast<int>(ai.boss_pattern);   // el patron va 1:1 con el capitulo
-    ai.special_timer -= dt;
-
-    switch (static_cast<BossPattern>(ai.boss_pattern)) {
-
-    // --- Cap 1: el capitan pelea a la carga y llama refuerzos cuando flaquea ---
-    case BossPattern::CapitanDeAcab:
-        chase(world, e, to_player, dist, dt);
-        if (ai.leap_timer <= 0.0f) {
-            ai.leap_timer = 3.0f;
-            movement.knockback = to_player * 300.0f;
-            if (world.has(e, Component::Animation)) play_anim(world.animations[e], AnimID::Dash, true);
-        } else if (ai.leap_timer < 0.5f) {
-            movement.velocity = {0, 0};   // telegrafia
-        }
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 2.6f;
-            volley(world, e, to_player, 3, 0.24f, ProjectileKind::Arrow, dmg * 0.55f, 170.0f, 240.0f);
-        }
-        if (ratio < 0.5f && ai.phase == 0) {
-            ai.phase = 1;
-            for (int i = 0; i < 3; i++) summon(world, e, EnemyType::SoldadoDeAcab, 6, chapter, i * 3);
-        }
-        break;
-
-    // --- Cap 2: el sacerdote no pelea, oficia: invoca y se cura ---
-    case BossPattern::SacerdoteBaal:
-        chase(world, e, to_player, dist, dt, 70.0f);
-        if (dist < 60.0f) movement.velocity = to_player * -movement.speed * 0.7f;   // guarda distancia
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 2.2f;
-            volley(world, e, to_player, 5, 0.20f, ProjectileKind::Darkbolt, dmg * 0.5f, 150.0f, 280.0f);
-        }
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = 7.0f;
-            summon(world, e, EnemyType::ProfetaDeBaal, 4, chapter, 2);
-            health.heal(health.max * 0.06f);
-            spawn_particles(world, world.transforms[e].position, {180, 90, 220, 255}, 10, 60.0f, 0.4f);
-        }
-        break;
-
-    // --- Cap 3: la multitud. 2a fase: "se sajaban con cuchillos" (1 Re 18:28) ---
-    case BossPattern::ProfetasDeBaal: {
-        chase(world, e, to_player, dist, dt, 60.0f);
-        bool frenzy = (ratio < 0.5f);
-        if (frenzy && ai.phase == 0) {
-            ai.phase = 1;
-            movement.speed *= 1.35f;
-            spawn_particles(world, world.transforms[e].position, {200, 40, 40, 255}, 16, 90.0f, 0.5f);
-        }
-        if (frenzy) health.current = std::max(1.0f, health.current - health.max * 0.012f * dt);  // se hieren solos
-        // Repone el corro desde el pueblo (los 450): UNO cada 5 s, al hueco del caido.
-        // Nacen ya como miembros (`boss_group`) para que cuenten en la barra.
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = frenzy ? 3.0f : 5.0f;
-            const int slot = free_ring_slot(world);
-            if (slot >= 0 && count_boss_group(world) < BAAL_RING_SLOTS) {
-                Entity m = spawn_baal_prophet(world, ai.ring_center, slot, chapter);
-                if (m != ENTITY_NONE) {
-                    world.enemy_ais[m].home_cell = ai.home_cell;   // cuenta en la celda del jefe
-                    spawn_particles(world, world.transforms[m].position, {200, 120, 255, 255}, 8, 70.0f, 0.3f);
-                }
-            }
-        }
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = frenzy ? 1.6f : 3.0f;
-            ring(world, e, to_player, frenzy ? 10 : 6, ProjectileKind::Darkbolt, dmg * 0.45f, 120.0f, 260.0f);
-        }
-        break;
-    }
-
-    // --- Cap 4: viento, terremoto, fuego... y el silbo apacible (1 Re 19:11-12) ---
-    case BossPattern::Desesperacion: {
-        u8 want = (ratio > 0.75f) ? 0 : (ratio > 0.50f) ? 1 : (ratio > 0.25f) ? 2 : 3;
-        if (want != ai.phase) {
-            ai.phase = want;
-            spawn_particles(world, world.transforms[e].position, {230, 230, 255, 255}, 18, 110.0f, 0.5f);
-        }
-        if (ai.phase == 3) {
-            // El silbo: deja de atacar. Ya no es un enemigo, es un silencio que hay que cruzar.
-            movement.velocity = movement.velocity * 0.90f;
-            health.invulnerable = false;
-            break;
-        }
-        chase(world, e, to_player, dist, dt);
-        if (ai.phase == 0 && ai.shoot_timer <= 0.0f) {          // viento: anillos que empujan
-            ai.shoot_timer = 2.4f;
-            ring(world, e, to_player, 12, ProjectileKind::Darkbolt, dmg * 0.4f, 110.0f, 320.0f);
-        }
-        if (ai.phase == 1) {                                     // terremoto: cargas seguidas
-            if (ai.leap_timer <= 0.0f) {
-                ai.leap_timer = 2.2f;
-                movement.knockback = to_player * 340.0f;
-                if (world.has(e, Component::Animation)) play_anim(world.animations[e], AnimID::Dash, true);
-            }
-        }
-        if (ai.phase == 2 && ai.shoot_timer <= 0.0f) {           // fuego: conos rapidos
-            ai.shoot_timer = 1.1f;
-            volley(world, e, to_player, 5, 0.18f, ProjectileKind::Fireball, dmg * 0.5f, 190.0f, 280.0f);
-        }
-        break;
-    }
-
-    // --- Cap 5: el duo. Jezabel entra con Acab y el que queda se enfurece ---
-    case BossPattern::AcabYJezabel: {
-        if (ai.phase == 0) {
-            ai.phase = 1;
-            ai.partner = summon(world, e, EnemyType::ProfetaDeBaal, 99, chapter + 2, 4);
-            if (ai.partner != ENTITY_NONE && world.has(ai.partner, Component::Health)) {
-                world.healths[ai.partner].max *= 3.0f;
-                world.healths[ai.partner].current = world.healths[ai.partner].max;
-                world.enemy_ais[ai.partner].name = "Jezabel";
-                world.transforms[ai.partner].scale = {1.3f, 1.3f};
-            }
-        }
-        bool alone = (ai.partner == ENTITY_NONE) || !world.is_alive(ai.partner) ||
-                     (world.has(ai.partner, Component::Health) && !world.healths[ai.partner].is_alive());
-        if (alone && ai.phase == 1) {
-            ai.phase = 2;
-            movement.speed *= 1.3f;
-            spawn_particles(world, world.transforms[e].position, {255, 80, 60, 255}, 16, 100.0f, 0.5f);
-        }
-        chase(world, e, to_player, dist, dt, 60.0f);
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = (ai.phase == 2) ? 1.2f : 2.2f;
-            volley(world, e, to_player, (ai.phase == 2) ? 5 : 3, 0.22f,
-                   ProjectileKind::Arrow, dmg * 0.55f, 185.0f, 300.0f);
-        }
-        break;
-    }
-
-    // --- Cap 6: el agua corrupta se parte en dos cada vez que cede ---
-    case BossPattern::EspirituCorrupto: {
-        chase(world, e, to_player, dist, dt);
-        u8 want = (ratio > 0.66f) ? 0 : (ratio > 0.33f) ? 1 : 2;
-        if (want > ai.phase) {
-            ai.phase = want;
-            summon(world, e, EnemyType::AguaCorrupta, 10, chapter + 1, 3);
-            summon(world, e, EnemyType::AguaCorrupta, 10, chapter + 1, 6);
-            world.transforms[e].scale = {1.6f - 0.15f * ai.phase, 1.6f - 0.15f * ai.phase};
-        }
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 1.8f;
-            ring(world, e, to_player, 7, ProjectileKind::Darkbolt, dmg * 0.5f, 135.0f, 250.0f);
-        }
-        break;
-    }
-
-    // --- Cap 7: el acreedor cobra. Cada ronda le devuelve vida ---
-    case BossPattern::Acreedor:
-        chase(world, e, to_player, dist, dt);
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 1.9f;
-            volley(world, e, to_player, 4, 0.30f, ProjectileKind::Darkbolt, dmg * 0.55f, 165.0f, 270.0f);
-        }
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = 6.0f;
-            health.heal(health.max * 0.05f);
-            summon(world, e, EnemyType::SoldadoSirio, 5, chapter, 2);
-            spawn_particles(world, world.transforms[e].position, {230, 200, 90, 255}, 10, 70.0f, 0.35f);
-        }
-        break;
-
-    // --- Cap 8: la Muerte no cede a distancia. Hay que tenderse sobre el niño (2 Re 4:34) ---
-    case BossPattern::LaMuerte: {
-        constexpr f32 CLOSE = 34.0f;
-        bool reachable = (dist < CLOSE);
-        health.invulnerable = !reachable;
-        // Huye del cuerpo a cuerpo: acercarse es toda la pelea
-        if (reachable) movement.velocity = to_player * -movement.speed;
-        else           chase(world, e, to_player, dist, dt, 60.0f);
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = reachable ? 2.6f : 1.5f;
-            ring(world, e, to_player, 9, ProjectileKind::Darkbolt, dmg * 0.5f, 125.0f, 300.0f);
-        }
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = 8.0f;
-            summon(world, e, EnemyType::IdolatraDeRimon, 5, chapter, 4);
-        }
-        break;
-    }
-
-    // --- Cap 9: Guiezi corrió tras la plata; ahora corre de ti (2 Re 5:20-27) ---
-    case BossPattern::Guiezi:
-        chase(world, e, to_player, dist, dt, 90.0f);
-        if (dist < 80.0f) movement.velocity = to_player * -movement.speed;
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = 4.0f;
-            Vec2 from = world.transforms[e].position;
-            spawn_particles(world, from, {150, 220, 150, 255}, 12, 90.0f, 0.35f);
-            world.transforms[e].position = free_spot_near(world, player_pos, 62.0f,
-                                                          static_cast<int>(world.time * 7.0f), from);
-            spawn_particles(world, world.transforms[e].position, {150, 220, 150, 255}, 12, 90.0f, 0.35f);
-            Vec2 aim = (player_pos - world.transforms[e].position).normalized();
-            volley(world, e, aim, 3, 0.26f, ProjectileKind::Arrow, dmg * 0.6f, 200.0f, 260.0f);
-            ai.shoot_timer = 1.2f;
-        }
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 2.0f;
-            volley(world, e, to_player, 2, 0.32f, ProjectileKind::Arrow, dmg * 0.5f, 190.0f, 260.0f);
-        }
-        break;
-
-    // --- Cap 10: el asedio. Siria no se acaba: hay que derribar a Ben-adad ---
-    case BossPattern::BenAdad:
-        chase(world, e, to_player, dist, dt, 80.0f);
-        if (ai.special_timer <= 0.0f) {
-            ai.special_timer = 4.5f;
-            summon(world, e, EnemyType::SoldadoSirio, 9, chapter, 1);
-            summon(world, e, EnemyType::SoldadoSirio, 9, chapter, 5);
-            if (ratio < 0.5f) summon(world, e, EnemyType::GeneralSirio, 9, chapter, 3);
-        }
-        if (ai.shoot_timer <= 0.0f) {
-            ai.shoot_timer = 2.0f;
-            volley(world, e, to_player, 7, 0.16f, ProjectileKind::Arrow, dmg * 0.45f, 175.0f, 320.0f);
-        }
-        if (ai.leap_timer <= 0.0f) {
-            ai.leap_timer = 6.0f;
-            ring(world, e, to_player, 12, ProjectileKind::Darkbolt, dmg * 0.4f, 120.0f, 300.0f);
-        }
-        break;
-    }
 }
 
 // =============================================================================
@@ -744,14 +344,24 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
         Vec2 to_player = (player_pos - transform.position).normalized();
         f32 dmg = world.has(e, Component::Combat) ? world.combats[e].damage : 8.0f;
 
-        // ---- Boss: un patron propio por capitulo (game/enemies.h BossPattern) ----
-        if (ai.is_boss) {
-            update_boss_ai(world, e, player_pos, to_player, dist, dmg, dt);
+        // ---- Jefes, su sequito y sus props: una estrategia por capitulo (bosses.cpp) ----
+        if (ai.is_boss || ai.boss_group || ai.prop_kind != 0) {
+            update_boss_entity(world, e, player_pos, to_player, dist, dmg, dt);
             continue;
         }
-        // ---- Corro del jefe (cap. 3): miembros con barra compartida ----
-        if (ai.boss_group) {
-            update_baal_prophet(world, e, player_pos, to_player, dist, dmg, dt);
+
+        // ---- Cegado por la hueste celestial (cap. 10, 2 Reyes 6:18): vaga sin rumbo ----
+        // Ni dispara ni golpea: el contacto se corta con la propia recarga de ataque.
+        if (ai.blind_timer > 0.0f) {
+            ai.blind_timer -= dt;
+            ai.think_timer -= dt;
+            if (world.has(e, Component::Combat))
+                world.combats[e].attack_timer = std::max(world.combats[e].attack_timer, 0.25f);
+            if (ai.think_timer <= 0.0f) {
+                ai.think_timer = 0.6f;
+                f32 a = randf_range(0.0f, 6.2831853f);
+                movement.velocity = Vec2{std::cos(a), std::sin(a)} * movement.speed * 0.35f;
+            }
             continue;
         }
 
@@ -795,9 +405,9 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
                         movement.velocity = {0, 0};
                     }
                 }
-                if (dist < ai.aggro_range && ai.shoot_timer <= 0.0f && has_line_of_sight(world, transform.position, player_pos)) {
+                if (dist < ai.aggro_range && ai.shoot_timer <= 0.0f && enemy_has_los(world, transform.position, player_pos)) {
                     ai.shoot_timer = 1.7f;
-                    shoot_at(world, e, to_player, ProjectileKind::Arrow, dmg, 200.0f, 240.0f);
+                    enemy_shoot(world, e, to_player, ProjectileKind::Arrow, dmg, 200.0f, 240.0f);
                 }
                 break;
 
@@ -807,10 +417,10 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
                     else if (dist > ai.attack_range * 1.3f && dist < ai.aggro_range) movement.velocity = to_player * movement.speed * 0.7f;
                     else movement.velocity = {0, 0};
                 }
-                if (dist < ai.aggro_range && ai.shoot_timer <= 0.0f && has_line_of_sight(world, transform.position, player_pos)) {
+                if (dist < ai.aggro_range && ai.shoot_timer <= 0.0f && enemy_has_los(world, transform.position, player_pos)) {
                     ai.shoot_timer = 2.3f;
                     // Slow, homing-ish bolt: aims where the player is now (slow enough to dodge)
-                    shoot_at(world, e, to_player, ProjectileKind::Darkbolt, dmg, 120.0f, 260.0f);
+                    enemy_shoot(world, e, to_player, ProjectileKind::Darkbolt, dmg, 120.0f, 260.0f);
                 }
                 break;
 
@@ -846,7 +456,7 @@ void update_enemy_ai(ECSWorld& world, f32 dt) {
                 }
                 if (dist < ai.aggro_range && ai.shoot_timer <= 0.0f) {
                     ai.shoot_timer = 3.6f;
-                    volley(world, e, to_player, 2, 0.30f, ProjectileKind::Arrow, dmg * 0.55f, 180.0f, 220.0f);
+                    enemy_volley(world, e, to_player, 2, 0.30f, ProjectileKind::Arrow, dmg * 0.55f, 180.0f, 220.0f);
                 }
                 break;
         }
@@ -864,7 +474,8 @@ static constexpr u8  SPLIT_MAX_GEN   = 2;       // 1 padre -> 2 -> 4 y se acaba
 void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
     if (!world.is_alive(enemy) || !is_hostile(world, enemy)) return;
     auto& ai = world.enemy_ais[enemy];
-    if (ai.is_boss) return;   // los jefes ya mueren con su propio patron
+    // Los jefes, su sequito y sus props mueren con su propio patron (bosses.cpp)
+    if (ai.is_boss || ai.boss_group || ai.prop_kind != 0) { on_boss_death(world, enemy, pos); return; }
 
     switch (ai.behavior) {
 
@@ -887,7 +498,7 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
     //     antes de que el Engine compruebe si la sala esta despejada) ---
     case AIBehavior::SplitOnDeath: {
         if (ai.split_generation >= SPLIT_MAX_GEN) break;
-        if (count_alive_enemies(world) >= SPLIT_MAX_ALIVE) break;
+        if (count_alive_minions(world) >= SPLIT_MAX_ALIVE) break;
 
         EnemyType type = static_cast<EnemyType>(ai.enemy_type);
         int chapter = std::max(1, static_cast<int>(ai.chapter));
@@ -896,7 +507,7 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
 
         int born = 0;
         for (int i = 0; i < 2; i++) {
-            Vec2 at = free_spot_near(world, pos, 12.0f, i * 3 + 1, pos);
+            Vec2 at = enemy_free_spot(world, pos, 12.0f, i * 3 + 1, pos);
             Entity c = spawn_enemy(world, type, at, world.enemy_textures[static_cast<u32>(type)], chapter);
             if (c == ENTITY_NONE) break;
             world.enemy_ais[c].split_generation = gen;
@@ -913,7 +524,7 @@ void on_enemy_death_behavior(ECSWorld& world, Entity enemy, Vec2 pos) {
             spawn_vfx(world, pos, TileSprite::Orb, {90, 160, 220, 200}, 16.0f, 0.4f, 1.5f, 0.0f);
             spawn_particles(world, pos, {90, 160, 220, 255}, 12, 80.0f, 0.4f);
             SDL_Log("Agua Corrupta se divide: gen %u, %d hijos, %d vivos",
-                    static_cast<unsigned>(gen), born, count_alive_enemies(world));
+                    static_cast<unsigned>(gen), born, count_alive_minions(world));
         }
         break;
     }
