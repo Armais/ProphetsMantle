@@ -28,11 +28,16 @@ from mathutils import Vector, Matrix
 from . import parts, render
 from .parts import get_mat, hexc, box, sphere, tube, plane_quad
 
-CELL = 64            # px per cell = 16 game units x ASSET_SCALE 4 (rooms.h TILESET_CELL)
+CELL = 128           # px per cell = 16 game units x 8 (2026-10-03: el doble; rooms.h TILESET_CELL)
+GUTTER = 2           # px de margen alrededor de cada bloque, con el borde extruido: el motor
+                     # muestrea el atlas en LINEAL y sin margen las celdas opacas sangrarian
+PITCH = CELL + 2 * GUTTER
 TILE_COLS = 8
 TILE_ROWS = 9
 SS = 2
-U = render.ORTHO_SCALE / render.FRAME * CELL     # world units per cell (1.275)
+BASE_CELL = 64       # el tamano para el que se escribieron las medidas de mundo
+U = render.ORTHO_SCALE / render.FRAME * BASE_CELL     # world units per cell (1.275)
+PX2WORLD = U / CELL  # unidades de mundo por pixel de celda
 OUTLINE = render.OUTLINE
 
 # name -> (col, row, cells_w, cells_h)
@@ -127,7 +132,7 @@ def _cam_ground():
 
 
 def _cam_prop(px, feet_row):
-    return _cam(px, render.CAM_ELEV_DEG, render.ORTHO_SCALE / render.FRAME * px, feet_row)
+    return _cam(px, render.CAM_ELEV_DEG, PX2WORLD * px, feet_row)
 
 
 # =============================================================================
@@ -136,7 +141,7 @@ def _cam_prop(px, feet_row):
 def _post(hi, px, palette, outline, alpha_cut=0.5, gain=None):
     """palette=None -> smooth (render.post_soft); palette -> legacy pixel-art path."""
     if palette is None:
-        return render.post_soft(hi, px, SS, outline=outline, gain=gain)
+        return render.post_soft(hi, px, SS, outline=outline, gain=gain, outline_px=3 if CELL >= 128 else None)
     a = hi[..., 3:4]
     prem = hi[..., :3] * a
     prem = prem.reshape(px, SS, px, SS, 3).mean(axis=(1, 3))
@@ -490,28 +495,39 @@ def build_cliff_rock_tall(m):
 
 
 def build_rock(m):
-    sphere('r0', (-0.08, 0.02, 0.22), 0.36, m['stone'], scale=(1.15, 0.9, 0.7), segs=10, rings=6)
-    sphere('r1', (0.22, -0.1, 0.16), 0.22, m['stone_lt'], scale=(1.0, 0.9, 0.75), segs=8, rings=5)
-    sphere('r2', (-0.3, -0.18, 0.1), 0.14, m['stone'], scale=(1, 1, 0.7), segs=8, rings=5)
+    # Penasco con bultos (parts.rock) y dos cantos al pie: la esfera lisa era un huevo gris.
+    parts.rock('r0', (-0.06, 0.02, 0.22), 0.36, m['stone'], scale=(1.15, 0.92, 0.72), seed=3, rough=0.14)
+    parts.rock('r1', (0.24, -0.10, 0.15), 0.22, m['stone_lt'], scale=(1.0, 0.9, 0.78), seed=7, rough=0.12)
+    parts.rock('r2', (-0.32, -0.18, 0.09), 0.14, m['stone'], scale=(1, 1, 0.7), seed=11, rough=0.10)
+    sphere('moss0', (-0.10, -0.05, 0.43), 0.12, m['moss'], scale=(1.4, 1.1, 0.35), segs=10, rings=6)
 
 
 def build_bush(m):
-    sphere('b0', (0, 0, 0.32), 0.42, m['leaf'], scale=(1.15, 1.0, 0.75), segs=10, rings=6)
-    sphere('b1', (-0.28, -0.12, 0.28), 0.28, m['leaf_lt'], scale=(1, 1, 0.8), segs=8, rings=5)
-    sphere('b2', (0.3, -0.05, 0.3), 0.26, m['leaf_dk'], scale=(1, 1, 0.8), segs=8, rings=5)
-    for i, (x, y, z) in enumerate([(-0.1, -0.35, 0.36), (0.25, -0.3, 0.22), (0.05, -0.28, 0.5)]):
-        sphere(f'berry{i}', (x, y, z), 0.045, m['berry'], segs=6, rings=4)
+    # Mata de racimos: muchas bolas pequenas y no tres grandes (de lejos era un pimiento)
+    rng = random.Random(11)
+    cols = [m['leaf'], m['leaf_lt'], m['leaf_dk']]
+    for i in range(11):
+        a = rng.uniform(0, math.pi * 2)
+        r = rng.uniform(0.0, 0.34)
+        x, y = math.cos(a) * r, math.sin(a) * r * 0.7
+        z = 0.22 + (0.34 - r) * 0.55 + rng.uniform(-0.03, 0.05)
+        sphere(f'b{i}', (x, y, z), rng.uniform(0.15, 0.22), cols[i % 3], scale=(1.1, 1.0, 0.85), segs=10, rings=7)
+    for i, (x, y, z) in enumerate([(-0.12, -0.36, 0.34), (0.22, -0.3, 0.26), (0.05, -0.30, 0.50), (-0.28, -0.2, 0.2)]):
+        sphere(f'berry{i}', (x, y, z), 0.04, m['berry'], segs=6, rings=4)
 
 
 def build_grass(m):
+    # Hierba alta: hojas ARQUEADAS (dos tramos) y mas densas; las rectas eran pinchos
     rng = random.Random(5)
-    for i in range(7):
+    for i in range(13):
         x = rng.uniform(-0.45, 0.45)
         y = rng.uniform(-0.3, 0.3)
-        h = rng.uniform(0.35, 0.6)
-        lean = rng.uniform(-0.18, 0.18)
-        tube(f'g{i}', (x, y, 0.0), (x + lean, y + rng.uniform(-0.05, 0.05), h), 0.045, 0.006,
-             m['grass'] if i % 2 else m['grass_dk'], segs=5)
+        h = rng.uniform(0.32, 0.6)
+        lean = rng.uniform(-0.22, 0.22)
+        c = m['grass'] if i % 3 else m['grass_dk']
+        mx, my = x + lean * 0.35, y + rng.uniform(-0.03, 0.03)
+        tube(f'g{i}a', (x, y, 0.0), (mx, my, h * 0.55), 0.042, 0.026, c, segs=6)
+        tube(f'g{i}b', (mx, my, h * 0.55), (x + lean, my, h), 0.026, 0.004, c, segs=6)
 
 
 def build_jar(m):
@@ -593,28 +609,62 @@ def build_chest(m):
 
 
 def build_tree(m):
-    tube('trunk', (0, 0, -0.05), (0.02, 0.0, 1.35), 0.16, 0.10, m['trunk'], segs=8)
-    tube('branch', (0.02, 0, 1.0), (0.4, 0.05, 1.45), 0.06, 0.03, m['trunk'], segs=6)
-    sphere('c0', (0.0, 0.0, 1.85), 0.60, m['leaf'], scale=(1.0, 0.95, 0.72), segs=12, rings=7)
-    sphere('c1', (-0.36, -0.1, 1.68), 0.38, m['leaf_dk'], scale=(1, 1, 0.8), segs=10, rings=6)
-    sphere('c2', (0.34, -0.15, 1.72), 0.36, m['leaf_lt'], scale=(1, 1, 0.8), segs=10, rings=6)
-    sphere('c3', (0.05, -0.3, 2.12), 0.32, m['leaf_lt'], scale=(1, 1, 0.8), segs=10, rings=6)
+    # Copa de RACIMOS dentro del ancho de la celda (U = 1,275): la vieja media 1,44 y el atlas
+    # la cortaba en seco por los dos lados (se veia la copa con los bordes rectos).
+    tube('trunk', (0, 0, -0.05), (0.03, 0.0, 1.25), 0.15, 0.09, m['trunk'], segs=10)
+    tube('branch', (0.03, 0, 0.95), (0.32, 0.05, 1.35), 0.06, 0.03, m['trunk'], segs=8)
+    tube('branch2', (0.02, 0, 1.05), (-0.28, 0.02, 1.42), 0.05, 0.025, m['trunk'], segs=8)
+    rng = random.Random(23)
+    cols = [m['leaf'], m['leaf_lt'], m['leaf_dk']]
+    for i in range(12):
+        a = rng.uniform(0, math.pi * 2)
+        r = rng.uniform(0.0, 0.34)
+        x = math.cos(a) * r
+        y = math.sin(a) * r * 0.6 - 0.05
+        z = 1.62 + (0.34 - r) * 0.55 + rng.uniform(-0.08, 0.10)
+        rad = rng.uniform(0.20, 0.27)
+        # el lado de la luz (arriba-izquierda) mas claro, el de abajo mas oscuro
+        c = m['leaf_lt'] if (z > 1.78 and x < 0.1) else (m['leaf_dk'] if z < 1.62 else cols[i % 2])
+        sphere(f'c{i}', (x, y, z), rad, c, scale=(1.05, 1.0, 0.85), segs=12, rings=8)
 
 
 def build_tree_dead(m):
-    tube('trunk', (0, 0, -0.05), (0.03, 0.0, 1.5), 0.15, 0.07, m['dead'], segs=7)
-    tube('b0', (0.02, 0, 1.0), (0.45, 0.05, 1.5), 0.06, 0.02, m['dead'], segs=5)
-    tube('b1', (0.0, 0, 1.2), (-0.4, -0.05, 1.7), 0.06, 0.02, m['dead'], segs=5)
-    tube('b2', (0.03, 0, 1.5), (0.2, 0.0, 2.0), 0.05, 0.015, m['dead'], segs=5)
+    tube('trunk', (0, 0, -0.05), (0.03, 0.0, 1.5), 0.15, 0.07, m['dead'], segs=8)
+    tube('b0', (0.02, 0, 1.0), (0.42, 0.05, 1.5), 0.06, 0.02, m['dead'], segs=6)
+    tube('b0b', (0.30, 0.04, 1.36), (0.48, 0.0, 1.62), 0.025, 0.01, m['dead'], segs=5)
+    tube('b1', (0.0, 0, 1.2), (-0.4, -0.05, 1.7), 0.06, 0.02, m['dead'], segs=6)
+    tube('b1b', (-0.26, -0.03, 1.5), (-0.46, 0.0, 1.62), 0.025, 0.01, m['dead'], segs=5)
+    tube('b2', (0.03, 0, 1.5), (0.2, 0.0, 2.0), 0.05, 0.015, m['dead'], segs=6)
 
 
 def build_palm(m):
-    tube('trunk', (0, 0, -0.05), (0.15, 0.0, 1.7), 0.14, 0.09, m['trunk'], segs=8)
-    for i in range(6):
-        a = i * math.pi / 3.0
-        dx, dy = math.cos(a) * 0.55, math.sin(a) * 0.4
-        tube(f'leaf{i}', (0.15, 0, 1.75), (0.15 + dx, dy, 1.75 - 0.35), 0.10, 0.02, m['leaf'] if i % 2 else m['leaf_lt'], segs=5)
-    sphere('coco', (0.15, -0.1, 1.68), 0.1, m['trunk'], segs=6, rings=4)
+    # Palmera de tronco anillado y frondas que CAEN en arco, cada una con su hilera de foliolos
+    for k in range(7):
+        z0, z1 = -0.05 + k * 0.25, -0.05 + (k + 1) * 0.25
+        tube(f'trunk{k}', (0.02 * k, 0, z0), (0.02 * (k + 1), 0, z1 + 0.02), 0.14 - k * 0.006,
+             0.13 - k * 0.006, m['trunk'] if k % 2 else m['wood_dk'], segs=10)
+    top = (0.14, 0.0, 1.72)
+    for i in range(8):
+        a = i * math.pi / 4.0 + 0.2
+        dx, dy = math.cos(a), math.sin(a) * 0.65
+        pts = []
+        for t in (0.0, 0.33, 0.66, 1.0):
+            r = 0.56 * t
+            z = top[2] + 0.18 * math.sin(t * math.pi * 0.9) - 0.42 * t * t
+            pts.append((top[0] + dx * r, top[1] + dy * r, z))
+        c = m['leaf'] if i % 2 else m['leaf_lt']
+        for j in range(3):
+            tube(f'fr{i}_{j}', pts[j], pts[j + 1], 0.05 - j * 0.012, 0.038 - j * 0.012, c, segs=6)
+            # foliolos a los lados de cada tramo
+            mx = (pts[j][0] + pts[j + 1][0]) * 0.5
+            my = (pts[j][1] + pts[j + 1][1]) * 0.5
+            mz = (pts[j][2] + pts[j + 1][2]) * 0.5
+            for sgn in (-1, 1):
+                ex = mx - dy * 0.12 * sgn
+                ey = my + dx * 0.12 * sgn
+                tube(f'lf{i}_{j}_{sgn}', (mx, my, mz), (ex, ey, mz - 0.10), 0.022, 0.004, c, segs=5)
+    for k in range(3):
+        sphere(f'coco{k}', (0.14 + (k - 1) * 0.07, -0.10, 1.62), 0.07, m['trunk'], segs=8, rings=6)
 
 
 def build_altar_god(m):
@@ -869,7 +919,7 @@ def _load_sheet(path, shape):
 
 
 def render_tileset(out_path, preview_path=None, log=print, only=None):
-    shape = (TILE_ROWS * CELL, TILE_COLS * CELL, 4)
+    shape = (TILE_ROWS * PITCH, TILE_COLS * PITCH, 4)
     sheet = np.zeros(shape, dtype=np.float32)
     if only is not None:
         prev = _load_sheet(out_path, shape)
@@ -880,8 +930,15 @@ def render_tileset(out_path, preview_path=None, log=print, only=None):
 
     def place(name, fr):
         col, row, cw, ch = LAYOUT[name]
-        y0, x0 = row * CELL, col * CELL
-        sheet[y0:y0 + ch * CELL, x0:x0 + cw * CELL] = fr
+        y0, x0 = row * PITCH + GUTTER, col * PITCH + GUTTER
+        h, w = ch * CELL, cw * CELL
+        sheet[y0:y0 + h, x0:x0 + w] = fr
+        # Extruir el borde al margen: el filtro lineal lee medio texel fuera de la celda
+        G = GUTTER
+        sheet[y0 - G:y0, x0:x0 + w] = fr[0:1, :]
+        sheet[y0 + h:y0 + h + G, x0:x0 + w] = fr[-1:, :]
+        sheet[y0 - G:y0 + h + G, x0 - G:x0] = sheet[y0 - G:y0 + h + G, x0:x0 + 1]
+        sheet[y0 - G:y0 + h + G, x0 + w:x0 + w + G] = sheet[y0 - G:y0 + h + G, x0 + w - 1:x0 + w]
 
     for name in names:
         parts.clear_scene()

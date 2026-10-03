@@ -18,8 +18,10 @@ tools/
                             disappears again. Smoothing: `parts.box(round=..., taper=...)` bevels every edge
                             (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
                             rings (helmet band, hood cowl) and soft cap edges.
-                            tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=64,
-                            TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
+                            tiles.py renders the terrain tileset (`tiles.main(SPRITES_DIR, TMP_DIR)`, CELL=128 =
+                            8 texels/unit, GUTTER=2 px extruded per side so the engine filters it
+                            LINEAR without bleeding (pitch 132; `BASE_CELL`=64 keeps the world size of
+                            every model), TILE_ROWS=9; `only=[...]` patches the existing tiles.png instead of blanking it);
                             its LAYOUT must match `TileSprite` in src/game/rooms.h. GROUND = opaque
                             top-down FLAT cells, DETAILS = transparent top-down decals, SMALL/PROPS/PROPS_TALL = 30 deg.
                             cine.py renders the 8 prologue panels AND the 10 chapter-intro

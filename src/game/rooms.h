@@ -48,7 +48,15 @@ enum class TileType : u8 {
 // Cells are one tile (16 game units) = TILE_SIZE * ASSET_SCALE texels (64 px at x4),
 // 8 columns. Keep in sync with tiles.LAYOUT / tiles.CELL.
 // =============================================================================
-constexpr int TILESET_CELL = Config::TILE_SIZE * Config::ASSET_SCALE;
+// 2026-10-03: el tileset va al DOBLE (128 px por celda = 8 texeles por unidad) y se muestrea
+// en LINEAL. Cada bloque lleva 2 px de margen con su borde extruido (tiles.py, GUTTER): sin
+// el, el filtro lineal leeria la celda vecina del atlas en el borde de las celdas opacas. A
+// 64 px y con `nearest` los props (arboles, rocas, hierba) se veian pixelados en cuanto la
+// ventana pasaba de 1280x720.
+constexpr int TILESET_TEXELS_PER_UNIT = Config::ASSET_SCALE * 2;                 // 8
+constexpr int TILESET_CELL   = Config::TILE_SIZE * TILESET_TEXELS_PER_UNIT;      // 128
+constexpr int TILESET_GUTTER = 2;
+constexpr int TILESET_PITCH  = TILESET_CELL + 2 * TILESET_GUTTER;                // 132
 
 enum class TileSprite : u8 {
     FloorA, FloorB, FloorC, FloorD, PathA, PathB, WaterA, WaterB,
@@ -130,7 +138,8 @@ inline TileSpriteDef get_tile_sprite_def(TileSprite s) {
 
 inline Rect get_tile_src(TileSprite s) {
     auto d = get_tile_sprite_def(s);
-    return { static_cast<f32>(d.col * TILESET_CELL), static_cast<f32>(d.row * TILESET_CELL),
+    return { static_cast<f32>(d.col * TILESET_PITCH + TILESET_GUTTER),
+             static_cast<f32>(d.row * TILESET_PITCH + TILESET_GUTTER),
              static_cast<f32>(d.cells_w * TILESET_CELL), static_cast<f32>(d.cells_h * TILESET_CELL) };
 }
 

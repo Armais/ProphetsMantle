@@ -15,7 +15,7 @@ assets/
   sprites/chariot.png   - el Carro de Fuego del milagro: filas este/sur/norte, columnas 0-3 capa back y 4-7 capa front (Engine::collect_chariot_draws)
   sprites/              - Character sheets: 12 PNG (896x1920, 7 cols x 15 rows of 128x128 = 32 game units
                           x ASSET_SCALE 4, rows = AnimID, smooth alpha + 2px dark outline)
-                          + tiles.png (terrain tileset, 64px cells = 16 units x4, 8 cols x 9 rows: rows 0-4 terrain/props/
+                          + tiles.png (terrain tileset, 128px cells = 16 units x8 + 2px gutter (pitch 132), 8 cols x 9 rows: rows 0-4 terrain/props/
                           pickups, row 5 floor families grass_a-d + stone_a-d, row 6 ground decals, row 7 shore
                           autotiling pieces + cliff_rock + jar + crack, rows 7-8 cliff_rock_tall + door; see TileSprite in game/rooms.h)
   fonts/                - LilitaOne-Regular.ttf (OFL) baked into glyph atlases at init (fallback: SDL debug text)

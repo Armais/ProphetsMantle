@@ -524,8 +524,10 @@ void ECSWorld::collect_draws(std::vector<DrawCmd>& out, Renderer& renderer) {
         cmd.tint = tint;
 
         if (has_texture) {
-            // src_rect is in texels (ASSET_SCALE per game unit); dst in game units
-            const f32 inv = 1.0f / static_cast<f32>(Config::ASSET_SCALE);
+            // src_rect is in texels (ASSET_SCALE per game unit; el tileset va al doble,
+            // TILESET_TEXELS_PER_UNIT); dst in game units
+            const f32 inv = 1.0f / static_cast<f32>(s.texture_id == tileset ? TILESET_TEXELS_PER_UNIT
+                                                                             : Config::ASSET_SCALE);
             f32 w = s.src_rect.w * inv * t.scale.x;
             f32 h = s.src_rect.h * inv * t.scale.y;
             cmd.texture_id = s.texture_id;

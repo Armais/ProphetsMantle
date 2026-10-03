@@ -6,7 +6,7 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 
 - **Game units**: all gameplay/UI code works in a 320x180 logical space (`GAME_WIDTH/HEIGHT`); speeds, colliders, HUD layout, tile logic (`TILE_SIZE = 16` units) never see the pixel resolution.
 - **Render target**: `GAME_WIDTH*RENDER_SCALE x GAME_HEIGHT*RENDER_SCALE` = **1280x720** (`Config::RENDER_SCALE = 4`); `Renderer::begin_frame` calls `SDL_SetRenderScale(4,4)` (per-target view state in SDL3) so every draw call stays in units; the target is then letterboxed (linear) into the window (default 1280x720).
-- **Assets**: `Config::ASSET_SCALE = 4` texels per unit — character frames 128x128 px (32 units), tileset cells 64x64 (16 units). `SpriteComponent::src_rect` is in TEXELS; drawn size = `src.w / ASSET_SCALE * scale` (`ECSWorld::collect_draws`). Sheets use linear filtering; the tileset uses nearest (atlas cells abut, CLAMP is texture-wide).
+- **Assets**: `Config::ASSET_SCALE = 4` texels per unit — character frames 128x128 px (32 units). The tileset goes at TWICE that (`TILESET_TEXELS_PER_UNIT` = 8, `game/rooms.h`): 128 px cells (16 units) with a 2 px extruded gutter, pitch 132. `SpriteComponent::src_rect` is in TEXELS; drawn size = `src.w / texels_per_unit * scale` (`ECSWorld::collect_draws` picks 8 for the tileset, `ASSET_SCALE` for everything else). Everything, tileset included, uses linear filtering.
 - **Look**: smooth alpha + dark outline (Blender `post_soft`), Workbench cavity+specular shading, soft elliptical shadows (`Renderer::shadow_tex`) under characters/props, screen vignette (`vignette_tex`), TTF text with outline (`draw_text`, 8 units line height at scale 1, `measure_text` for layout). Text passes `scale > 1.25` use the large atlas.
 - **Texturas de ayuda procedurales**, creadas en `init` y tenidas con `draw_sprite_rect`:
   `shadow_tex` (mancha eliptica), `vignette_tex`, `panel_tex` (el boton redondeado en 9
@@ -20,13 +20,15 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
 - Color palette: Elias=naranjas,rojos,dorados / Eliseo=azules,verdes,blancos / Baal=morados,negros,rojos oscuros / Entornos=ocres,beiges,piedra
 - **NO es pixel art, y el `nearest` que queda NO es estetica.** El GDD v1.0 decia "Pixel Art
   16-bit" y "nearest-neighbor scaling"; eso esta **superado** (decision del usuario,
-  2026-08-25): el estilo es figurita 3D suave. En `src/` solo quedan dos usos de
-  `SDL_SCALEMODE_NEAREST` y los dos estan comentados en el sitio: `Renderer::load_texture`
-  con `smooth=false`, que es **solo para atlas** (el tileset — sus celdas se tocan y CLAMP
-  es de textura entera, asi que en lineal sangrarian unas sobre otras), y el zoom de
-  depuracion de `save_screenshot(scale>1)`, que nadie llama con scale>1. Todo lo que el
-  jugador mira —hojas de personaje, efectos, retratos, paneles del prologo, atlas de
-  glifos— va en **lineal**. Al medir en unidades de juego, dilo asi: los comentarios que
+  2026-08-25): el estilo es figurita 3D suave. En `src/` solo queda un uso de
+  `SDL_SCALEMODE_NEAREST`, comentado en el sitio: el zoom de depuracion de
+  `save_screenshot(scale>1)`, que nadie llama con scale>1. El tileset iba en `nearest`
+  (sus celdas se tocaban y en lineal sangraban unas sobre otras) y por eso arboles y rocas
+  se veian pixelados al lado de personajes suaves; desde el 2026-10-03 va al DOBLE de
+  resolucion y con un **margen de 2 px extruido** alrededor de cada celda (`tiles.py`
+  `GUTTER`), que es lo que deja filtrar en lineal sin sangrado. Todo lo que el
+  jugador mira —hojas de personaje, tileset, efectos, retratos, paneles del prologo, atlas
+  de glifos— va en **lineal**. Al medir en unidades de juego, dilo asi: los comentarios que
   decian "pixels/sec" o "distance in pixels" en `config.h` e `input.h` mentian (nada en
   gameplay ve la resolucion). En `tools/`, `render.render_sheet` ya **no** cuantiza por
   defecto (`quantize=False`), que es lo que run.py pedia desde siempre.

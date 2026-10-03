@@ -236,7 +236,8 @@ void Engine::load_sprites() {
         world.enemy_textures[t] = enemy_textures[t];   // los jefes invocan sin pasar por el Engine
     }
 
-    tileset_texture = renderer.load_texture("sprites/tiles.png", /*smooth=*/false);  // atlas: nearest, no cell bleeding
+    // Atlas a 8 texeles por unidad con margen extruido (rooms.h TILESET_GUTTER): va en LINEAL
+    tileset_texture = renderer.load_texture("sprites/tiles.png", /*smooth=*/true);
     if (tileset_texture == TEXTURE_NONE) {
         SDL_Log("WARNING: tileset missing (assets/sprites/tiles.png) - using placeholder tiles");
     }
