@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "core/i18n.h"
+#include "render/sprites.h"   // Icon::SANCT_*: la celda de icons.png de cada mejora
 #include "systems/progression.h"
 #include <cstdio>
 #include <initializer_list>
@@ -29,81 +30,81 @@ void ProgressionSystem::init() {
     using C = MetaCategory;
 
     // --- EL PROFETA: lo que llevas puesto desde la primera sala -------------------------
-    // Iconos: celdas de icons.png reutilizadas (assets/ no crece): el cuervo, la antorcha,
-    // las sandalias y el cuenco de ceniza.
-    upgrades.push_back(make_upgrade(Meta::VIDA, C::Prophet, 22,
+    // Cada mejora tiene su PROPIO icono (Icon::SANCT_*, icons.py `SANCTUARY`): el que dice el
+    // efecto. Las que desbloquean un objeto llevan el del objeto, que es lo que vas a ver.
+    upgrades.push_back(make_upgrade(Meta::VIDA, C::Prophet, Icon::SANCT_CORAZON,
         tr("Provisión del Cuervo", "The Raven's Provision"),
         tr("Más vida máxima desde la primera sala.", "More max health from the first room."),
         tr("«Los cuervos le traían pan y carne por la mañana y por la tarde.»",
            "«The ravens brought him bread and meat in the morning and in the evening.»"),
         {40, 80, 130, 200, 300}));
-    upgrades.push_back(make_upgrade(Meta::DANO, C::Prophet, 10,
+    upgrades.push_back(make_upgrade(Meta::DANO, C::Prophet, Icon::SANCT_HOGUERA,
         tr("Fuego Interior", "Inner Fire"),
         tr("Cada disparo del cayado hace más daño.", "Every staff shot deals more damage."),
         tr("«Su palabra quemaba como una antorcha.»", "«His word burned like a torch.»"),
         {75, 150, 260}));
-    upgrades.push_back(make_upgrade(Meta::VELOCIDAD, C::Prophet, 4,
+    upgrades.push_back(make_upgrade(Meta::VELOCIDAD, C::Prophet, Icon::SANCT_SANDALIA,
         tr("Sandalias Rápidas", "Swift Sandals"),
         tr("Caminas más deprisa.", "You walk faster."),
         tr("«Ciñó sus lomos y corrió delante de Acab.»", "«He girded up his loins and ran before Ahab.»"),
         {60, 120, 200}));
-    upgrades.push_back(make_upgrade(Meta::FE, C::Prophet, 12,
+    upgrades.push_back(make_upgrade(Meta::FE, C::Prophet, Icon::SANCT_HALO,
         tr("Fe Renovada", "Renewed Faith"),
         tr("Empiezas la partida con más fe: milagros antes.", "You start with more faith: miracles sooner."),
         tr("«Vuelve a mirar siete veces.»", "«Go again seven times.»"),
         {100, 220}));
 
     // --- DONES: lo que cambia COMO se juega la partida ----------------------------------
-    upgrades.push_back(make_upgrade(Meta::ALIENTO, C::Gifts, 27,
+    upgrades.push_back(make_upgrade(Meta::ALIENTO, C::Gifts, Icon::SANCT_ALIENTO,
         tr("Aliento de Vida", "Breath of Life"),
         tr("Al caer, te levantas con media vida en vez de morir.", "When you fall, you rise with half your health instead of dying."),
         tr("«El alma del niño volvió a él, y revivió.»", "«The soul of the child came into him again, and he revived.»"),
         {180, 420}));
-    upgrades.push_back(make_upgrade(Meta::PRIMICIAS, C::Gifts, 2,
+    upgrades.push_back(make_upgrade(Meta::PRIMICIAS, C::Gifts, Icon::SANCT_PRIMICIAS,
         tr("Primicias", "Firstfruits"),
         tr("Empiezas la partida eligiendo un objeto entre tres.", "You start the run choosing one of three items."),
         tr("«Trajo al varón de Dios panes de primicias.»", "«He brought the man of God bread of the firstfruits.»"),
         {160, 320}));
-    upgrades.push_back(make_upgrade(Meta::SUERTES, C::Gifts, 11,
+    upgrades.push_back(make_upgrade(Meta::SUERTES, C::Gifts, Icon::SANCT_SUERTES,
         tr("Echar Suertes", "Casting Lots"),
         tr("Ante tres cartas que no te sirven, pides otras tres.", "Facing three cards you don't want, ask for three more."),
         tr("«La suerte se echa en el regazo; mas de Jehová es la decisión.»", "«The lot is cast into the lap; but the decision is the Lord's.»"),
         {70, 150, 260}));
-    upgrades.push_back(make_upgrade(Meta::ALFORJA, C::Gifts, 19,
+    upgrades.push_back(make_upgrade(Meta::ALFORJA, C::Gifts, Icon::SANCT_ALFORJA,
         tr("Alforja Ancha", "Wide Satchel"),
         tr("Más huecos en la alforja para llevar consumibles.", "More satchel slots to carry consumables."),
         tr("«Ciñe tus lomos y toma esta redoma en tu mano.»", "«Gird up thy loins, and take this box in thine hand.»"),
         {90, 200}));
-    upgrades.push_back(make_upgrade(Meta::TINAJA, C::Gifts, 13,
+    upgrades.push_back(make_upgrade(Meta::TINAJA, C::Gifts, Icon::SANCT_TINAJA,
         tr("La Tinaja de Sarepta", "The Jar of Zarephath"),
         tr("Cada capítulo empieza con Agua del Jordán en la alforja.", "Every chapter starts with Water of the Jordan in your satchel."),
         tr("«La harina de la tinaja no escaseará.»", "«The barrel of meal shall not waste.»"),
         {100, 210}));
-    upgrades.push_back(make_upgrade(Meta::DIEZMO, C::Gifts, 7,
+    upgrades.push_back(make_upgrade(Meta::DIEZMO, C::Gifts, Icon::SANCT_DIEZMO,
         tr("Diezmo", "Tithe"),
         tr("Cada intento te paga más ofrendas.", "Every attempt pays you more offerings."),
         tr("«Traed todos los diezmos al alfolí, y probadme.»", "«Bring ye all the tithes into the storehouse, and prove me.»"),
         {80, 170, 280}));
-    upgrades.push_back(make_upgrade(Meta::ALTAR, C::Gifts, 26,
+    upgrades.push_back(make_upgrade(Meta::ALTAR, C::Gifts, Icon::SANCT_ALTAR,
         tr("Altar Portátil", "Portable Altar"),
         tr("Oras donde estás, sin altar: +10 fe y +10 vida.", "Pray where you stand, no altar needed: +10 faith and +10 health."),
         tr("«Reparó el altar de Jehová que estaba arruinado.»", "«He repaired the altar of the Lord that was broken down.»"),
         {120, 240}));
 
     // --- ELISEO: el Acto II -----------------------------------------------------------
-    upgrades.push_back(make_upgrade(Meta::HERENCIA, C::Elisha, 15,
+    upgrades.push_back(make_upgrade(Meta::HERENCIA, C::Elisha, Icon::SANCT_HERENCIA,
         tr("Herencia Ampliada", "Broader Inheritance"),
         tr("En el Ascenso, Eliseo hereda más fe de Elías.", "At the Ascension, Elisha inherits more of Elijah's faith."),
         tr("«Que una doble porción de tu espíritu sea sobre mí.»", "«Let a double portion of thy spirit be upon me.»"),
         {150, 280}));
-    upgrades.push_back(make_upgrade(Meta::DOBLE, C::Elisha, 31,
+    upgrades.push_back(make_upgrade(Meta::DOBLE, C::Elisha, Icon::SANCT_LAMPARA,
         tr("Doble Porción Mejorada", "Greater Double Portion"),
         tr("Eliseo empieza con tres huecos de milagro.", "Elisha starts with three miracle slots."),
         tr("«Tomó el manto de Elías, y golpeó las aguas.»", "«He took the mantle of Elijah, and smote the waters.»"),
         {200}));
     // "Los hijos de los profetas" (2 Reyes 2:3): el sistema de Discipulos es la fortaleza
     // propia de Eliseo, asi que se compra aqui y solo le sirve a el.
-    upgrades.push_back(make_upgrade(Meta::ESCUELA, C::Elisha, 30,
+    upgrades.push_back(make_upgrade(Meta::ESCUELA, C::Elisha, Icon::SANCT_ESCUELA,
         tr("La Escuela de Profetas", "The School of Prophets"),
         tr("Un discípulo camina y pelea siempre junto a Eliseo.", "A disciple always walks and fights beside Elisha."),
         tr("«Los hijos de los profetas salieron a recibirle.»", "«The sons of the prophets came forth to meet him.»"),
@@ -112,25 +113,25 @@ void ProgressionSystem::init() {
     // --- EL TESORO: objetos que entran en juego --------------------------------------
     // Nacen bloqueados (ItemDef::starts_locked). Las armas, pasivos y reliquias entran en el
     // sorteo de CARTAS; los Higos son consumible y desde la alforja salen en el MUNDO.
-    MetaUpgrade arco = make_upgrade(Meta::ARCO, C::Treasure, 16,
+    MetaUpgrade arco = make_upgrade(Meta::ARCO, C::Treasure, Icon::item(16),
         tr("El Arco del Rey", "The King's Bow"),
         tr("El Arco de Joás puede salir en las cartas: ráfaga de 3 saetas.", "Joash's Bow can appear in the cards: a volley of 3 arrows."),
         tr("«Saeta de salvación de Jehová.»", "«The arrow of the Lord's deliverance.»"), {90});
     arco.unlocks_item = 16;
     upgrades.push_back(arco);
-    MetaUpgrade higos = make_upgrade(Meta::HIGOS, C::Treasure, 17,
+    MetaUpgrade higos = make_upgrade(Meta::HIGOS, C::Treasure, Icon::item(17),
         tr("El Remedio del Profeta", "The Prophet's Remedy"),
         tr("Los Higos de Ezequías aparecen por el mundo: curan toda la vida.", "Hezekiah's Figs appear in the world: they heal you fully."),
         tr("«Tomad masa de higos.»", "«Take a lump of figs.»"), {110});
     higos.unlocks_item = 17;
     upgrades.push_back(higos);
-    MetaUpgrade panes = make_upgrade(Meta::PANES, C::Treasure, 21,
+    MetaUpgrade panes = make_upgrade(Meta::PANES, C::Treasure, Icon::SANCT_MESA,
         tr("La Mesa de Eliseo", "Elisha's Table"),
         tr("Los Panes de Cebada pueden salir en las cartas.", "The Loaves of Barley can appear in the cards."),
         tr("«Da a la gente para que coma.»", "«Give unto the people, that they may eat.»"), {140});
     panes.unlocks_item = 21;
     upgrades.push_back(panes);
-    MetaUpgrade reloj = make_upgrade(Meta::RELOJ, C::Treasure, 20,
+    MetaUpgrade reloj = make_upgrade(Meta::RELOJ, C::Treasure, Icon::SANCT_SOMBRA,
         tr("La Sombra que Vuelve", "The Shadow that Returns"),
         tr("El Reloj de Acaz puede salir en las cartas: perdona una muerte por capítulo.", "The Dial of Ahaz can appear in the cards: forgives one death per chapter."),
         tr("«La sombra volvió atrás diez grados.»", "«The shadow went back ten degrees.»"), {260});
@@ -140,19 +141,19 @@ void ProgressionSystem::init() {
     // --- ASPECTO: skins del cayado (GDD 4.x, "NO pay-to-win") ------------------------
     // No cambian ni una cifra: tinen el proyectil y el fogonazo. Se compran con ofrendas,
     // que es la moneda que ya existe, y NO con dinero.
-    MetaUpgrade s1 = make_upgrade(Meta::SKIN_BRASA, C::Cosmetic, 10,
+    MetaUpgrade s1 = make_upgrade(Meta::SKIN_BRASA, C::Cosmetic, Icon::SANCT_CAYADO + 0,
         tr("Brasa del Carmelo", "Ember of Carmel"),
         tr("Cayado en rojo brasa. Solo aspecto: se equipa en Opciones.", "Ember-red staff. Looks only: equip it in Options."),
         tr("«Cayó fuego de Jehová y consumió el holocausto.»", "«The fire of the Lord fell, and consumed the burnt sacrifice.»"), {80});
     s1.unlocks_skin = 1;
     upgrades.push_back(s1);
-    MetaUpgrade s2 = make_upgrade(Meta::SKIN_JORDAN, C::Cosmetic, 10,
+    MetaUpgrade s2 = make_upgrade(Meta::SKIN_JORDAN, C::Cosmetic, Icon::SANCT_CAYADO + 1,
         tr("Luz del Jordán", "Light of the Jordan"),
         tr("Cayado en azul claro. Solo aspecto: se equipa en Opciones.", "Pale-blue staff. Looks only: equip it in Options."),
         tr("«Las aguas se apartaron a uno y otro lado.»", "«The waters parted hither and thither.»"), {80});
     s2.unlocks_skin = 2;
     upgrades.push_back(s2);
-    MetaUpgrade s3 = make_upgrade(Meta::SKIN_HOREB, C::Cosmetic, 10,
+    MetaUpgrade s3 = make_upgrade(Meta::SKIN_HOREB, C::Cosmetic, Icon::SANCT_CAYADO + 2,
         tr("Ceniza del Horeb", "Ash of Horeb"),
         tr("Cayado en gris violáceo. Solo aspecto: se equipa en Opciones.", "Violet-grey staff. Looks only: equip it in Options."),
         tr("«Y tras el fuego, un silbo apacible.»", "«And after the fire, a still small voice.»"), {80});

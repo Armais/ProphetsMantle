@@ -162,12 +162,29 @@ dos problemas, y los dos eran ciertos:
 
 **Catalogo nuevo** (`progression.h/.cpp`, ids ESTABLES en `namespace Meta`: 0-14 los de
 siempre, 15-20 nuevos). Cinco pestanas (`MetaCategory`): El Profeta, Dones, Eliseo, Tesoro y
-Aspecto. Cada mejora tiene `max_rank` y un coste POR RANGO (`costs[]`), icono de `icons.png`
-(reutilizado: `assets/` no crece) y una cita. **Lo que da cada rango vive en UNA tabla**
+Aspecto. Cada mejora tiene `max_rank` y un coste POR RANGO (`costs[]`), su PROPIO icono
+(`Icon::SANCT_*`, celdas 32..50 de `icons.png`; ver abajo) y una cita. **Lo que da cada rango vive en UNA tabla**
 (`meta_hp`, `meta_damage`, `meta_speed_mult`, `meta_start_faith`, `meta_inherit_ratio`,
 `meta_revives`, `meta_rerolls`, `meta_offering_mult`, `meta_belt_slots`, `meta_jar_water`) que
 lee el Engine al aplicarlo Y `meta_rank_text` al pintarlo: la cifra de la pantalla y la del
 juego no pueden divergir.
+
+**Iconos propios (2026-10-03).** Al principio El Santuario tomaba prestadas celdas de
+objetos y milagros para no hacer crecer `assets/`, y el usuario lo cazo a la primera: la
+antorcha de un objeto como "Fuego Interior", un cuenco de ceniza como "Fe Renovada", unas
+tortas sueltas como "La Mesa de Eliseo" y la escalinata del Reloj como "La Sombra que
+Vuelve". Aqui la regla de `assets/` cede: ahora hay 19 celdas propias (`icons.py`,
+`SANCTUARY`), y el criterio es **el icono dice el EFECTO con un simbolo de juego y el nombre
+lo viste**: corazon (vida, con el cuervo encima), hoguera (dano), sandalia con estelas
+(velocidad), halo de luz (fe), corazon con el soplo (revivir), gavilla (primicias), dados
+(otra tirada), alforja, tinaja rebosando, bolsa de monedas (diezmo), altar de cuernos con
+sus varas, el manto como capa con luz (herencia), lampara de TRES llamas (la de Doble
+Porcion es de dos), rollo con dos cayados (escuela), mesa de madera con panes y cantaro,
+cuadrante solar con su sombra y la flecha de "atras", y el cayado con la llama de su color
+para cada skin (el tinte de `draw_upgrade_icon` se quito: ya viene pintado). **Nunca la
+celda de un objeto o milagro que el jugador conoce por otra cosa**; la excepcion son las
+que desbloquean un objeto (Arco, Higos), que llevan el icono de ese objeto porque es justo
+lo que vas a ver salir.
 
 | Pestana | Mejora | Rangos | Efecto por rango |
 |---|---|---|---|

@@ -141,7 +141,8 @@ que se deben explorar"*, *"la ubicacion del jefe ... no debe ser visible desde e
   `draw_icon(renderer, idx, dst)` devuelve false sin hoja, para que cada sitio caiga a su
   icono generico del tileset. La usan la fila de objetos, la celda del arma, las celdas de
   milagro, los botones tactiles USAR / ARMA, las cartas de eleccion (`ChoiceCard::icon_idx`,
-  a 25 unidades) y la ficha del Codice (Objetos y Milagros, en el hueco del retrato).
+  a 25 unidades), la ficha del Codice (Objetos y Milagros, en el hueco del retrato) y El
+  Santuario, que desde el 2026-10-03 tiene celdas PROPIAS (`Icon::SANCT_*`, 32..50).
 
 ### El mapa se PINTA en una textura (2026-09-12)
 

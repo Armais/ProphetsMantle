@@ -210,6 +210,27 @@ y mirar los 22 en dos hojas de contacto ANTES de copiar nada.
   girar 180 en Z, que lo devolvia de cara) y **el metal pleno sale oscuro** sin entorno que
   reflejar (el oro del Arca se apagaba): 0,5 conserva el color y gana el brillo. EEVEE corre
   sin GPU en el mismo venv (llvmpipe), ~40 s por icono: las 32 son unos 20 minutos.
+- **Los 19 iconos de El Santuario (2026-10-03, `SANCTUARY`, celdas 32..50)**. La hoja pasa a
+  8x7 y `main(only=...)` pega la hoja anterior aunque tenga MENOS filas (`_load` compara el
+  ancho), asi que ampliarla no obliga a renderizar las 32 de antes. Piezas nuevas que sirven
+  para cualquier icono: `_flame` (una esfera estirada en GOTA que se cimbrea: con cajas
+  afiladas las llamas eran piramides y la hoguera una corona), `_heart` (esfera deformada
+  por la curva del corazon: dos esferas y un cono dejaban un escalon), `_torus`, `_prism` /
+  `_flat_poly` (con bisel), `_chain` (tubos con esfera en cada codo), `_sparkle` (destello de
+  cuatro puntas DE CARA a la camara, con los ejes de pantalla `_SR`/`_SU`/`_SF`) y
+  `_grid_surface`. **`POST_GLOW` / `FRAME_MARGIN`**: resplandor detras del icono en el post
+  (alfa desenfocado y tenido, por fuera del contorno) con margen propio para que no se
+  corte; un toro translucido de "aura" salia OPACO y gris (EEVEE no le daba alfa a la
+  pelicula). Lo que costo pasadas, mirando la hoja de contacto a tamano real y a 40 px (el
+  de la lista): la pluma del cuervo suelta era un cuchillo (va el cuervo posado sobre el
+  corazon); una caja redondeada no es una sandalia (suela con silueta de pie, `_sole_poly`,
+  y a 1,45 de escala o se pierde entre las estelas); un halo con rayos alrededor es un sol;
+  tres chorros resbalando por la tinaja eran tentaculos y gotas saltando, burbujas (va
+  llena al ras con UN chorro); un altar dorado con varas es el Arca (madera oscura, bronce,
+  cuernos grandes y la llama); y el manto: tela plana con destellos = alfombra magica, plana
+  con luz = felpudo, capa vista desde arriba = cubo de papel. Lo que se lee como MANTO es la
+  silueta de capa DE ESPALDAS (`_cape`: cuello, hombros que caen, costados rectos, bajo
+  ondulado, capucha en gota) girada -30 en X para que la espalda mire a la camara.
 
 ## Jefes con hoja propia y retratos al doble (2026-10-03)
 

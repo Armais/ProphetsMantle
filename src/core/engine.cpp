@@ -3567,13 +3567,10 @@ void Engine::render_tutorial_card() {
     }
 }
 
-// Icono de una mejora: su celda de icons.png; las skins, tenidas de su color.
+// Icono de una mejora: su celda propia de icons.png (Icon::SANCT_*). Las skins ya traen su
+// color pintado: antes eran la antorcha de un objeto tenida, y el tinte la ensuciaba.
 static void draw_upgrade_icon(Renderer& r, const MetaUpgrade& u, Rect dst, bool dim) {
-    Color tint = dim ? Color{150, 145, 140, 220} : Color::white();
-    if (u.unlocks_skin != MetaUpgrade::NO_ITEM) {
-        StaffSkin sk = get_staff_skin(u.unlocks_skin);
-        tint = {sk.shot.r, sk.shot.g, sk.shot.b, static_cast<u8>(dim ? 200 : 255)};
-    }
+    const Color tint = dim ? Color{150, 145, 140, 220} : Color::white();
     if (!draw_icon(r, u.icon, dst, tint))
         r.draw_disc({dst.x + dst.w * 0.5f, dst.y + dst.h * 0.5f}, dst.w * 0.35f, {245, 205, 90, 220});
 }
