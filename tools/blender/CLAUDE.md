@@ -198,6 +198,18 @@ y mirar los 22 en dos hojas de contacto ANTES de copiar nada.
   (`libegl1 libegl-mesa0 libgl1-mesa-dri`) con `EGL_PLATFORM=surfaceless`. Workbench renderiza
   por software (llvmpipe) sin cambiar el aspecto; el aviso `EGL_BAD_MATCH` sale y no importa.
   Runner: `sys.path.insert(0, 'tools/blender')` e `icons.main(out, tmp)` / `chariot.main(out, tmp)`.
+- **Iconos con luz de EEVEE (2026-10-03, `icons.EEVEE = True`)**: con Workbench cada icono era
+  plastico mate con la luz plana de los props, y un icono se mira de cerca. Ahora `_eevee_look`
+  monta tres soles —principal calido arriba a la izquierda, CONTRALUZ frio y fuerte que recorta
+  el borde contra el fondo oscuro de la celda, relleno del cielo— y pasa los materiales planos
+  de `parts.get_mat` a Principled con laca (coat); los de `METAL_KEYS` (oro, bronce, lanzas)
+  van MEDIO metalicos y los de `GLOW_KEYS` (fuego, estrellas, luz) emiten. Modelos, encuadre y
+  contorno no cambian; `gain` 1,08 en el post (el 1,7 por defecto compensa a Workbench).
+  Dos trampas que costaron pasadas: **la rotacion del contraluz** (la camara mira a +Y; una X
+  POSITIVA del sol manda la luz hacia +Y, o sea DE CARA; el contraluz va con X negativa y sin
+  girar 180 en Z, que lo devolvia de cara) y **el metal pleno sale oscuro** sin entorno que
+  reflejar (el oro del Arca se apagaba): 0,5 conserva el color y gana el brillo. EEVEE corre
+  sin GPU en el mismo venv (llvmpipe), ~40 s por icono: las 32 son unos 20 minutos.
 
 ## Jefes con hoja propia y retratos al doble (2026-10-03)
 

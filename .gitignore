@@ -74,3 +74,6 @@ tools/audio/orquesta/tmp/
 tools/estampas/tmp/
 tools/estampas/figs/_tmp/
 tools/estampas/figs/
+
+# Worktrees de agentes de Claude Code (temporales)
+.claude/worktrees/
