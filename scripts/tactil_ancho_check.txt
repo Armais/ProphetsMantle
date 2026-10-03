@@ -4,19 +4,25 @@
 # Por que existe: los eventos de dedo de SDL vienen normalizados a la VENTANA ENTERA, no
 # al area de juego. En 16:9 no se nota (no hay pilares), pero en el 20:9 de un movil el
 # letterbox deja dos pilares negros de 120 px y, sin descontarlos, un dedo puesto ENCIMA
-# del boton dibujado se leia ~29 unidades a la izquierda: la celda Q lanzaba el milagro
-# de la celda E. Los comandos `touch/drag/untouch` NO sirven para cazar esto porque
-# aplican la inversa exacta de la misma transformacion; por eso aqui se usan las
-# variantes `touchpx/dragpx/untouchpx`, que hablan en PIXELES DE VENTANA como un dedo.
+# del boton dibujado se leia ~29 unidades a la izquierda: el milagro 1 lanzaba otra cosa.
+# Los comandos `touch/drag/untouch` (y `tbtn`) NO sirven para cazar esto porque aplican la
+# inversa exacta de la misma transformacion; por eso aqui se usan las variantes
+# `touchpx/dragpx/untouchpx`, que hablan en PIXELES DE VENTANA como un dedo.
 #
-# Ventana 1200x540 -> escala entera 3, viewport {120, 0, 960, 540}.
-# Celda Q (milagro 1) dibujada en unidades de juego (292..314, 144..166), centro (303,155)
-#   -> pixeles de ventana: 120 + 303*3 = 1029 , 155*3 = 465
+# Ventana 1200x540 -> escala entera 3, viewport {120, 0, 960, 540}. La zona tocable es la
+# ventana ENTERA: en unidades de juego x -40..360 (2026-10-03, el grupo de botones vive en
+# el pilar de la derecha y el stick puede nacer en el de la izquierda).
+#   DASH en (339,159)      -> px 120 + 339*3 = 1137 , 159*3 = 477   (DENTRO del pilar)
+#   milagro 1 en (301,159) -> px 120 + 301*3 = 1023 , 477
+# Sin descontar el letterbox, px 1023 se leeria como x = 272,8: encima de USAR, no del
+# milagro 1.
 #
 # GATE (leer el log, no las capturas):
-#   1) tiene que salir   Cast miracle: Cuervos de Querit
-#      Si sale "Fuego del Cielo" el desfase del letterbox ha vuelto (celda E en vez de Q).
-#   2) el toque en el pilar izquierdo (px 40) NO puede lanzar ningun milagro.
+#   1) el toque en el pilar izquierdo (px 40) NO puede lanzar ningun milagro (es la zona
+#      del stick: nace un joystick y nada mas)
+#   2) tiene que salir   Cast miracle: Cuervos de Querit
+#   3) tiene que salir   Touch button: DASH   con el toque en el pilar derecho (px 1137),
+#      que antes de 2026-10-03 era negro muerto
 
 wait 1.0
 
@@ -69,7 +75,7 @@ learn 2 1
 learn 9 2
 wait 0.6
 
-# --- El pilar negro no es el juego: un dedo ahi no puede pulsar un boton ---
+# --- El pilar izquierdo es la zona del stick: un dedo ahi no pulsa ningun boton ---
 touchpx 40 465
 wait 0.15
 untouchpx 40 465
@@ -77,12 +83,20 @@ wait 0.5
 shot A0_pilar_izquierdo
 wait 0.1
 
-# --- Celda Q, tocada en los pixeles EXACTOS en los que se dibuja ---
-touchpx 1029 465
+# --- Milagro 1, tocado en los pixeles EXACTOS en los que se dibuja ---
+touchpx 1023 477
 wait 0.15
-untouchpx 1029 465
+untouchpx 1023 477
 wait 0.7
-shot A1_milagro_q_en_20_9
+shot A1_milagro_1_en_20_9
 wait 0.3
+
+# --- DASH, en el pilar derecho ---
+touchpx 1137 477
+wait 0.15
+shot A3_dash_en_el_pilar
+wait 0.1
+untouchpx 1137 477
+wait 0.4
 
 quit

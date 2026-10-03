@@ -363,6 +363,31 @@ struct Engine {
     // que existe para poder probar la orientacion VERTICAL del GDD 4.5 en un escritorio:
     // sin el, comprobar el reparto de bandas exigia un telefono.
     int forced_win_w = 0, forced_win_h = 0;
+    // `--dpi N`: finge una pantalla de N puntos por pulgada para que el tamaño de los
+    // controles tactiles por DPI se pueda probar en un escritorio (0 = el del aparato; en
+    // escritorio, sin el flag, la escala es 1: el movil de referencia).
+    f32 forced_dpi = 0.0f;
+
+    // Controles tactiles: zona segura de la ventana (notch, gestos del sistema, pilares) y
+    // escala por el tamaño FISICO de la pantalla. Se recalcula al crear la ventana, al
+    // redimensionarla y cuando el sistema cambia la zona segura.
+    void refresh_touch_area();
+    f32  touch_dpi_scale() const;
+    // Vista previa de los controles en Opciones: al tocar tamaño, opacidad o zurdo, los
+    // botones se pintan un momento encima de la pantalla con el ajuste nuevo.
+    static constexpr f32 TOUCH_PREVIEW_TIME = 1.6f;
+    f32  touch_preview_t = 0.0f;
+    // "Ahorro de bateria" (SETTING_BATTERY_SAVE): el bucle pinta un paso de cada dos.
+    bool battery_saver = false;
+    // Ritmo de frames con reglas de movil (Engine::run): pasos de update desde el ultimo
+    // frame pintado, y "pinta ya aunque no haya paso" (ventana recreada o redimensionada).
+    int  steps_since_render = 0;
+    bool force_render = true;
+    // Sonda `fpsmark` de los guiones
+    u64  fps_mark_time = 0;
+    u32  fps_mark_frames = 0;
+    // Atras en el titulo (movil): la primera vez avisa durante estos segundos, la segunda sale.
+    f32  exit_confirm_t = 0.0f;
 
     bool init(const char* title = "MANTLE - El Manto del Profeta");
     void shutdown();

@@ -85,6 +85,7 @@ struct HUDContext {
     // Controles tactiles: null o `touch_ui` apagado = no se dibuja ninguno y en
     // escritorio el HUD queda exactamente igual que antes.
     const Input*        input    = nullptr;
+    f32   dash_cd = 0.0f;   // recarga del dash que FALTA, 0..1 (barrido del boton DASH)
 };
 
 // Choice overlay (GameScene::Choice): up to 3 cards drawn over the frozen world.
@@ -192,10 +193,13 @@ struct HUD {
     void render(Renderer& renderer, const Player& player,
                 const ECSWorld& world, const FaithSystem& faith, const HUDContext& ctx);
 
-    // Publica a proposito: en VERTICAL la llama Engine::render por separado, despues del
-    // letterbox, para pintar los botones en la banda negra (Renderer::begin_overlay).
+    // Publica a proposito: en tactil la llama Engine::render por separado, despues del
+    // letterbox, para pintar los botones sobre la ventana entera (Renderer::begin_overlay):
+    // en un 20:9 el grupo vive en el pilar negro, y en vertical, en la banda de abajo.
     void draw_touch_controls(Renderer& renderer, const Player& player, const HUDContext& ctx);
-    // Idem: en vertical las celdas de milagro se pintan en la banda, fuera del mundo.
+    // Vista previa del layout tactil (Opciones): todos los botones, con su sitio de verdad.
+    void draw_touch_preview(Renderer& renderer, const Input& in, f32 fade, u32 tileset, f32 time);
+    // Idem: en tactil las celdas de milagro son botones redondos del mismo grupo.
     void draw_miracle_slots(Renderer& renderer, const Player& player, const HUDContext& ctx,
                             const FaithSystem& faith);
     // Rect del minimapa pequeno. Publico porque el Engine se lo pasa a Input para que

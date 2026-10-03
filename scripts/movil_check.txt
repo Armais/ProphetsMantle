@@ -1,0 +1,128 @@
+# Verificacion: la pasada de movil del 2026-10-03 (controles en arco, pilares, zurdo,
+# tamaño/opacidad, ritmo de frames, temblor del "no se puede")
+# Uso:  MANTLE.exe --touch --window 2400x1080 --script scripts/movil_check.txt
+#       (2400x1080 = un movil 20:9 de 6,5". Ventana -> escala 6, viewport {240,0,1920,1080},
+#        40 unidades de pilar a cada lado.)
+# Variantes que el guion no puede cambiar desde dentro, para lanzar a mano:
+#   --touch --window 1280x720                  16:9 sin pilares (el caso mas apretado)
+#   --touch --window 2400x1080 --dpi 420       DPI real de un 6,5" -> "escala 0.99"
+#   --touch --window 2560x1600 --dpi 275       tablet de 11" -> la escala se acota a 0.75
+#
+# GATES (log; las capturas son para mirar, no el criterio):
+#   1. `Touch layout: area -40,0 400x180  escala 1.00 ... DASH (339,159) pausa (340,15)`
+#      -> el grupo y la pausa viven en el PILAR derecho
+#   2. Temblor: `Touch button: MILAGRO` sobre el milagro 3 (Doble Porcion sin nivel de fe)
+#      y `Touch deny: milagro 3`: el boton se niega, tiembla y se pone rojo (captura C2)
+#   3. Stick que SIGUE al dedo: tras arrastrar 100 unidades a la derecha la base va detras
+#      del dedo a un radio exacto (JOY ... base=(118.0,130.0) dedo=(140.0,130.0) radio=22.0),
+#      y al volver 32 unidades (dedo en 108, 10 por detras de la base) el eje ya apunta a la
+#      IZQUIERDA: `eje=(-0.45,0.00)`. Sin el seguimiento la base seguiria en 40 y el eje en
+#      (1.00,0.00): habria que desandar 68 unidades mas antes de que el profeta se girase.
+#   4. (el ritmo de frames tiene guion propio, ritmo_check.txt: a 2400x1080 el renderer por
+#      software de los guiones no llega ni a 15 fps y la medida no diria nada)
+#   5. `touchprefs 150 60 0` -> `Touch layout: ... escala 1.27 ...` (acotada: al 150% el
+#      grupo subiria hasta el minimapa) y `touchprefs 70 100 1` -> `... ZURDO` con DASH a la
+#      IZQUIERDA (x < 0, en el pilar izquierdo)
+#   6. En zurdo, un dedo en la mitad DERECHA crea el stick (JOY activo=1) y `tbtn dash`
+#      sigue dando `Touch button: DASH`
+#   7. Opciones: tocar "Tam. botones" enciende la vista previa (captura C8) y el SAVEDUMP
+#      final dice `SAVEDUMP tactil tamano=80 opacidad=100 zurdo=1 ahorro=0`
+
+wait 0.5
+defaults
+lang 0
+wait 0.3
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.2
+god
+faith 30
+learn 0 0
+learn 2 1
+learn 9 2
+give 8
+give 0
+meta 5
+wait 1.0
+shot C1_reposo_20_9
+wait 0.1
+
+# --- Temblor: el milagro 3 (Doble Porcion, nivel 4) no se puede lanzar con 30 de fe ---
+tbtn m3 1
+wait 0.08
+tbtn m3 0
+wait 0.12
+shot C2_milagro_negado
+wait 0.6
+
+# --- El stick sigue al dedo ---
+touch 40 130 0
+wait 0.05
+drag 140 130 0
+wait 0.1
+joylog
+drag 108 130 0
+wait 0.1
+joylog
+shot C3_stick_siguiendo
+wait 0.05
+untouch 108 130 0
+wait 0.3
+
+# --- Tamaño grande y opacidad baja ---
+touchprefs 150 60 0
+wait 0.4
+shot C4_grande_translucido
+wait 0.1
+
+# --- Zurdo y pequeño ---
+touchprefs 70 100 1
+wait 0.4
+shot C5_zurdo
+wait 0.1
+touch 280 130 0
+wait 0.05
+drag 300 120 0
+wait 0.1
+joylog
+shot C6_zurdo_stick
+wait 0.05
+untouch 300 120 0
+wait 0.2
+tbtn dash 1
+wait 0.1
+tbtn dash 0
+wait 0.3
+
+# --- Opciones desde la pausa: la vista previa al tocar "Tam. botones" ---
+# Pausa en tactil: pildoras desde y=50 con paso 24 -> "Opciones" (fila 3) en y~131.
+# En Opciones la fila 6 (Tam. botones) pide un paso de lista: tras el, cae en el hueco 5
+# (y=157). Mitad DERECHA = subir: 70% -> 80%.
+tbtn pausa 1
+wait 0.1
+tbtn pausa 0
+wait 0.6
+touch 160 131
+wait 0.1
+untouch 160 131
+wait 0.6
+shot C7_opciones_tactiles
+wait 0.1
+touch 160 166
+wait 0.1
+drag 160 150
+wait 0.2
+untouch 160 150
+wait 0.3
+touch 240 157
+wait 0.1
+untouch 240 157
+wait 0.15
+shot C8_vista_previa
+wait 0.1
+savedump
+wait 0.2
+quit

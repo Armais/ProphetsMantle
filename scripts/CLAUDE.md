@@ -125,9 +125,10 @@ Opciones), un `Scene change` al tocar "Nueva Partida" y un `Item taken:` tras to
 la misma carta.
 
 Y una lección de reparto: `tactil_check.txt` tuvo que mover su sonda de apuntado de
-(232, 118) a (232, 100) al aparecer el botón ORAR. **La fila de acción ocupa y 112..134** y
-los botones se comprueban antes que el "tap = ataque", así que cualquier sonda que caiga ahí
-se la come un botón.
+(232, 118) a (232, 100) al aparecer el botón ORAR. Los botones se comprueban antes que el
+"tap = ataque", así que cualquier sonda que caiga encima de uno (o de su margen de dedo, desde
+2026-10-03) se la come el botón. Hoy el grupo es un arco alrededor de DASH (ver "La pasada de
+movil", al final): en 16:9 y escala 1 ocupa de x≈223 a 320 y de y≈83 a 175.
 
 ## Pulido tras la primera prueba del APK (2026-09-11)
 
@@ -357,3 +358,36 @@ mecanica de cada pasivo y la alforja en el guardado). Sus gates estan en su cabe
 **Ojo con los guardados nuevos**: en un `XDG_DATA_HOME` vacio el juego arranca en el selector
 de IDIOMA, y los guiones que esperan el titulo navegan mal. La bateria se corre sobre una
 copia de un guardado con el idioma ya contestado (`press confirm` + `quit` una vez).
+
+## La pasada de movil (2026-10-03)
+
+Comandos nuevos:
+
+- **`tbtn <boton> <1|0>`**: baja (1) o sube (0) un dedo en el CENTRO del boton tactil, donde
+  este con el layout ACTUAL (`dash`, `usar`, `m1`, `m2`, `m3`, `arma`, `orar`, `pausa`). Desde
+  que los botones son redondos y su sitio depende de la pantalla, el tamaño y el zurdo, unas
+  coordenadas fijas se pudririan en cada cambio. Es tan "ciego" como `touch` (aplica la misma
+  transformacion que el dibujo): la sonda de extremo a extremo sigue siendo `touchpx`.
+- **`touchprefs <tamaño%> <opacidad%> <zurdo 0|1>`** y **`battery <0|1>`**: los ajustes
+  tactiles sin pasar por Opciones (sus filas solo existen en tactil).
+- **`joylog`**: `JOY activo base dedo radio eje reposo` del stick de movimiento.
+- **`fpsmark`**: `FPSMARK N fps pintados en T s (ahorro=A)` desde la marca anterior.
+- `savedump` imprime `SAVEDUMP tactil tamano=.. opacidad=.. zurdo=.. ahorro=..`.
+
+Guiones:
+
+- **`movil_check.txt`** (`--touch --window 2400x1080`): el grupo en el pilar, el temblor del
+  milagro negado, el stick que sigue al dedo, tamaño / opacidad / zurdo y la vista previa de
+  Opciones. Gates en su cabecera.
+- **`ritmo_check.txt`** (`--touch --window 640x360`): el ritmo de frames. Se mide en el
+  TITULO porque el renderer por software del contenedor tarda ~75 ms por frame de partida (13
+  fps con o sin el cambio): ahi no se ve nada. El techo de 60 tampoco se ve (el titulo llega a
+  ~45), pero el de 30 del ahorro si, y sin `--touch` el ahorro no toca nada.
+- Re-pinneados: `tactil_check` (botones por `tbtn`), `tactil_ancho_check` (milagro 1 en px
+  1023,477 y DASH **en el pilar** en px 1137,477; el toque del pilar izquierdo cae ahora en la
+  zona del stick y sigue sin pulsar nada), `vertical_check` (milagro 1 en (261,354), y el toque
+  rapido SEPARADO de la captura: una captura a esa resolucion se lleva varios pasos y el toque
+  pasaba a ser un mantener) y `menus_tactil_check` (Opciones tiene 12 filas en tactil:
+  "Volver" es la 11 y se llega con seis tramos de arrastre).
+- **Con `--touch`, las capturas de partida leen la VENTANA** (los controles van en la
+  superposicion): con `--window 2400x1080` salen a 2400x1080 con los pilares.

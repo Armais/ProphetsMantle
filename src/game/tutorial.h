@@ -86,7 +86,7 @@ struct TutorialText {
     const char* head;
     const char* flavor;
 };
-TutorialText tutorial_text(TutorialGoal goal, bool touch);
+TutorialText tutorial_text(TutorialGoal goal, bool touch, bool lefty = false);
 
 // Cartel mientras la puerta del norte esta abierta y queda cruzarla.
 TutorialText tutorial_door_text();

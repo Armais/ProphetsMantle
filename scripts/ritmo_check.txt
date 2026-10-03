@@ -1,0 +1,52 @@
+# Verificacion: el ritmo de frames con reglas de movil (2026-10-03)
+# Uso:  MANTLE.exe --touch --window 640x360 --script scripts/ritmo_check.txt
+#       (ventana PEQUEÑA a proposito: el driver offscreen de los guiones pinta por software
+#        y a 2400x1080 no pasa de 15 fps, con lo que la medida no distinguiria nada)
+#
+# El juego avanza a 60 pasos por segundo y no interpola, asi que en un movil de 90/120 Hz
+# la mitad de los frames eran copias del anterior. Con reglas de movil (`--touch` o un
+# telefono) el bucle solo pinta cuando hay un paso nuevo y duerme mientras tanto; el
+# "Ahorro de bateria" de Opciones pinta uno de cada dos pasos.
+#
+# Se mide en el TITULO: el driver offscreen de los guiones pinta por software y un frame
+# de partida le cuesta ~75 ms (13 fps con o sin este cambio, medido en el contenedor
+# Linux), asi que ahi la medida no distinguiria nada. El titulo es lo mas barato que hay y
+# aun asi ese renderer se queda en ~45 fps: por eso el techo de 60 no se puede ver aqui,
+# pero el de 30 SI, y con el se ve que el ritmo manda.
+#
+# GATES (log), medidos el 2026-10-03 en el contenedor Linux:
+#   1. `FPSMARK ... (ahorro=0)` = lo que de el renderer, con techo 60 (aqui ~44)
+#   2. `FPSMARK 30.0 fps pintados ... (ahorro=1)`   (29..31)
+#   3. SIN --touch el ahorro no toca nada (las dos marcas ~44: en escritorio no hay ritmo)
+#   4. `battery = 1` / `battery = 0`, y el menu sigue respondiendo despues (`Menu tap`)
+
+wait 0.5
+defaults
+lang 0
+wait 0.5
+# El selector de idioma, si sale (un `defaults` anterior lo reabre): contesta Español
+touch 160 103
+wait 0.1
+untouch 160 103
+wait 0.8
+
+fpsmark
+wait 3.0
+fpsmark
+battery 1
+wait 0.3
+fpsmark
+wait 3.0
+fpsmark
+battery 0
+wait 0.3
+fpsmark
+wait 2.0
+fpsmark
+
+# El menu sigue vivo: "Opciones" (columna derecha, fila 1 de la rejilla)
+touch 212 102
+wait 0.1
+untouch 212 102
+wait 0.5
+quit

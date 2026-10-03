@@ -17,6 +17,17 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
   trozos, y por eso los dos joysticks tactiles se dibujaban como cajas — que es como el
   tester los vio en el movil. La regla de `assets/` manda: se generan en `init`, no entran
   como PNG.
+- **`disc_tex` / `ring_tex` a 128 px** (antes 64) y **`ring_thin_tex`** (aro fino, 9% del
+  radio, `draw_ring_thin`), 2026-10-03: los botones tactiles se pintan sobre la VENTANA, donde
+  un DASH mide ~190 px en un movil, y un disco de 64 ampliado tres veces tenia el borde
+  blando. **`draw_pie(center, r, start, frac, color)`**: sector circular por
+  `SDL_RenderGeometry` (horario, 0 = las doce), el barrido de recarga de los botones. Sin
+  borde suavizado: se tapa con el aro del boton.
+- **La superposicion ya no es solo del vertical**: en tactil los controles se pintan SIEMPRE
+  ahi (en un 20:9, en los pilares). `Renderer::overlay_used` lo apunta `begin_overlay` y lo
+  limpia `begin_frame`, y **`save_screenshot` lee la VENTANA si en ese frame hubo
+  superposicion** (antes solo en vertical). Con `--touch --window 2400x1080` las capturas de
+  partida salen por tanto a 2400x1080 con sus pilares; las de menu, a 1280x720 como siempre.
 - **`draw_panel` ajusta sus cortes a la rejilla de pixeles** (1/`RENDER_SCALE` de unidad,
   2026-10-03). Un corte entre dos de los nueve trozos que cae a medio pixel lo pintan los
   dos a medias con el filtrado lineal y queda una RAYA: salia en los botones de la derrota

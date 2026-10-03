@@ -21,9 +21,11 @@
 #             3 El Codice     (108,152)  -- hueco de las ofrendas en (212,152)
 #             El canal entre columnas (x 154..166) es zona muerta a proposito.
 #   Opciones  ventana de 6 filas, hueco k -> y = 48 + k*21 (centros 52, 73, 94, 115, 136,
-#             157), placa de x 16 a 304. Con --touch las filas son 8 (Musica, Efectos,
-#             Auto-mira, Sensibilidad, Vibracion, Stick dcho., Idioma, Volver), asi que
-#             "Volver" (indice 7) solo se alcanza tras recorrer 2 pasos.
+#             157), placa de x 16 a 304. Con --touch las filas son 12 (Musica, Efectos,
+#             Auto-mira, Sensibilidad, Vibracion, Stick dcho., Tam. botones, Opacidad,
+#             Zurdo, Ahorro bat., Idioma, Volver — las cuatro de los controles tactiles
+#             desde 2026-10-03), asi que "Volver" (indice 11) solo se alcanza tras
+#             recorrer 6 pasos.
 #   Cartas    choice_card_rect: 3 cartas de 92 de ancho, centro de la 2a en x=160, y=77
 #
 # GATES (log):
@@ -91,25 +93,34 @@ shot M2_opciones_ajustadas
 wait 0.1
 
 # --- ARRASTRE: recorre la ventana y NO pulsa ninguna fila ---
-# Dos tramos de 16 unidades hacia arriba = 2 pasos de lista. Van en DOS `drag` porque cada
-# uno inyecta un solo evento de dedo y el motor da un paso por evento a proposito (dos
-# `pulse` de la misma accion en el mismo frame serian una sola pulsacion). Un dedo real
-# manda 60-120 eventos por segundo, asi que ahi el gesto es continuo.
+# Seis tramos de 16 unidades hacia arriba = 6 pasos de lista (el tope: 12 filas - 6 de
+# ventana). Van en `drag` SUELTOS porque cada uno inyecta un solo evento de dedo y el motor
+# da un paso por evento a proposito (dos `pulse` de la misma accion en el mismo frame
+# serian una sola pulsacion). Un dedo real manda 60-120 eventos por segundo, asi que ahi el
+# gesto es continuo.
 # El slop de menu son 14, o sea que este arrastre tampoco cuenta como toque.
-# Gate: ni un `Menu tap` entre estas seis lineas.
-touch 160 150
+# Gate: ni un `Menu tap` entre estas lineas.
+touch 160 166
 wait 0.1
+drag 160 150
+wait 0.2
 drag 160 134
 wait 0.2
 drag 160 118
 wait 0.2
-untouch 160 118
+drag 160 102
+wait 0.2
+drag 160 86
+wait 0.2
+drag 160 70
+wait 0.2
+untouch 160 70
 wait 0.4
 shot M3_opciones_recorridas
 wait 0.1
 
-# --- "Volver" (indice 7, ahora en el hueco 5, y=157): esa fila SI confirma ---
-# Gate: Menu tap: pantalla=2 fila=7
+# --- "Volver" (indice 11, ahora en el hueco 5, y=157): esa fila SI confirma ---
+# Gate: Menu tap: pantalla=2 fila=11
 touch 160 157
 wait 0.1
 untouch 160 157

@@ -17,7 +17,7 @@ void Input::init() {
     // desarrollo declara un dispositivo tactil y el HUD salia con botones de telefono en
     // una partida de teclado.
     touch_ui = is_mobile();
-    init_touch_layout(0.0f);
+    relayout_touch();
 
     // Try to open first available gamepad
     int count = 0;
@@ -60,34 +60,117 @@ void Input::shutdown() {
     }
 }
 
-// Los rects tienen que casar con lo que dibuja HUD::draw_miracle_slots / draw_touch_controls.
-// La celda de milagro i vive en x = 320 - 28 - i*27, y = 180 - 36, de 22x22.
-void Input::init_touch_layout(f32 band_below) {
+// =============================================================================
+// Layout tactil (2026-10-03)
+// =============================================================================
+// Posicion de cada boton RESPECTO DEL CENTRO DE DASH, a escala 1 y para diestros (el zurdo
+// refleja la x). Dos arcos: los milagros a 38 unidades (180, 135 y 90 grados) y los
+// pequeños a ~66 (170, 135 y 100), intercalados para que ninguno tape a otro. Comprobado a
+// mano: el hueco mas estrecho entre dos bordes es de 3,2 unidades (M1-M2, M2-M3), mayor que
+// cero con cualquier escala porque todo escala junto.
+static const Vec2 TOUCH_OFFSETS[TOUCH_BUTTON_COUNT] = {
+    {  0.0f,   0.0f},   // DASH
+    {-65.0f, -11.5f},   // USAR
+    {-38.0f,   0.0f},   // milagro 1
+    {-27.0f, -27.0f},   // milagro 2
+    {  0.0f, -38.0f},   // milagro 3
+    {-46.7f, -46.7f},   // ARMA
+    {-11.0f, -65.0f},   // ORAR
+    {  0.0f,   0.0f},   // pausa: va aparte
+};
+static const f32 TOUCH_RADII[TOUCH_BUTTON_COUNT] = {
+    TOUCH_DASH_R, TOUCH_MINOR_R, TOUCH_MIRACLE_R, TOUCH_MIRACLE_R, TOUCH_MIRACLE_R,
+    TOUCH_MINOR_R, TOUCH_MINOR_R, 0.0f,
+};
+// Lo que el grupo se extiende desde el centro de DASH (izquierda / arriba), para acotar la
+// escala: un "Tamaño 150%" en una pantalla pequeña no puede meter los botones en la mitad
+// del stick ni subirlos hasta el minimapa.
+static constexpr f32 TOUCH_REACH_X = 65.0f + TOUCH_MINOR_R;
+static constexpr f32 TOUCH_REACH_Y = 65.0f + TOUCH_MINOR_R;
+
+void Input::init_touch_layout(const TouchLayoutParams& p) {
+    touch_params = p;
+    const Rect sa = p.safe;
     const f32 W = static_cast<f32>(Config::GAME_WIDTH);
-    const f32 S = 22.0f;
-    touch_band = band_below;
-    // En VERTICAL los botones se bajan a la banda negra (GDD 4.5). Hace falta sitio para
-    // las dos filas (22 + 12 de hueco + 22 = 56) mas 6 de respiro; si no cabe, se quedan
-    // donde siempre, dentro del area de juego.
-    const bool in_band = (band_below >= 62.0f);
-    const f32 H = in_band ? static_cast<f32>(Config::GAME_HEIGHT) + band_below - 6.0f
-                          : static_cast<f32>(Config::GAME_HEIGHT);
-    // Fila de arriba, de derecha a izquierda: DASH, USAR, ARMA, ORAR. A 68 y no a 64 del
-    // borde para dejar libre la franja de las placas de coste de los milagros. ARMA y ORAR
-    // solo se encienden si el profeta lleva arma secundaria / puede rezar
-    // (Input::set_touch_enabled), asi que en la mayoria de las partidas la fila son dos.
-    touch_buttons[TOUCH_BTN_DASH]   = {{W -  28.0f, H - 68.0f, S, S}, Action::Dash,            -1};
-    touch_buttons[TOUCH_BTN_CONS]   = {{W -  55.0f, H - 68.0f, S, S}, Action::Consumable,      -1};
-    touch_buttons[TOUCH_BTN_WEAPON] = {{W -  82.0f, H - 68.0f, S, S}, Action::AttackSecondary, -1};
-    touch_buttons[TOUCH_BTN_PRAY]   = {{W - 109.0f, H - 68.0f, S, S}, Action::Pray,            -1};
-    // Fila de abajo: las tres celdas de milagro del HUD, tal cual
-    for (int i = 0; i < Config::MAX_MIRACLE_SLOTS && i < 3; i++)
-        touch_buttons[TOUCH_BTN_MIRACLE + i] = {{W - 28.0f - i * 27.0f, H - 36.0f, S, S},
-                                static_cast<Action>(static_cast<u32>(Action::Miracle1) + i), i};
-    // Pausa: arriba al centro, en el hueco que dejan el panel de vitales (izquierda) y el
-    // minimapa (derecha). Va SIEMPRE dentro del area de juego, tambien en vertical: es el
-    // unico boton que hay que poder encontrar sin mirar.
-    touch_buttons[TOUCH_BTN_PAUSE]  = {{W * 0.5f - 11.0f, 3.0f, S, 14.0f}, Action::Pause, -1};
+
+    // Escala: el tamaño fisico (DPI) por el ajuste del jugador, acotada para que el grupo
+    // quepa entre el centro de la pantalla y la esquina, y por debajo de la franja del
+    // minimapa y el objetivo (y < 58 en apaisado).
+    f32 s = p.dpi_scale * p.user_scale;
+    const f32 room_x = (sa.w * 0.5f) - TOUCH_EDGE;
+    const f32 room_y = sa.h - TOUCH_EDGE - 58.0f;
+    const f32 need_x = TOUCH_REACH_X + TOUCH_DASH_R;
+    const f32 need_y = TOUCH_REACH_Y + TOUCH_DASH_R;
+    if (need_x * s > room_x) s = room_x / need_x;
+    if (need_y * s > room_y && room_y > 0.0f) s = std::min(s, room_y / need_y);
+    s = std::max(0.6f, std::min(1.8f, s));
+    touch_scale = s;
+    touch_slop  = TOUCH_HIT_SLOP * s;
+
+    // Reflejo del zurdo alrededor del centro de la ZONA SEGURA (no del area de juego): con
+    // un notch a un lado los dos grupos quedan igual de lejos de su borde.
+    const f32 mx = sa.x * 2.0f + sa.w;
+    auto mirror = [&](f32 x) { return p.lefty ? mx - x : x; };
+
+    // DASH en la esquina inferior del lado de los botones
+    const f32 dr = TOUCH_DASH_R * s;
+    const Vec2 c = {mirror(sa.right() - TOUCH_EDGE * s - dr), sa.bottom() - TOUCH_EDGE * s - dr};
+    static const Action ACTS[TOUCH_BUTTON_COUNT] = {
+        Action::Dash, Action::Consumable, Action::Miracle1, Action::Miracle2, Action::Miracle3,
+        Action::AttackSecondary, Action::Pray, Action::Pause,
+    };
+    for (int i = 0; i < TOUCH_BUTTON_COUNT; i++) {
+        TouchButton& b = touch_buttons[i];
+        b.action = ACTS[i];
+        b.slot   = (i >= TOUCH_BTN_MIRACLE && i < TOUCH_BTN_MIRACLE + 3) ? i - TOUCH_BTN_MIRACLE : -1;
+        if (i == TOUCH_BTN_PAUSE) continue;
+        const Vec2 off = TOUCH_OFFSETS[i] * s;
+        b.radius = TOUCH_RADII[i] * s;
+        b.center = {c.x + (p.lefty ? -off.x : off.x), c.y + off.y};
+        b.rect   = {b.center.x - b.radius, b.center.y - b.radius, b.radius * 2.0f, b.radius * 2.0f};
+    }
+
+    // Pausa. Arriba, y en el PILAR del lado de los botones si cabe (un 20:9 tiene ~40
+    // unidades de pilar): ahi no tapa nada del mundo ni del HUD. En 16:9 se queda arriba al
+    // centro, en el hueco entre el panel de vitales y el minimapa, como siempre. Su tamaño
+    // NO escala: es el unico boton que hay que encontrar sin mirar, y no debe moverse.
+    {
+        TouchButton& b = touch_buttons[TOUCH_BTN_PAUSE];
+        const f32 PW = 26.0f, PH = 18.0f;   // ~9,4 x 6,5 mm, mas el margen del dedo
+        const f32 pillar = p.lefty ? (0.0f - sa.x) : (sa.right() - W);
+        Rect r = {W * 0.5f - PW * 0.5f, std::max(3.0f, sa.y + 3.0f), PW, PH};
+        if (pillar >= PW + 6.0f) {
+            const f32 px = p.lefty ? sa.x + (pillar - PW) * 0.5f
+                                   : W + (pillar - PW) * 0.5f;
+            r = {px, sa.y + 6.0f, PW, PH};
+        }
+        b.rect = r;
+        b.radius = 0.0f;
+        b.center = r.center();
+    }
+
+    // Stick de movimiento: su radio escala con los botones (mismo pulgar) y su reposo va en
+    // la esquina contraria a DASH, a la misma altura, para que los dos pulgares descansen
+    // simetricos.
+    joy_radius = TOUCH_JOY_R * s;
+    joystick_move.radius = joy_radius;
+    joy_rest = {mirror(sa.x + TOUCH_EDGE * s + joy_radius + 8.0f * s), c.y - 4.0f * s};
+
+    SDL_Log("Touch layout: area %.0f,%.0f %.0fx%.0f  escala %.2f (dpi %.2f x %.2f)%s  DASH (%.0f,%.0f) pausa (%.0f,%.0f)",
+            sa.x, sa.y, sa.w, sa.h, s, p.dpi_scale, p.user_scale, p.lefty ? "  ZURDO" : "",
+            c.x, c.y, touch_buttons[TOUCH_BTN_PAUSE].center.x, touch_buttons[TOUCH_BTN_PAUSE].center.y);
+}
+
+int Input::touch_button_at(Vec2 p) const {
+    int best = -1;
+    f32 best_d = touch_slop;
+    for (int i = 0; i < TOUCH_BUTTON_COUNT; i++) {
+        const TouchButton& b = touch_buttons[i];
+        if (!b.enabled) continue;
+        const f32 d = b.edge_distance(p);
+        if (d <= best_d) { best = i; best_d = d; }
+    }
+    return best;
 }
 
 // Botones contextuales: los que no aplican se apagan enteros (dibujo y hit-test).
@@ -139,6 +222,7 @@ void Input::update_touch(f32 dt) {
     if (!touch_ui) return;
     touch_info_slot = -1;
     for (auto& b : touch_buttons) {
+        if (b.deny_t > 0.0f) b.deny_t = std::max(0.0f, b.deny_t - dt);
         if (!b.down) { b.hold = 0.0f; b.hold_fired = false; continue; }
         b.hold += dt;
         if (b.slot >= 0 && b.hold >= TOUCH_HOLD_INFO) touch_info_slot = b.slot;
@@ -425,7 +509,8 @@ void Input::process_touch(const SDL_Event& event) {
         (event.tfinger.y - touch_vp.y) / touch_vp.h * Config::GAME_HEIGHT
     };
 
-    bool left_half = (touch_pos.x < Config::GAME_WIDTH * 0.5f);
+    // La mitad del stick: la izquierda, o la derecha con el ajuste de zurdo.
+    const bool move_half = in_move_half(touch_pos);
 
     if (event.type == SDL_EVENT_FINGER_DOWN) {
         int f = find_finger(touch_fingers, event.tfinger.fingerID, true);
@@ -474,10 +559,11 @@ void Input::process_touch(const SDL_Event& event) {
         }
 
         // 1) Los botones se comprueban ANTES que el "tap = ataque": si no, cada milagro
-        //    disparaba tambien el cayado.
-        for (int bi = 0; bi < TOUCH_BUTTON_COUNT; bi++) {
+        //    disparaba tambien el cayado. Con margen de dedo: si dos margenes se solapan,
+        //    gana el boton con el borde mas cerca.
+        const int bi = touch_button_at(touch_pos);
+        if (bi >= 0 && !touch_buttons[bi].down) {
             TouchButton& b = touch_buttons[bi];
-            if (!b.enabled || b.down || !b.rect.contains(touch_pos)) continue;
             SDL_Log("Touch button: %s", touch_btn_name(bi));
             b.down   = true;
             b.hold   = 0.0f;
@@ -496,16 +582,18 @@ void Input::process_touch(const SDL_Event& event) {
             }
             return;
         }
+        if (bi >= 0) return;   // ese boton ya lo tiene otro dedo: este no dispara de propina
 
-        if (left_half && !joystick_move.active) {
-            // Left side: movement joystick
+        if (move_half && !joystick_move.active) {
+            // Mitad del stick: el joystick de movimiento nace donde baja el dedo
             joystick_move.active = true;
             joystick_move.origin = touch_pos;
             joystick_move.current = touch_pos;
             joystick_move.finger_id = event.tfinger.fingerID;
+            joystick_move.radius = joy_radius;
         }
-        else if (!left_half) {
-            // Right side: tap to attack (auto-aim direction). Si el dedo ARRASTRA, el
+        else if (!move_half) {
+            // La otra mitad: tap to attack (auto-aim direction). Si el dedo ARRASTRA, el
             // mismo gesto pasa a ser apuntado manual (joystick_aim -> aim_axis).
             actions[static_cast<u32>(Action::Attack)] = true;
             touch_aim_active = true;
@@ -563,10 +651,12 @@ void Input::process_touch(const SDL_Event& event) {
             return;
         }
 
-        // Un dedo que se sale del boton lo suelta: si no, se quedaba pulsado para siempre
+        // Un dedo que se sale del boton lo suelta: si no, se quedaba pulsado para siempre.
+        // Con el DOBLE de margen que al pulsar: un pulgar que se apoya rueda un poco, y
+        // soltar el DASH por rozar el borde es lo que se siente como "no responde".
         for (auto& b : touch_buttons) {
             if (!b.down || b.finger != event.tfinger.fingerID) continue;
-            if (b.rect.contains(touch_pos)) continue;
+            if (b.edge_distance(touch_pos) <= touch_slop * 2.0f) continue;
             b.down = false;
             b.hold = 0.0f;
             if (b.slot < 0) actions[static_cast<u32>(b.action)] = false;
@@ -574,6 +664,7 @@ void Input::process_touch(const SDL_Event& event) {
 
         if (joystick_move.active && event.tfinger.fingerID == joystick_move.finger_id) {
             joystick_move.current = touch_pos;
+            joystick_move.follow();   // la base va detras del dedo si este se pasa del radio
         }
         if (touch_aim_active && event.tfinger.fingerID == touch_aim_finger) {
             joystick_aim.current = touch_pos;

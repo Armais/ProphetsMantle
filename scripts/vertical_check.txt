@@ -9,7 +9,9 @@
 #
 # Con 540x960 la escala es 540/320 = 1,6875, asi que el area de juego mide 540x303 y
 # quedan (960-303)/2 = 328 px de banda arriba y abajo = 194 unidades de juego. Como es
-# mas que las 62 que piden las dos filas de botones, BAJAN a la banda de abajo.
+# banda, el grupo de botones se ancla a la esquina inferior de la VENTANA (desde 2026-10-03
+# el layout tactil se ancla siempre a la zona segura de la ventana, no al area de juego) y
+# por tanto BAJA a la banda de abajo: DASH en (299,354), milagro 1 en (261,354).
 #
 # Que hay que ver en las capturas (que en vertical son de la VENTANA entera, no del
 # objetivo interno de 1280x720):
@@ -25,19 +27,28 @@ wait 3.0
 press confirm
 wait 1.5
 god
+learn 0 0
 wait 0.5
 shot V0_vertical_mundo_y_banda
 wait 0.1
 
-# --- Un toque sobre la celda de milagro Q, ya en la banda ---
-# En vertical los botones estan en y = 180 + banda - 6 - 36 y siguientes, o sea FUERA del
-# area de juego. Las coordenadas de `touch` son unidades de juego y `window_to_game` las
-# devuelve igual, asi que el hit-test no necesita saber nada de la banda.
-touch 303 338
-wait 0.2
+# --- Un toque sobre el milagro 1, ya en la banda ---
+# En vertical el grupo esta en y ~280..370, o sea FUERA del area de juego (0..180). Las
+# coordenadas de `touch` son unidades de juego y `window_to_game` las devuelve igual, asi
+# que el hit-test no necesita saber nada de la banda. Gate: `Touch button: MILAGRO` y
+# `Cast miracle: Cuervos de Querit` (el profeta empieza con el hueco vacio: `learn 0 0`).
+# El toque va SIN captura en medio: una captura a esta resolucion se lleva varios pasos y
+# el toque pasaba de 0,4 s, o sea que pasaba a ser "mantener" (la ficha) y no lanzaba nada.
+touch 261 354
+wait 0.15
+untouch 261 354
+wait 0.3
+# Y la captura del boton pulsado, con un MANTENER: sale ademas la ficha del milagro.
+touch 261 354
+wait 0.5
 shot V1_boton_en_la_banda
 wait 0.1
-untouch 303 338
+untouch 261 354
 wait 0.8
 
 # --- El mapa grande, para ver que el area de juego no se ha recortado ---

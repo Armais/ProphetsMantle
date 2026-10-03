@@ -48,13 +48,22 @@ struct MenuSystem {
     int  settings_sensitivity = 5;    // 1..10
     bool settings_rumble      = true;
     bool settings_rstick      = false;   // segundo joystick virtual (solo tactil)
-    bool settings_show_rstick = false;   // esa fila solo se pinta en tactil
+    bool settings_show_rstick = false;   // las filas TACTILES solo se pintan en tactil
+    // Controles tactiles a la medida (2026-10-03), tambien solo en tactil
+    int  settings_touch_size    = 100;   // % (70..150)
+    int  settings_touch_opacity = 100;   // % (30..100)
+    bool settings_lefty         = false;
+    bool settings_battery       = false; // ahorro de bateria: 30 fps
 
     // Filas de Opciones. Van por ID y no por indice fijo porque la del stick derecho solo
     // existe en tactil: sin la tabla, quitar una fila desplazaba el significado de todas
     // las de abajo, tanto al pintar como al ajustar (Engine::update_settings).
     enum SettingRow { ROW_MUSIC, ROW_SFX, ROW_AIM, ROW_SENS, ROW_RUMBLE,
-                      ROW_RSTICK, ROW_SKIN, ROW_LANG, ROW_BACK, ROW_COUNT };
+                      ROW_RSTICK, ROW_TSIZE, ROW_TOPACITY, ROW_LEFTY, ROW_BATTERY,
+                      ROW_SKIN, ROW_LANG, ROW_BACK, ROW_COUNT };
+    static bool is_touch_row(int r) {
+        return r == ROW_RSTICK || r == ROW_TSIZE || r == ROW_TOPACITY || r == ROW_LEFTY || r == ROW_BATTERY;
+    }
     int settings_rows[ROW_COUNT] = {};   // fila visible i -> SettingRow
     // Primera fila de la ventana. Solo en tactil: alli la placa mide 19 unidades de alto
     // para que se pueda tocar y las nueve filas ya no caben en la pantalla.
@@ -77,7 +86,7 @@ struct MenuSystem {
     // Toque en los menus (movil). Cada render_* apunta el rect de SUS filas y `update`
     // busca ahi el tap: una sola formula, la misma que pinta. Tocar una fila la elige Y la
     // confirma; en Opciones, la mitad izquierda baja el valor y la derecha lo sube.
-    static constexpr int MAX_ROW_RECTS = 9;
+    static constexpr int MAX_ROW_RECTS = 14;   // Opciones en tactil: hasta 13 filas
     Rect row_rects[MAX_ROW_RECTS] = {};
     int  row_rect_count = 0;
     MenuScreen rect_screen = MenuScreen::Title;   // pantalla a la que pertenecen los rects
@@ -86,6 +95,8 @@ struct MenuSystem {
     // `touch_hints` es ademas la marca de "estamos en un telefono" para TODA la capa: en
     // movil no se pinta ningun cursor, porque no se navega, se toca el boton que se quiere.
     bool touch_hints = false;
+    // Ajuste "Zurdo": la pantalla de Controles dice que mitad es el stick y cual dispara.
+    bool touch_lefty = false;
     // El boton que hay bajo el dedo se ilumina mientras el dedo sigue apoyado. Lo escribe
     // el Engine desde Input::ui_press, y es lo que sustituye al resaltado de seleccion.
     bool press_active = false;

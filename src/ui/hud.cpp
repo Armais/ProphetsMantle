@@ -571,11 +571,11 @@ void HUD::render(Renderer& renderer, const Player& player,
     draw_offerings(renderer, ctx);
     draw_inventory(renderer, player, ctx);
     draw_belt(renderer, player, ctx);
-    // En VERTICAL las celdas de milagro se han ido a la banda negra con el resto de los
-    // botones, y ahi no llega el objetivo de 320x180: las pinta la pasada de superposicion
-    // (Engine::render), igual que dash y consumible.
-    const bool slots_in_band = ctx.input && ctx.input->touch_ui && ctx.input->touch_band >= 62.0f;
-    if (!slots_in_band) draw_miracle_slots(renderer, player, ctx, faith);
+    // En tactil las celdas de milagro SON botones y se pintan con ellos en la pasada de
+    // superposicion (Engine::render): en un 20:9 viven en el pilar negro, adonde el objetivo
+    // de 320x180 no llega. En PC, la fila de siempre.
+    const bool touch = ctx.input && ctx.input->touch_ui;
+    if (!touch) draw_miracle_slots(renderer, player, ctx, faith);
     if (!ctx.show_map) {
         draw_minimap(renderer, ctx, false);
         draw_objective(renderer, ctx);
@@ -584,7 +584,6 @@ void HUD::render(Renderer& renderer, const Player& player,
     draw_message(renderer, ctx);
     draw_pickup_card(renderer, ctx);
     draw_banner(renderer, ctx);
-    draw_touch_controls(renderer, player, ctx);
     // El mapa grande va EL ULTIMO: ahora ocupa casi toda la pantalla y con el orden de
     // antes el panel de vitales le cortaba la esquina y un mensaje de aviso se le plantaba
     // encima del terreno. Es una superposicion a pantalla completa, como el Codice.
@@ -864,121 +863,248 @@ void HUD::draw_pickup_card(Renderer& renderer, const HUDContext& ctx) {
 }
 
 // =============================================================================
-// Controles tactiles (GDD 4.2)
+// Controles tactiles (GDD 4.2; redondos y en arco desde 2026-10-03)
 // =============================================================================
-// Solo con `Input::touch_ui` (movil, pantalla tactil detectada o --touch). En
-// escritorio no se dibuja nada y el HUD queda exactamente igual que antes. Poca
-// opacidad: el pulgar tiene que ver donde pulsa sin que los botones tapen el juego.
-// Los tres botones de milagro NO se dibujan aqui: son las propias celdas del HUD
-// (mismos rects que Input::init_touch_layout).
-// En VERTICAL esto NO se llama desde HUD::render sino desde Engine::render, ya despues
-// del letterbox y dentro de Renderer::begin_overlay(), para poder pintar en la banda negra
-// de abajo. La funcion es la misma: los rects vienen de Input::init_touch_layout, que es
-// quien decide si estan dentro del mundo o en la banda.
+// Solo con `Input::touch_ui` (movil o --touch). En escritorio no se dibuja nada y el HUD
+// queda exactamente igual que antes. Se pintan SIEMPRE en la pasada de superposicion
+// (Engine::render, dentro de Renderer::begin_overlay), sobre la ventana entera: en un 20:9
+// el grupo de botones vive en el pilar negro de la derecha, que el objetivo de 320x180 no
+// alcanza. Los rects y los centros vienen de Input::init_touch_layout — el mismo sitio del
+// que sale el hit-test, que es el contrato de todo control tactil del proyecto.
+
+// Alfa escalado por la opacidad del jugador ("Opacidad de controles")
+static inline u8 op_a(f32 a, f32 op) { return static_cast<u8>(std::max(0.0f, std::min(255.0f, a * op))); }
+
+// La escala de texto mas grande, entre `s0` y `s_min`, a la que `text` cabe en `max_w`.
+// `draw_text` no recorta: lo que no cabe se planta encima del boton vecino.
+static f32 fit_text_scale(const Renderer& renderer, const char* text, f32 max_w, f32 s0, f32 s_min) {
+    f32 sc = s0;
+    while (sc > s_min && renderer.measure_text(text, sc) > max_w) sc -= 0.05f;
+    return sc;
+}
+
+// Lo que necesita un boton redondo para pintarse. Lo arma quien sabe que significa cada
+// uno (DASH, USAR, un milagro...) y lo pinta draw_round_button, que solo sabe de formas.
+struct RoundButtonLook {
+    int         own_icon  = Icon::NONE;          // icons.png
+    TileSprite  tile_icon = TileSprite::Arrow;   // respaldo del tileset
+    const char* label     = nullptr;             // dentro, abajo
+    f32         cd_frac   = 0.0f;                // recarga que FALTA, 0..1 (barrido radial)
+    f32         cd_secs   = 0.0f;                // segundos que faltan (cifra si > 1)
+    bool        ready     = false;               // late en oro (se puede usar ya)
+    bool        locked    = false;               // candado / aro rojo
+    const char* badge     = nullptr;             // chapa arriba a la derecha (coste, cargas)
+    Color       badge_col = {160, 210, 250, 255};
+    bool        badge_orb = false;               // la chapa lleva el orbe de fe delante
+};
+
+static void draw_round_button(Renderer& renderer, const TouchButton& b, const RoundButtonLook& lk,
+                              u32 tileset, f32 time, f32 op) {
+    // Temblor del "no se puede": dura TOUCH_DENY_TIME y se apaga solo
+    const f32 deny = b.deny_t > 0.0f ? b.deny_t / TOUCH_DENY_TIME : 0.0f;
+    Vec2 c = b.center;
+    c.x += std::sin(time * 70.0f) * 2.2f * deny;
+    // Pulsado: se hunde un poco. Es la confirmacion de que el toque ha entrado, la misma
+    // que da un boton fisico — y la unica que se ve con el pulgar encima.
+    const f32 r = b.radius * (b.down ? 0.92f : 1.0f);
+
+    // Aura del boton listo: respira a 0,7 Hz, como las celdas de antes (ui/CLAUDE.md)
+    if (lk.ready && !b.down) {
+        const f32 beat = 0.5f + 0.5f * std::sin(time * 4.2f);
+        renderer.draw_disc(c, r + 2.6f, {255, 200, 90, op_a(30.0f + 70.0f * beat, op)});
+    }
+    renderer.draw_disc({c.x, c.y + 1.3f}, r, {0, 0, 0, op_a(90, op)});            // sombra
+    const Color plate = b.down    ? Color{70, 56, 44, op_a(225, op)}
+                      : lk.locked ? Color{58, 28, 32, op_a(185, op)}
+                                  : Color{26, 20, 32, op_a(175, op)};
+    renderer.draw_disc(c, r, plate);
+    renderer.draw_disc({c.x, c.y - r * 0.28f}, r * 0.72f, {255, 255, 255, op_a(16, op)});   // bisel
+
+    // Icono, subido un poco si lleva rotulo debajo
+    const f32 isz = r * (lk.label ? 1.18f : 1.3f);
+    const f32 icy = c.y - (lk.label ? r * 0.17f : 0.0f);
+    const Rect ir = {c.x - isz * 0.5f, icy - isz * 0.5f, isz, isz};
+    const Color it = lk.locked ? Color{140, 125, 120, op_a(230, op)}
+                   : b.down    ? Color{255, 255, 255, op_a(255, op)}
+                               : Color{240, 236, 228, op_a(235, op)};
+    if (!draw_icon(renderer, lk.own_icon, ir, it) && tileset != TEXTURE_NONE)
+        renderer.draw_sprite_rect(tileset, get_tile_src(lk.tile_icon),
+                                  {ir.x + isz * 0.1f, ir.y + isz * 0.1f, isz * 0.8f, isz * 0.8f}, it);
+
+    // Barrido de recarga: la parte que FALTA en sombra, vaciandose en sentido horario
+    if (lk.cd_frac > 0.0f) {
+        renderer.draw_pie(c, r, 1.0f - lk.cd_frac, lk.cd_frac, {0, 0, 0, op_a(150, op)});
+        if (lk.cd_secs >= 1.0f) {
+            char n[8];
+            snprintf(n, sizeof(n), "%d", static_cast<int>(lk.cd_secs + 0.5f));
+            const f32 ns = std::min(1.0f, r / 13.0f) * 0.85f;
+            renderer.draw_text(n, c.x - renderer.measure_text(n, ns) * 0.5f, icy - 4.0f * ns,
+                               {255, 245, 225, op_a(245, op)}, ns);
+        }
+    }
+
+    // Candado (falta NIVEL de fe): cuerpo y arco, en el centro
+    if (lk.locked) {
+        const f32 k = r / 13.0f;
+        const f32 lx = c.x - 3.0f * k, ly = icy - 1.0f * k;
+        renderer.draw_rect({lx - 0.75f * k, ly - 0.75f * k, 7.5f * k, 6.5f * k}, {30, 14, 16, op_a(235, op)});
+        renderer.draw_rect({lx, ly, 6.0f * k, 5.0f * k}, {235, 165, 80, op_a(255, op)});
+        renderer.draw_rect({lx + 1.0f * k, ly - 3.0f * k, 4.0f * k, 3.0f * k}, {235, 165, 80, op_a(255, op)});
+        renderer.draw_rect({lx + 2.0f * k, ly - 2.0f * k, 2.0f * k, 2.0f * k}, {30, 14, 16, op_a(235, op)});
+    }
+
+    // Aro: oro si se puede, rojo si se niega o esta cerrado, apagado si recarga
+    const f32 beat = lk.ready ? 0.5f + 0.5f * std::sin(time * 4.2f) : 0.0f;
+    Color ring = b.down     ? Color{255, 238, 180, op_a(255, op)}
+               : deny > 0.0f ? Color{255, 90, 70, op_a(255, op)}
+               : lk.locked  ? Color{170, 80, 66, op_a(220, op)}
+               : lk.ready   ? Color{static_cast<u8>(225 + 30 * beat), static_cast<u8>(185 + 45 * beat), 95, op_a(235, op)}
+               : lk.cd_frac > 0.0f ? Color{120, 112, 120, op_a(200, op)}
+                                   : Color{215, 190, 140, op_a(200, op)};
+    renderer.draw_ring_thin(c, r + 0.4f, {0, 0, 0, op_a(120, op)});
+    renderer.draw_ring_thin(c, r, ring);
+
+    // Rotulo dentro, abajo, sobre una franja oscura para que se lea encima del icono
+    if (lk.label) {
+        const f32 ls = fit_text_scale(renderer, lk.label, r * 1.55f, std::min(0.62f, 0.5f * r / 11.0f + 0.05f), 0.38f);
+        const f32 lw = renderer.measure_text(lk.label, ls);
+        const f32 ly = c.y + r * 0.38f;
+        renderer.draw_panel({c.x - lw * 0.5f - 2.0f, ly - 0.6f, lw + 4.0f, 8.0f * ls + 1.6f},
+                            {10, 8, 14, op_a(150, op)}, 2.0f);
+        renderer.draw_text(lk.label, c.x - lw * 0.5f, ly, lk.locked ? Color{215, 170, 150, op_a(235, op)}
+                                                                     : Color{250, 232, 190, op_a(245, op)}, ls);
+    }
+
+    // Chapa arriba a la derecha (coste en fe / cargas): DENTRO de la caja del boton, para
+    // no pisar al vecino del arco (el hueco mas estrecho entre bordes es de ~3 unidades).
+    if (lk.badge) {
+        const f32 bs = 0.6f;
+        const f32 tw = renderer.measure_text(lk.badge, bs);
+        const f32 orb = lk.badge_orb ? 5.5f : 0.0f;
+        const f32 bw = tw + orb + 4.0f, bh = 7.0f;
+        const f32 bx = c.x + r * 0.72f - bw * 0.5f, by = c.y - r * 0.72f - bh * 0.5f;
+        renderer.draw_panel({bx, by, bw, bh}, {12, 10, 18, op_a(225, op)}, 3.0f);
+        if (lk.badge_orb && tileset != TEXTURE_NONE)
+            renderer.draw_sprite_rect(tileset, get_tile_src(TileSprite::Orb), {bx + 1.5f, by + 1.0f, 5.0f, 5.0f},
+                                      {255, 255, 255, op_a(255, op)});
+        renderer.draw_text(lk.badge, bx + 2.0f + orb, by + 1.0f, {lk.badge_col.r, lk.badge_col.g, lk.badge_col.b, op_a(255, op)}, bs);
+    }
+}
+
 void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HUDContext& ctx) {
     const Input* in = ctx.input;
     if (!in || !in->touch_ui || ctx.tileset == TEXTURE_NONE) return;
-    // Si los botones se han ido a la banda, los pinta la pasada de superposicion: aqui se
-    // dibujarian recortados por el borde del area de juego.
-    if (in->touch_band >= 62.0f && !renderer.in_overlay()) return;
+    const f32 op = in->touch_opacity;
 
-    // --- Joystick de movimiento: la base nace donde bajo el dedo ---
+    // --- Joystick de movimiento: la base nace donde bajo el dedo y le sigue si se pasa ---
+    const f32 jr = in->joy_radius;
     if (in->joystick_move.active) {
-        Vec2 o = in->joystick_move.origin;
-        Vec2 k = o + in->joystick_move.get_axis() * 13.0f;
-        // Redondos y mas transparentes que antes: en cuadrado se leian como una caja de
-        // dialogo puesta encima del juego, y tapaban demasiado.
-        renderer.draw_disc(o, 16.0f, {20, 16, 26, 60});
-        renderer.draw_ring(o, 17.0f, {255, 245, 220, 90});
-        renderer.draw_disc(k, 7.5f, {250, 230, 190, 170});
+        const Vec2 o = in->joystick_move.origin;
+        const Vec2 k = o + in->joystick_move.get_axis() * jr;   // 1:1 con el dedo hasta el tope
+        renderer.draw_disc(o, jr, {16, 12, 22, op_a(70, op)});
+        renderer.draw_ring_thin(o, jr, {255, 240, 210, op_a(130, op)});
+        // Hacia donde va: un aro mas vivo en el lado del empuje
+        const Vec2 ax = in->joystick_move.get_axis();
+        if (ax.length() > 0.3f)
+            renderer.draw_disc(o + ax.normalized() * (jr - 2.0f), 2.2f, {255, 225, 150, op_a(200, op)});
+        renderer.draw_disc({k.x, k.y + 0.8f}, jr * 0.42f, {0, 0, 0, op_a(70, op)});
+        renderer.draw_disc(k, jr * 0.42f, {250, 232, 195, op_a(190, op)});
+        renderer.draw_ring_thin(k, jr * 0.42f, {255, 255, 255, op_a(140, op)});
+    } else if (in->touch_gameplay) {
+        // En reposo, su FANTASMA en la esquina: dice "el pulgar va aqui" sin una linea de
+        // texto. Muy apagado, y no hace falta tocarlo justo ahi: el stick nace donde baje
+        // el dedo en toda esa mitad.
+        renderer.draw_disc(in->joy_rest, jr, {16, 12, 22, op_a(34, op)});
+        renderer.draw_ring_thin(in->joy_rest, jr, {255, 240, 210, op_a(60, op)});
+        renderer.draw_disc(in->joy_rest, jr * 0.42f, {250, 232, 195, op_a(50, op)});
     }
 
-    // --- Apuntado manual (hold + drag en la mitad derecha) ---
+    // --- Apuntado manual (hold + drag en la otra mitad) ---
     // Se dibuja el origen, un rastro de puntos y la mira: sin el rastro no se distingue
     // de un tap y no se sabe hacia donde se esta disparando.
     if (in->joystick_aim.active) {
         Vec2 o = in->joystick_aim.origin;
         Vec2 dir = in->joystick_aim.get_axis();
-        renderer.draw_disc(o, 8.5f, {20, 16, 26, 50});
-        renderer.draw_ring(o, 9.0f, {245, 205, 90, 58});
+        renderer.draw_disc(o, 8.5f, {20, 16, 26, op_a(50, op)});
+        renderer.draw_ring(o, 9.0f, {245, 205, 90, op_a(58, op)});
         for (int d = 1; d <= 4; d++) {
             Vec2 p = o + dir * (7.0f * d);
-            renderer.draw_disc(p, 1.5f, {250, 225, 160, static_cast<u8>(175 - d * 25)});
+            renderer.draw_disc(p, 1.5f, {250, 225, 160, op_a(175.0f - d * 25.0f, op)});
         }
         Vec2 t = o + dir * 34.0f;
-        renderer.draw_rect({t.x - 5, t.y - 1, 10, 2}, {255, 235, 175, 235});
-        renderer.draw_rect({t.x - 1, t.y - 5, 2, 10}, {255, 235, 175, 235});
+        renderer.draw_rect({t.x - 5, t.y - 1, 10, 2}, {255, 235, 175, op_a(235, op)});
+        renderer.draw_rect({t.x - 1, t.y - 5, 2, 10}, {255, 235, 175, op_a(235, op)});
     }
 
-    // --- Fila de accion: DASH, USAR, ARMA, ORAR (los que apliquen) ---
-    static const int action_btns[4] = {TOUCH_BTN_DASH, TOUCH_BTN_CONS,
-                                       TOUCH_BTN_WEAPON, TOUCH_BTN_PRAY};
+    // --- DASH, USAR, ARMA, ORAR (los que apliquen) ---
+    const Player::BeltSlot& sel = player.belt[std::max(0, std::min(player.belt_sel, Player::BELT_MAX - 1))];
+    static const int action_btns[4] = {TOUCH_BTN_DASH, TOUCH_BTN_CONS, TOUCH_BTN_WEAPON, TOUCH_BTN_PRAY};
     for (int k = 0; k < 4; k++) {
         const TouchButton& b = in->touch_buttons[action_btns[k]];
         if (!b.enabled) continue;   // `enabled` manda en el dibujo Y en el hit-test
-        bool cons = (b.action == Action::Consumable);
-        bool weap = (b.action == Action::AttackSecondary);
-        bool pray = (b.action == Action::Pray);
-
-        renderer.draw_rect({b.rect.x - 1, b.rect.y - 1, b.rect.w + 2, b.rect.h + 2},
-                           b.down ? Color{250, 225, 160, 225} : Color{200, 180, 140, 120});
-        renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 145)});
-
-        TileSprite icon = TileSprite::Arrow;
-        int own = Icon::NONE;   // icono propio del objeto (icons.png), si lo hay
-        const Player::BeltSlot& sel = player.belt[std::max(0, std::min(player.belt_sel, Player::BELT_MAX - 1))];
-        if (cons && ctx.registry && !sel.empty()) {
-            const ItemDef* d = ctx.registry->get(sel.id);
-            if (d) icon = category_icon(d->category);
-            own = Icon::item(sel.id);
-        } else if (weap) {
-            icon = weapon_icon(player.weapon_slot);
-            own = Icon::item(player.weapon_slot);
-        } else if (pray) {
-            icon = TileSprite::AltarGod;
+        RoundButtonLook lk;
+        char badge[8] = "";
+        switch (b.action) {
+            case Action::Dash:
+                lk.tile_icon = TileSprite::Arrow;
+                lk.label = "DASH";
+                lk.cd_frac = ctx.dash_cd;
+                break;
+            case Action::Consumable:
+                lk.label = tr("USAR", "USE");
+                if (ctx.registry && !sel.empty()) {
+                    if (const ItemDef* d = ctx.registry->get(sel.id)) lk.tile_icon = category_icon(d->category);
+                    lk.own_icon = Icon::item(sel.id);
+                    if (sel.charges > 1) {
+                        snprintf(badge, sizeof(badge), "x%u", static_cast<unsigned>(sel.charges));
+                        lk.badge = badge;
+                        lk.badge_col = {255, 235, 180, 255};
+                    }
+                }
+                break;
+            case Action::AttackSecondary:
+                lk.label = tr("ARMA", "WEAPON");
+                lk.tile_icon = weapon_icon(player.weapon_slot);
+                lk.own_icon = Icon::item(player.weapon_slot);
+                lk.cd_frac = std::min(1.0f, player.secondary_cd / 0.9f);
+                break;
+            default:   // Orar
+                lk.label = tr("ORAR", "PRAY");
+                lk.tile_icon = TileSprite::AltarGod;
+                lk.own_icon = Icon::SANCT_ALTAR;
+                if (ctx.prayers > 0) {
+                    snprintf(badge, sizeof(badge), "%d", ctx.prayers);
+                    lk.badge = badge;
+                    lk.badge_col = {190, 215, 240, 255};
+                }
+                break;
         }
-        const Rect ir = {b.rect.x + 3, b.rect.y + 3, b.rect.w - 6, b.rect.h - 6};
-        const Color it = b.down ? Color::white() : Color{230, 225, 215, 200};
-        if (!draw_icon(renderer, own, ir, it))
-            renderer.draw_sprite_rect(ctx.tileset, get_tile_src(icon), ir, it);
-        if (cons && !sel.empty() && sel.charges > 1) {
-            char n[4];
-            snprintf(n, sizeof(n), "%u", static_cast<unsigned>(sel.charges));
-            renderer.draw_text(n, b.rect.right() - 5.0f, b.rect.bottom() - 7.0f, {255, 235, 180, 250}, 0.65f);
-        }
-        // La etiqueta va ENCIMA: debajo de estos botones estan las placas de coste de las
-        // celdas de milagro y los dos textos se pisaban.
-        const char* label = cons ? tr("USAR", "USE")
-                          : weap ? tr("ARMA", "WEAPON")
-                          : pray ? tr("ORAR", "PRAY")
-                                 : "DASH";
-        f32 lw = renderer.measure_text(label, 0.55f);
-        renderer.draw_text(label, b.rect.x + (b.rect.w - lw) * 0.5f, b.rect.y - 6.0f,
-                           {225, 205, 165, 200}, 0.55f);
+        draw_round_button(renderer, b, lk, ctx.tileset, ctx.time, op);
     }
 
-    // --- Pausa: dos barritas, arriba al centro. Sustituye al swipe de dos dedos, que
-    // chocaba con "stick + apuntar" (dos dedos en pantalla es la postura normal). ---
+    // --- Pausa: dos barritas. Sustituye al swipe de dos dedos, que chocaba con "stick +
+    // apuntar" (dos dedos en pantalla es la postura normal). ---
     {
         const TouchButton& b = in->touch_buttons[TOUCH_BTN_PAUSE];
         if (b.enabled) {
-            renderer.draw_rect({b.rect.x - 1, b.rect.y - 1, b.rect.w + 2, b.rect.h + 2},
-                               b.down ? Color{250, 225, 160, 225} : Color{200, 180, 140, 110});
-            renderer.draw_rect(b.rect, {20, 16, 26, static_cast<u8>(b.down ? 200 : 140)});
-            Color bar = b.down ? Color::white() : Color{230, 225, 215, 200};
+            renderer.draw_panel({b.rect.x, b.rect.y + 1.0f, b.rect.w, b.rect.h}, {0, 0, 0, op_a(90, op)}, 4.0f);
+            renderer.draw_panel(b.rect, b.down ? Color{120, 92, 50, op_a(230, op)} : Color{30, 24, 36, op_a(185, op)}, 4.0f);
+            Color bar = b.down ? Color{255, 255, 255, op_a(255, op)} : Color{235, 225, 205, op_a(225, op)};
             f32 cx = b.rect.center().x;
-            renderer.draw_rect({cx - 4.0f, b.rect.y + 3.0f, 3.0f, b.rect.h - 6.0f}, bar);
-            renderer.draw_rect({cx + 1.0f, b.rect.y + 3.0f, 3.0f, b.rect.h - 6.0f}, bar);
+            renderer.draw_rect({cx - 4.0f, b.rect.y + 4.0f, 3.0f, b.rect.h - 8.0f}, bar);
+            renderer.draw_rect({cx + 1.0f, b.rect.y + 4.0f, 3.0f, b.rect.h - 8.0f}, bar);
         }
     }
 
-    // --- Ficha del milagro: mantener pulsada su celda en vez de lanzarlo (GDD) ---
+    // --- Ficha del milagro: mantener pulsado su boton en vez de lanzarlo (GDD) ---
     if (in->touch_info_slot >= 0 && in->touch_info_slot < Config::MAX_MIRACLE_SLOTS) {
         const MiracleSlot& s = player.miracle_slots[in->touch_info_slot];
         if (!s.is_empty()) {
             auto def = get_miracle_def(s.miracle);
+            // A y=58 y no a 96 (2026-10-03): el aviso del HUD subio en tactil a y~105 para
+            // salir de debajo del grupo de botones, y la ficha se le plantaba encima.
             const f32 w = 152.0f, h = 34.0f;
-            f32 x = (Config::GAME_WIDTH - w) * 0.5f, y = 96.0f;
+            f32 x = (Config::GAME_WIDTH - w) * 0.5f, y = 58.0f;
             renderer.draw_rect({x - 1, y - 1, w + 2, h + 2}, {245, 205, 90, 190});
             renderer.draw_rect({x, y, w, h}, {18, 14, 24, 238});
             renderer.draw_text(def.name, x + 5, y + 3, {250, 225, 160, 250}, 0.8f);
@@ -987,6 +1113,36 @@ void HUD::draw_touch_controls(Renderer& renderer, const Player& player, const HU
             renderer.draw_text(sub, x + 5, y + 13, {200, 185, 150, 225}, 0.6f);
             renderer.draw_text(def.description, x + 5, y + 22, {215, 210, 200, 230}, 0.6f);
         }
+    }
+}
+
+// Vista previa de los controles (Opciones, al tocar tamaño / opacidad / zurdo): todos los
+// botones del layout ACTUAL, encendidos o no, con rotulos genericos. Sale de los mismos
+// centros que el hit-test, asi que lo que se ve es exactamente donde respondera el dedo.
+void HUD::draw_touch_preview(Renderer& renderer, const Input& in, f32 fade, u32 tileset, f32 time) {
+    if (!in.touch_ui || fade <= 0.0f) return;
+    const f32 op = in.touch_opacity * std::min(1.0f, fade);
+    renderer.draw_disc(in.joy_rest, in.joy_radius, {16, 12, 22, op_a(90, op)});
+    renderer.draw_ring_thin(in.joy_rest, in.joy_radius, {255, 240, 210, op_a(170, op)});
+    renderer.draw_disc(in.joy_rest, in.joy_radius * 0.42f, {250, 232, 195, op_a(150, op)});
+    static const char* const LABELS_ES[TOUCH_BUTTON_COUNT] = {"DASH", "USAR", "1", "2", "3", "ARMA", "ORAR", nullptr};
+    static const char* const LABELS_EN[TOUCH_BUTTON_COUNT] = {"DASH", "USE", "1", "2", "3", "WEAPON", "PRAY", nullptr};
+    for (int i = 0; i < TOUCH_BUTTON_COUNT; i++) {
+        TouchButton b = in.touch_buttons[i];
+        if (i == TOUCH_BTN_PAUSE) {
+            renderer.draw_panel(b.rect, {30, 24, 36, op_a(200, op)}, 4.0f);
+            const f32 cx = b.rect.center().x;
+            renderer.draw_rect({cx - 4.0f, b.rect.y + 4.0f, 3.0f, b.rect.h - 8.0f}, {235, 225, 205, op_a(230, op)});
+            renderer.draw_rect({cx + 1.0f, b.rect.y + 4.0f, 3.0f, b.rect.h - 8.0f}, {235, 225, 205, op_a(230, op)});
+            continue;
+        }
+        b.down = false;
+        b.deny_t = 0.0f;
+        RoundButtonLook lk;
+        lk.label = tr(LABELS_ES[i], LABELS_EN[i]);
+        lk.tile_icon = (i == TOUCH_BTN_DASH) ? TileSprite::Arrow : TileSprite::Star;
+        lk.own_icon = Icon::NONE;
+        draw_round_button(renderer, b, lk, tileset, time, op);
     }
 }
 
@@ -1010,23 +1166,54 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
                              const FaithSystem& faith) {
     static const char* keys[Config::MAX_MIRACLE_SLOTS] = {"Q", "E", "F"};
     const f32 S = 22.0f;   // slot size
-    // En tactil, la celda del HUD **es** el boton, asi que la posicion se toma de
-    // `Input::init_touch_layout` en vez de recalcularla aqui. Antes estaban en dos sitios
-    // y solo un comentario las mantenia iguales; en vertical, donde los botones bajan a la
-    // banda negra, esa duplicidad separaba el dibujo del hit-test (se veia la celda dentro
-    // del mundo y se pulsaba 160 unidades mas abajo).
-    const Input* tin = (ctx.input && ctx.input->touch_ui) ? ctx.input : nullptr;
-    for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++) {
-        f32 x = static_cast<f32>(Config::GAME_WIDTH) - 28.0f - i * 27.0f;
-        f32 y = static_cast<f32>(Config::GAME_HEIGHT) - 36.0f;
-        if (tin && (2 + i) < TOUCH_BUTTON_COUNT) {
-            // `enabled` manda en el DIBUJO y en el hit-test, el mismo contrato que la fila
-            // de accion. Durante la entrada del jefe el tactil se apaga entero, y una celda
-            // latiendo que no responde al dedo es peor que no pintar nada.
-            if (!tin->touch_buttons[2 + i].enabled) continue;
-            x = tin->touch_buttons[2 + i].rect.x;
-            y = tin->touch_buttons[2 + i].rect.y;
+    // En tactil la celda ES el boton, y desde 2026-10-03 es REDONDA y vive en el arco de
+    // alrededor de DASH (Input::init_touch_layout). Se pinta con el mismo dibujo que el
+    // resto de botones tactiles; lo de abajo es la celda cuadrada del PC, sin cambios.
+    if (ctx.input && ctx.input->touch_ui) {
+        const Input* in = ctx.input;
+        const f32 op = in->touch_opacity;
+        for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS && i < 3; i++) {
+            const TouchButton& b = in->touch_buttons[TOUCH_BTN_MIRACLE + i];
+            // `enabled` manda en el DIBUJO y en el hit-test. Durante la entrada del jefe el
+            // tactil se apaga entero, y un boton latiendo que no responde es peor que nada.
+            if (!b.enabled) continue;
+            const auto& slot = player.miracle_slots[i];
+            RoundButtonLook lk;
+            char cost[12] = "";
+            char shortname[24] = "";
+            if (!slot.is_empty()) {
+                const MiracleDef def = get_miracle_def(slot.miracle);
+                const bool lock_tier = def.tier > faith.get_max_miracle_tier();
+                const bool lock_cost = !lock_tier && player.miracle_cost(slot.miracle) > faith.current;
+                lk.own_icon  = Icon::miracle(static_cast<u32>(slot.miracle));
+                lk.tile_icon = miracle_icon(slot.miracle);
+                lk.locked    = lock_tier;
+                lk.ready     = slot.is_ready() && !lock_tier && !lock_cost;
+                if (!slot.is_ready() && def.cooldown > 0.0f) {
+                    lk.cd_frac = std::min(1.0f, slot.cooldown_remaining / def.cooldown);
+                    lk.cd_secs = slot.cooldown_remaining;
+                }
+                // Coste en fe en la chapa; si falta NIVEL, la fe que hay que alcanzar
+                snprintf(cost, sizeof(cost), "%.0f", lock_tier ? faith_required_for_tier(def.tier)
+                                                               : player.miracle_cost(slot.miracle));
+                lk.badge = cost;
+                lk.badge_orb = true;
+                lk.badge_col = (lock_tier || lock_cost) ? Color{240, 120, 100, 255} : Color{160, 210, 250, 255};
+                // El nombre corto (la PRIMERA palabra) dentro del boton: al quitar la chapa
+                // Q/E/F la celda se quedo muda y el usuario no supo que se tocaba.
+                const char* full = def.name;
+                size_t n = 0;
+                while (full[n] && full[n] != ' ' && n + 1 < sizeof(shortname)) { shortname[n] = full[n]; n++; }
+                shortname[n] = '\0';
+                lk.label = shortname;
+            }
+            draw_round_button(renderer, b, lk, ctx.tileset, ctx.time, op);
         }
+        return;
+    }
+    for (int i = 0; i < player.active_slot_count && i < Config::MAX_MIRACLE_SLOTS; i++) {
+        const f32 x = static_cast<f32>(Config::GAME_WIDTH) - 28.0f - i * 27.0f;
+        const f32 y = static_cast<f32>(Config::GAME_HEIGHT) - 36.0f;
 
         const auto& slot = player.miracle_slots[i];
         // Dos bloqueos distintos, y el jugador tiene que poder distinguirlos de un vistazo:
@@ -1100,41 +1287,12 @@ void HUD::draw_miracle_slots(Renderer& renderer, const Player& player, const HUD
         // Ready glow line
         if (ready) renderer.draw_rect({x, y + S - 1.0f, S, 1.0f}, {255, 220, 120, 200});
 
-        // Key hint badge under the slot. En tactil la celda ES el boton: la chapa con la
-        // tecla sobra y ademas cae fuera de la pantalla cuando los botones bajan a la banda.
+        // Key hint badge under the slot (solo PC: en tactil la celda es un boton redondo
+        // y lleva su nombre dentro, ver arriba).
         f32 kx = x + S * 0.5f, ky = y + S + 5.0f;
-        if (!tin) {
-            if (renderer.shadow_tex != TEXTURE_NONE)
-                renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
-            renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
-        } else if (!slot.is_empty()) {
-            // Al quitar la chapa Q/E/F en la pasada de Android la celda se quedo MUDA, y
-            // el usuario probo el APK y no supo como lanzar un milagro. DASH, USAR, ARMA y
-            // ORAR llevan etiqueta; estas tambien, en el mismo hueco donde iba la tecla.
-            // El nombre corto es la PRIMERA palabra —"Fuego" contra "Cuervos" es lo que
-            // distingue una celda de otra— y solo si CABE: `draw_text` no recorta, se sale
-            // por encima de la celda vecina. Se mide, no se estima (`wrap_text` trunca en
-            // silencio y esa trampa ya costo un rato en este proyecto).
-            const char* full = get_miracle_def(slot.miracle).name;
-            char shortname[24];
-            size_t n = 0;
-            while (full[n] && full[n] != ' ' && n + 1 < sizeof(shortname)) { shortname[n] = full[n]; n++; }
-            shortname[n] = '\0';
-
-            const f32 budget = S + 4.0f;      // 22 de celda + los 2 de aire a cada lado
-            f32 ls = 0.55f, lw = renderer.measure_text(shortname, ls);
-            if (lw > budget) { ls = 0.45f; lw = renderer.measure_text(shortname, ls); }
-            const char* label = shortname;
-            if (lw > budget) {
-                // No cabe ni encogido: una etiqueta generica, y solo en la primera celda.
-                // Repetir "MILAGRO" tres veces no anade nada y empasta la fila.
-                if (i != 0) label = nullptr;
-                else { label = tr("MILAGRO", "MIRACLE"); ls = 0.5f; lw = renderer.measure_text(label, ls); }
-            }
-            if (label)
-                renderer.draw_text(label, x + (S - lw) * 0.5f, ky - 3.0f,
-                                   ready ? Color{250, 225, 165, 235} : Color{205, 190, 160, 175}, ls);
-        }
+        if (renderer.shadow_tex != TEXTURE_NONE)
+            renderer.draw_sprite_rect(renderer.shadow_tex, {0, 0, 64, 32}, {kx - 6, ky - 5, 12, 10}, {0, 0, 0, 180});
+        renderer.draw_text(keys[i], kx - renderer.measure_text(keys[i], 0.7f) * 0.5f, ky - 3.0f, {235, 225, 200, 255}, 0.7f);
 
         // Sobre el slot: normalmente el coste en fe; si falta nivel, la fe que hay que
         // alcanzar precedida de "+", que es la informacion que de verdad hace falta.
@@ -2155,7 +2313,10 @@ void HUD::draw_message(Renderer& renderer, const HUDContext& ctx) {
         if (tw <= 300.0f) break;
     }
     const f32 lh = 11.0f * scale;
-    f32 y = Config::GAME_HEIGHT - 44.0f - (count - 1) * lh;
+    // En tactil sube: abajo a la derecha esta el grupo de botones, que se pinta encima de
+    // todo, y un aviso largo quedaba con la cola tapada por USAR.
+    const bool touch = ctx.input && ctx.input->touch_ui;
+    f32 y = Config::GAME_HEIGHT - (touch ? 64.0f : 44.0f) - (count - 1) * lh;
     renderer.draw_rect({(Config::GAME_WIDTH - tw) * 0.5f - 4, y - 2, tw + 8, 12 + (count - 1) * lh},
                        {0, 0, 0, static_cast<u8>(140 * a)});
     for (int i = 0; i < count; i++)
