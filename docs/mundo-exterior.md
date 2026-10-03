@@ -343,6 +343,43 @@ Reproducibles bit a bit (dos pasadas identicas linea a linea). Las anteriores (0
 no son comparables. Ojo con el tramo del jefe: `killall` deja la sala por limpia, asi
 que el bot **se sale de la arena** por la abertura y el tramo se corta solo.
 
+### El suelo se HORNEA por trozos (2026-10-03)
+
+Peticion del usuario: «mejora todo, graficos e imagenes, a un nivel ultra profesional». Lo
+que mas se ve del juego era una rejilla: cuatro variantes de baldosa sorteadas por tile (en el
+Carmelo, Jerico, Sunem y Samaria un damero de losas grises), la senda hecha de manchas
+repetidas y las charcas en escalera. El defecto era la CELDA, y no se arreglaba pintando
+mejor la celda: `game/ground.h/.cpp` genera el suelo por codigo en texturas de TROZO.
+
+- **Trozo = 16x16 tiles (256 unidades) a 2 px por unidad = 512x512 px.** Doce ranuras de 1 MB
+  que se reciclan (LRU). Los trozos visibles se hacen en el acto (al entrar en una zona son
+  1-4, ~20-50 ms cada uno en el contenedor de pruebas); los de alrededor se rellenan **por
+  filas con un presupuesto de 3 ms por frame** (`prefetch_step`), asi que cruzar de trozo no
+  da tirones. Cada trozo lleva la FIRMA de sus tiles + 3 de margen: si una charca se seca
+  (Sanar Aguas) o se abre una grieta, ese trozo se rehace solo.
+- **Campos suaves, no celdas**: por tile se ponen mascaras (senda, agua, agua honda, hueco,
+  solido, hierba, muro), se emborronan a nivel de tile y se muestrean con bilineal + ruido. El
+  umbral 0,5 cae en la linea entre tiles, asi que la orilla se curva SIN dejar de seguir la
+  colision. Encima: agua de clara a honda con arena mojada y espuma, senda con borde levantado
+  y rodadas, hueco con labio, sombra de contacto al pie de lo solido, vados con piedras planas.
+- **Un estilo y una paleta por capitulo** (`look_for`): tierra (Querit, la aldea pobre), arena
+  con ondas (Sarepta), roca con grietas a dos escalas (Carmelo, Horeb), pradera (El Llamado,
+  el Jordan) y losas irregulares tipo Voronoi (Jerico, Sunem, Samaria e interiores). En las
+  ciudades las losas van donde hay muros cerca y en manchas, con tierra batida entre medias:
+  una zona enlosada entera era un tablero.
+- **Lo que sigue saliendo del tileset**, encima del suelo horneado: muros y acantilados del
+  borde, puente, hierba alta, decorados y todos los props. Sin tileset no se hornea nada y
+  `render_ground` pinta las celdas de siempre (el camino viejo sigue entero detras de `baked`).
+- El agua es una textura ESTATICA; lo que se mueve son destellos por tile de agua visible
+  (`shadow_tex` estirada, fase por tile).
+- Log: `Suelo: trozo X,Y horneado en N ms` (los cuatro primeros y los que pasan de 40 ms).
+- **Trampa de guion que salio aqui**: un frame lento corre varios pasos de update seguidos, y
+  un `shot` sin `wait` detras deja que el comando siguiente (`chapter N`) se ejecute ANTES del
+  render: la captura sale con el capitulo siguiente. Es la regla de siempre (`wait 0.1` tras
+  cada `shot`), solo que con el horneado se nota mas.
+
+Guiones: `mapas_check`, `secretos_check` e `interiores_check` pasan sus gates.
+
 ### Deuda visual del exterior (2026-08-26)
 
 Cinco defectos que **solo se ven desde que la sala mide cuatro pantallas**, y ninguno era un

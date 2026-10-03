@@ -3,6 +3,7 @@
 // =============================================================================
 
 #include "game/rooms.h"
+#include "game/ground.h"
 #include "game/events.h"
 #include "render/renderer.h"
 #include <cstring>
@@ -1124,6 +1125,10 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
     const int water_frame = static_cast<int>(time * 2.0f);
     int x_lo, x_hi, y_lo, y_hi;
     view_range(*this, view, x_lo, x_hi, y_lo, y_hi);
+    // Suelo horneado por trozos (game/ground.h, 2026-10-03): tierra, senda, agua, orillas y
+    // huecos salen de una textura continua y ya no de celdas. Lo que queda aqui encima son
+    // los muros, el puente, la hierba alta y los decorados.
+    const bool baked = textured && ground_draw_baked(renderer, *this, view, time);
 
     for (int y = y_lo; y <= y_hi; y++) {
         for (int x = x_lo; x <= x_hi; x++) {
@@ -1149,7 +1154,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
             bool border_wall = (t == TileType::Wall) && (x == 0 || x == tiles_w - 1 || y == 0 || y == tiles_h - 1);
             if (!border_wall && !is_water_like(t) && t != TileType::Pit) {
                 TileSprite fs = static_cast<TileSprite>(static_cast<u32>(biome.floor_base) + (h % 4));
-                renderer.draw_sprite_rect(tileset, get_tile_src(fs), dst, biome.floor_tint);
+                if (!baked) renderer.draw_sprite_rect(tileset, get_tile_src(fs), dst, biome.floor_tint);
 
                 // Ground decals (tufts, pebbles, flowers, cracks...) on plain floor tiles only
                 if (t == TileType::Floor) {
@@ -1181,7 +1186,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
                 // Se hace al DIBUJAR y no al generar: un fleco de tiles de verdad ensancha
                 // la senda (probado, y la deja el doble de ancha) en vez de romperle el
                 // contorno, y ademas cambiaria por donde se puede andar.
-                if (t == TileType::Floor || t == TileType::TallGrass) {
+                if (!baked && (t == TileType::Floor || t == TileType::TallGrass)) {
                     const TileSprite ps = ((h >> 4) & 1) ? TileSprite::PathA : TileSprite::PathB;
                     auto spill = [&](int nx, int ny, int side) {
                         if (!in_bounds(nx, ny, tiles_w, tiles_h) || tiles[ny][nx] != TileType::Path) return;
@@ -1202,7 +1207,8 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
                 }
             }
 
-            switch (t) {
+            switch (baked && (t == TileType::Path || t == TileType::River || t == TileType::Water ||
+                              t == TileType::Ford || t == TileType::Pit) ? TileType::Floor : t) {
                 case TileType::Path: {
                     TileSprite ps = ((h >> 4) & 1) ? TileSprite::PathA : TileSprite::PathB;
                     renderer.draw_sprite_rect(tileset, get_tile_src(ps), dst, biome.floor_tint);
@@ -1271,7 +1277,7 @@ void Room::render_ground(Renderer& renderer, u32 tileset, f32 time, Rect view) c
             // land. Three cells authored for "land to the north" are rotated 90/180/270 to
             // cover the 12 blob-tiling cases, so the river reads as a continuous curve
             // instead of a staircase of squares.
-            if (is_water_like(t) && t != TileType::Bridge) {
+            if (!baked && is_water_like(t) && t != TileType::Bridge) {
                 auto land = [&](int nx, int ny) {
                     if (!in_bounds(nx, ny, tiles_w, tiles_h)) return false;   // outside the room: no bank on the border
                     return !is_water_like(tiles[ny][nx]);

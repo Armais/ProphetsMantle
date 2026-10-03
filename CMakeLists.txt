@@ -154,6 +154,7 @@ set(MANTLE_SOURCES
     src/game/rooms.cpp
     src/game/combat.cpp
     src/game/tutorial.cpp
+    src/game/ground.cpp
     src/ui/hud.cpp
     src/ui/menus.cpp
     src/ui/story.cpp
