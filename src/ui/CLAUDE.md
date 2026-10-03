@@ -488,7 +488,7 @@ El layout y por que esta en `src/input/CLAUDE.md` ("La pasada de móvil"). Lo de
 - `HUDContext::dash_cd` (la recarga del dash que falta, 0..1) la rellena el Engine desde
   `MovementComponent::dash_cooldown`: el HUD no ve el ECS por dentro.
 - **Opciones en tactil tiene 12 filas** (las cuatro de los controles: Tam. botones, Opacidad,
-  Zurdo, Ahorro bat., detras de Stick dcho.; `MenuSystem::is_touch_row`), y por eso
+  Zurdo, Ahorro bat., detras de Joystick de apuntar; `MenuSystem::is_touch_row`), y por eso
   `MAX_ROW_RECTS` sube a 14. En PC siguen siendo las de siempre. La ventana de 6 filas que se
   arrastra ya existia.
 - **Controles** (`render_controls`, tactil) describe el arco y dice que el tamaño y el zurdo

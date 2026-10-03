@@ -137,6 +137,11 @@ apunta desde el primer pixel**, y se dibuja en pantalla.
   convierte en stick. Verificado en el guion.
 - Usa la **Sensibilidad** del ajuste de usuario: divide el radio del joystick y el umbral
   de arrastre.
+- **Se llama "Joystick de apuntar"** ("Aim joystick") desde el 2026-10-03, decision del
+  usuario. Antes era "Stick dcho.", jerga de mando que no decia que hacia; se descarto
+  "Apuntado manual" porque apuntar a mano existe en TODAS las plataformas (es lo que hace la
+  Auto-mira en OFF, o arrastrar sin este ajuste) y el nombre tiene que decir lo que solo pasa
+  en tactil: que aparece un joystick en pantalla para apuntar.
 - **La fila de Opciones solo existe en tactil**, y por eso las filas de esa pantalla pasaron
   a montarse sobre una **tabla de ids** (`MenuSystem::SettingRow` + `settings_rows[]`) en
   vez de por indice fijo: sin ella, quitar una fila desplazaba el significado de todas las

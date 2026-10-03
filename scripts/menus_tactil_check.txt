@@ -22,7 +22,7 @@
 #             El canal entre columnas (x 154..166) es zona muerta a proposito.
 #   Opciones  ventana de 6 filas, hueco k -> y = 48 + k*21 (centros 52, 73, 94, 115, 136,
 #             157), placa de x 16 a 304. Con --touch las filas son 12 (Musica, Efectos,
-#             Auto-mira, Sensibilidad, Vibracion, Stick dcho., Tam. botones, Opacidad,
+#             Auto-mira, Sensibilidad, Vibracion, Joystick de apuntar, Tam. botones, Opacidad,
 #             Zurdo, Ahorro bat., Idioma, Volver — las cuatro de los controles tactiles
 #             desde 2026-10-03), asi que "Volver" (indice 11) solo se alcanza tras
 #             recorrer 6 pasos.

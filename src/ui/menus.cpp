@@ -565,7 +565,10 @@ void MenuSystem::render_settings(Renderer& renderer) {
             row == ROW_AIM    ? tr("Auto-mira", "Auto-aim") :
             row == ROW_SENS   ? tr("Sensibilidad", "Sensitivity") :
             row == ROW_RUMBLE ? tr("Vibración", "Rumble") :
-            row == ROW_RSTICK ? tr("Stick dcho.", "Right stick") :
+            // "Joystick de apuntar" y no "Stick dcho." (jerga de mando) ni "Apuntado manual"
+            // (eso existe en todas las plataformas y lo decide la Auto-mira): nombra lo que
+            // aparece en pantalla, que solo existe en tactil. Decision del usuario, 2026-10-03.
+            row == ROW_RSTICK ? tr("Joystick de apuntar", "Aim joystick") :
             row == ROW_TSIZE  ? tr("Tam. botones", "Button size") :
             row == ROW_TOPACITY ? tr("Opacidad", "Opacity") :
             row == ROW_LEFTY  ? tr("Zurdo", "Left-handed") :
