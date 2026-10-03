@@ -17,6 +17,11 @@ Reglas transversales a todo `src/`: `../CLAUDE.md`.
   trozos, y por eso los dos joysticks tactiles se dibujaban como cajas — que es como el
   tester los vio en el movil. La regla de `assets/` manda: se generan en `init`, no entran
   como PNG.
+- **`draw_panel` ajusta sus cortes a la rejilla de pixeles** (1/`RENDER_SCALE` de unidad,
+  2026-10-03). Un corte entre dos de los nueve trozos que cae a medio pixel lo pintan los
+  dos a medias con el filtrado lineal y queda una RAYA: salia en los botones de la derrota
+  (filas en x,5) y en las pestanas de El Santuario. Se arregla aqui una vez, no
+  redondeando en cada llamada.
 - Color palette: Elias=naranjas,rojos,dorados / Eliseo=azules,verdes,blancos / Baal=morados,negros,rojos oscuros / Entornos=ocres,beiges,piedra
 - **NO es pixel art, y el `nearest` que queda NO es estetica.** El GDD v1.0 decia "Pixel Art
   16-bit" y "nearest-neighbor scaling"; eso esta **superado** (decision del usuario,

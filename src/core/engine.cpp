@@ -3145,6 +3145,12 @@ void Engine::render_run_summary(f32 top) {
         const f32 pulse = a ? 0.5f + 0.5f * std::sin(world.time * 5.0f) : 0.0f;
         renderer.draw_text(next, PX + 10.0f, y + 15.5f,
                            a ? Color{255, static_cast<u8>(210 + 30 * pulse), 120, 255} : Color{200, 150, 130, 230}, 0.52f);
+        // Y su icono detras del nombre, el mismo que vas a ver en El Santuario (si cabe)
+        const MetaUpgrade* shown = a ? a : p;
+        const f32 ix = PX + 10.0f + renderer.measure_text(next, 0.52f) + 2.0f;
+        if (shown && ix + 8.0f <= PX + PW - 6.0f)
+            draw_icon(renderer, shown->icon, {ix, y + 13.5f, 8.0f, 8.0f},
+                      a ? Color::white() : Color{170, 160, 150, 220});
     }
 }
 
@@ -3215,24 +3221,31 @@ void Engine::render_equipment() {
     renderer.draw_text(tr("DONES DEL SANTUARIO", "SANCTUARY GIFTS"), LX, y, {240, 215, 150, 230}, 0.55f);
     y += 8.0f;
     bool any_gift = false;
-    auto gift = [&](const char* txt) { renderer.draw_text(txt, LX, y, {215, 205, 190, 235}, 0.52f); y += 6.5f; any_gift = true; };
+    // Cada don con el icono de su mejora: el mismo que se compro en El Santuario
+    auto gift = [&](u32 meta_id, const char* txt) {
+        const MetaUpgrade* u = progression.get(meta_id);
+        const bool icon = u && draw_icon(renderer, u->icon, {LX, y - 1.0f, 7.0f, 7.0f});
+        renderer.draw_text(txt, icon ? LX + 9.0f : LX, y, {215, 205, 190, 235}, 0.52f);
+        y += 7.0f;
+        any_gift = true;
+    };
     if (progression.is_unlocked(Meta::ALIENTO)) {
-        snprintf(v, sizeof(v), tr("Aliento de Vida: %d", "Breath of Life: %d"), revives_left); gift(v);
+        snprintf(v, sizeof(v), tr("Aliento de Vida: %d", "Breath of Life: %d"), revives_left); gift(Meta::ALIENTO, v);
     }
     if (progression.is_unlocked(Meta::SUERTES)) {
-        snprintf(v, sizeof(v), tr("Echar Suertes: %d", "Casting Lots: %d"), rerolls_left); gift(v);
+        snprintf(v, sizeof(v), tr("Echar Suertes: %d", "Casting Lots: %d"), rerolls_left); gift(Meta::SUERTES, v);
     }
     if (progression.is_unlocked(Meta::ALTAR)) {
-        snprintf(v, sizeof(v), tr("Altar Portátil: %d", "Portable Altar: %d"), prayers_left); gift(v);
+        snprintf(v, sizeof(v), tr("Altar Portátil: %d", "Portable Altar: %d"), prayers_left); gift(Meta::ALTAR, v);
     }
     for (u32 id : {Meta::VIDA, Meta::DANO, Meta::VELOCIDAD, Meta::DIEZMO}) {
         const MetaUpgrade* u = progression.get(id);
         if (!u || u->rank <= 0) continue;
         char t[64];
         meta_rank_text(*u, u->rank, t, sizeof(t));
-        gift(t);
+        gift(id, t);
     }
-    if (!any_gift) gift(tr("Ninguno: El Santuario espera", "None yet: the Sanctuary awaits"));
+    if (!any_gift) gift(Meta::COUNT, tr("Ninguno: El Santuario espera", "None yet: the Sanctuary awaits"));
 
     // --- Columna derecha: la alforja y los objetos -----------------------------------
     const f32 RX = 128.0f, RW = W - RX - 8.0f;

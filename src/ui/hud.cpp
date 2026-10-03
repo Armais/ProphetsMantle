@@ -822,11 +822,12 @@ void HUD::draw_belt(Renderer& renderer, const Player& player, const HUDContext& 
         renderer.draw_text(tr("Alforja", "Satchel"), last.right() + 4.0f, last.y + 4.0f, {130, 122, 112, 170}, 0.5f);
     }
     // Altar Portatil: oraciones sin altar que quedan, con su tecla, en la misma columna que
-    // el nombre del consumible y justo encima (en tactil lo dice el boton ORAR)
+    // el nombre del consumible y justo encima (en tactil lo dice el boton ORAR). El icono es
+    // el del don en El Santuario, no el del milagro Altar Consumido.
     if (ctx.prayers > 0 && !touch) {
         const Rect last = belt_cell_rect(cap - 1, touch);
         const Rect r = {last.right() + 4.0f, last.y - 6.0f, 7.0f, 7.0f};
-        if (!draw_icon(renderer, Icon::miracle(4), r) && ctx.tileset != TEXTURE_NONE)
+        if (!draw_icon(renderer, Icon::SANCT_ALTAR, r) && ctx.tileset != TEXTURE_NONE)
             renderer.draw_sprite_rect(ctx.tileset, get_tile_src(TileSprite::AltarGod), r);
         char lab[32];
         snprintf(lab, sizeof(lab), tr("[P] Orar x%d", "[P] Pray x%d"), ctx.prayers);

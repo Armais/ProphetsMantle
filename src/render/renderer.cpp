@@ -310,8 +310,16 @@ void Renderer::draw_panel(Rect dst, Color tint, f32 corner) {
     const f32 c  = std::min(corner, std::min(dst.w, dst.h) * 0.5f);
     // La textura es cuadrada, asi que las tres franjas valen para los dos ejes.
     const f32 so[3] = {0.0f, tc, ts - tc}, ss[3] = {tc, ts - 2.0f * tc, tc};
-    const f32 dx[3] = {dst.x, dst.x + c, dst.x + dst.w - c}, dw[3] = {c, dst.w - 2.0f * c, c};
-    const f32 dy[3] = {dst.y, dst.y + c, dst.y + dst.h - c}, dh[3] = {c, dst.h - 2.0f * c, c};
+    // Los cortes entre trozos van a la REJILLA de pixeles del render (1/RENDER_SCALE de
+    // unidad). Un corte a medio pixel lo pintan los dos trozos a medias con el filtrado
+    // lineal y queda una raya: salia en los botones de la derrota (filas a x,5) y en las
+    // pestanas de El Santuario, que se arreglaron a mano antes de saber que era esto.
+    const f32 g = static_cast<f32>(Config::RENDER_SCALE);
+    auto snap = [g](f32 v) { return std::round(v * g) / g; };
+    const f32 xs[4] = {snap(dst.x), snap(dst.x + c), snap(dst.x + dst.w - c), snap(dst.x + dst.w)};
+    const f32 ys[4] = {snap(dst.y), snap(dst.y + c), snap(dst.y + dst.h - c), snap(dst.y + dst.h)};
+    const f32 dx[3] = {xs[0], xs[1], xs[2]}, dw[3] = {xs[1] - xs[0], xs[2] - xs[1], xs[3] - xs[2]};
+    const f32 dy[3] = {ys[0], ys[1], ys[2]}, dh[3] = {ys[1] - ys[0], ys[2] - ys[1], ys[3] - ys[2]};
     for (int j = 0; j < 3; j++)
         for (int i = 0; i < 3; i++)
             if (dw[i] > 0.01f && dh[j] > 0.01f)
