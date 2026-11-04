@@ -28,7 +28,7 @@ Written from scratch in C++17 on SDL3, with no game engine.
   (fire burns brush and opens cracks, healing the waters dries pools, open eyes reveal
   what is hidden).
 - **Faith** is the core resource: it powers the 10 miracles and scales across 6 tiers.
-- **38 encounters** drawn from the biblical text, 22 items, 18 achievements, and a
+- **39 encounters** drawn from the biblical text, 22 items, 18 achievements, and a
   meta-progression hub (El Santuario) with 21 ranked upgrades.
 - Scripture is quoted verbatim from public-domain translations: Reina-Valera 1909 in
   Spanish, King James Version in English. Enemies and events are checked
@@ -47,8 +47,10 @@ Written from scratch in C++17 on SDL3, with no game engine.
   a headless Linux build runs the test scripts in containers.
 - **Every asset is generated inside the repo.** Characters and props are 3D models
   rendered to sprite sheets by a Blender Python pipeline (`tools/blender`). The 47 music
-  tracks, the sound effects and the voices are synthesized (Sonic Pi and
-  `tools/audio`). The only third-party asset is the Lilita One font (SIL OFL).
+  tracks are original scores written as code and rendered by a synthetic orchestra in
+  numpy/scipy (`tools/audio/orquesta`), without a single sample; the sound effects and
+  the voices are synthesized with numpy too. The only third-party asset is the Lilita One
+  font (SIL OFL).
 - **Scripted autoplay for testing.** `--script` drives the game from a text file
   (move, attack, cast, jump to a chapter, spawn enemies, simulate touches, take
   screenshots), and each script's checks are read from the log. Over 50 scripts cover regressions, game feel,
@@ -104,7 +106,7 @@ Escrito desde cero en C++17 sobre SDL3, sin motor de juego.
   matorral, y los milagros sirven también de llave (el fuego quema matorral y abre grietas,
   sanar las aguas seca charcas, abrir los ojos revela lo oculto).
 - **La fe** es el recurso central: alimenta los 10 milagros y escala en 6 niveles.
-- **38 encuentros** sacados del texto bíblico, 22 objetos, 18 logros y un lugar de
+- **39 encuentros** sacados del texto bíblico, 22 objetos, 18 logros y un lugar de
   meta-progreso (El Santuario) con 21 mejoras por rangos.
 - Las citas bíblicas van literales y salen de traducciones de dominio público: la
   Reina-Valera 1909 en español y la King James en inglés. Enemigos y sucesos se
@@ -123,8 +125,10 @@ Escrito desde cero en C++17 sobre SDL3, sin motor de juego.
   arm64; una build de Linux sin pantalla corre los guiones de prueba en contenedores.
 - **Todos los assets se generan dentro del repo.** Personajes y objetos son modelos 3D
   que un pipeline de Blender en Python renderiza a hojas de sprites (`tools/blender`). Las
-  47 pistas de música, los efectos y las voces son síntesis propia (Sonic Pi y
-  `tools/audio`). El único asset de terceros es la fuente Lilita One (SIL OFL).
+  47 pistas de música son partituras originales escritas como código y las interpreta una
+  orquesta sintética en numpy/scipy (`tools/audio/orquesta`), sin una sola muestra; los
+  efectos y las voces también son síntesis propia con numpy. El único asset de terceros es
+  la fuente Lilita One (SIL OFL).
 - **Autoplay por guion para las pruebas.** `--script` maneja el juego desde un fichero de
   texto (moverse, atacar, lanzar milagros, saltar a un capítulo, sembrar enemigos, simular
   toques, hacer capturas) y deja en el log las comprobaciones que tienen que pasar. Hay más
