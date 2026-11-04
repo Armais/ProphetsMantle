@@ -19,11 +19,14 @@ adjunta `android\app\build\outputs\apk\debug\app-debug.apk` como
 
 Lo que hay que saber antes de tocarlo:
 
-- **No hay `gh` CLI en esta maquina y no hace falta.** El script habla con la API REST
+- **El script no usa `gh`** (que si esta instalado desde 2026-10-23, `gh auth status` =
+  `Armais`, y sirve para lo demas). El script habla con la API REST
   y saca el token de `git credential fill` para `github.com`, que es la misma credencial
   con la que funciona `git push`. El token no se imprime ni se guarda.
-- **El repo es PRIVADO**: el release no publica el binario a nadie. Para descargarlo hay
-  que abrir el enlace en el movil con la sesion de GitHub iniciada; si no, da 404.
+- **El repo es PUBLICO desde 2026-11-04** (antes era privado): un release en
+  `ProphetsMantle` deja el APK descargable para cualquiera. Ese dia se borraron los 7
+  prereleases `apk-*` (los tags siguen) porque el usuario no quiere el juego descargable.
+  No lanzar el script contra este repo sin preguntarle por donde van ahora los APK.
 - **`*.apk` esta en `.gitignore` a proposito.** El APK son 68 MB (crecio con la musica de 2026-09-14): va como asset de un
   release, nunca commiteado al repo.
 - El tag lleva el sha de HEAD, asi que **dos builds del mismo commit chocan** (422 desde
