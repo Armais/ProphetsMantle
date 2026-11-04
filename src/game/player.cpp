@@ -898,7 +898,7 @@ void Player::cast_miracle(ECSWorld& world, FaithSystem& faith, MiracleID id) {
             break;
 
         case MiracleID::OjosAbiertos:
-            // "Jehova abrio los ojos del criado, y vio el monte lleno de carros de fuego"
+            // "Jehova abrio los ojos del mozo, y miro: y he aqui que el monte estaba lleno de carros de fuego"
             // (2 Reyes 6:17): el mapa entero del capitulo queda a la vista para lo que
             // queda de capitulo, y durante la duracion se marca lo que hay en la sala.
             map_revealed = true;

@@ -7,7 +7,8 @@ se actualiza **al meter** el asset, no después.
 Estado a 2026-10-03: **no hay ningún asset de terceros, salvo la tipografía (OFL).** Todo
 el audio —música, efectos y voz— es síntesis propia, sin muestras de terceros; todo lo demás
 se genera con las herramientas del propio repositorio. El juego se puede distribuir
-comercialmente sin más trámite que respetar la OFL de la fuente.
+comercialmente sin más trámite que respetar la OFL de la fuente. El texto bíblico que va
+dentro del juego es de dominio público (ver «Texto bíblico», más abajo).
 
 ## Audio — 100 % generado por el proyecto
 
@@ -97,6 +98,26 @@ La OFL permite uso comercial e incrustación en el juego. Obliga a: (a) no vende
 fuente por separado, (b) mantener el aviso de licencia, y (c) no usar los Nombres
 Reservados de la fuente en una versión modificada. MANTLE la usa sin modificar, solo la
 hornea en atlas de glifos en tiempo de arranque (`Renderer::bake_atlas`).
+
+## Texto bíblico — de terceros, en el código (no en `assets/`)
+
+Las citas viven en `src/game/lore.h`, `src/game/scenes.h`, `src/game/events.h` y
+`src/systems/progression.cpp`, no en `assets/`, pero se distribuyen con el juego.
+
+| Idioma | Traducción | Derechos |
+|---|---|---|
+| Español | Reina-Valera 1909, con la ortografía al día («a» por «á», «fue» por «fué», Acab por Achâb, Nabot por Naboth) | Dominio público. Texto de referencia: eBible.org, `spaRV1909` |
+| Inglés | King James Version (1611) | Dominio público, salvo en el Reino Unido: allí los derechos son de la Corona y los administra Cambridge University Press |
+
+**Una cita nueva se copia de la 1909, nunca de la 1960.** La Reina-Valera 1960 tiene
+derechos (© Sociedades Bíblicas en América Latina, 1960; renovado © Sociedades Bíblicas
+Unidas, 1988) y el juego la citaba hasta el 2026-11-04. Ese día se cotejaron todas las citas
+con la 1909 y se cambiaron. Al poner la ortografía al día solo se tocan acentos y la
+grafía de los nombres; el orden y las palabras son los de 1909 («Ruégote», «Hete
+encontrado», «sajábanse»). Si la cita es larga se recorta, pero no se reescribe.
+
+El registro arcaizante del texto inventado no plantea ningún problema: imitar un estilo no
+copia ningún texto.
 
 ## Bibliotecas enlazadas (no son assets, pero cuentan para la distribución)
 

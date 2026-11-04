@@ -28,7 +28,7 @@
 //
 // VOZ: dos lineas por cartel. Arriba la instruccion en seco, abajo una linea corta en el
 // registro del juego. Ese sabor es INVENTADO y esta escrito a la manera de la
-// Reina-Valera 1960 (la regla de voz de `docs/encuentros-y-lore.md`), pero NO finge ser
+// Reina-Valera (la regla de voz de `docs/encuentros-y-lore.md`), pero NO finge ser
 // versiculo: sin comillas angulares y sin referencia, que en esta capa se reservan para
 // la cita de verdad.
 //

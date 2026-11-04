@@ -32,7 +32,7 @@
 // `Portrait::NONE`: usar la cara de Acab para su hijo seria mentir.
 //
 // VOZ (pasada del 2026-09-10, veredicto del usuario: «suenan a IA»): el registro es el de
-// la Reina-Valera 1960 tambien en lo inventado — vosotros, «he aqui», «senor mio», «tu
+// la Reina-Valera tambien en lo inventado — vosotros, «he aqui», «senor mio», «tu
 // siervo», «varon de Dios», «Vive Jehova» —, y cada personaje habla como en 1-2 Reyes, no
 // con sentencias. Una sola sentencia bimembre por ESCENA, ninguna caja cerrada con
 // aforismo salvo que sea versiculo, nadie narra lo que se ve en pantalla, ningun aparte
@@ -192,7 +192,7 @@ inline EventDef get_scene_line(int line) {
     // huir. Lo inventado se apoya en el libro: el altar y la imagen de Asera y la sidonia
     // Jezabel (16:30-33), Jezabel que ya mata profetas (18:4), los 450 de Baal (18:19),
     // Acab que lo busca por todos los reinos (18:10) y el manto de pelo (2 R 1:8). La
-    // sentencia de 17:1 va tal cual la RV1960, en la cuarta caja.
+    // sentencia de 17:1 va tal cual la RV1909, en la cuarta caja.
     // =========================================================================
     case Sc::AUD_REPRENDE: return {
         tr("Elías", "Elijah"),
@@ -226,7 +226,7 @@ inline EventDef get_scene_line(int line) {
         tr("Elías", "Elijah"),
         {tr("Tú dices que Baal da la lluvia. Pues que la dé.",
             "Thou sayest that Baal giveth the rain. Then let him give it."),
-         tr("Vive Jehová Dios de Israel, en cuya presencia estoy, que no habrá lluvia ni rocío en estos años, sino por mi palabra.",
+         tr("Vive Jehová Dios de Israel, delante del cual estoy, que no habrá lluvia ni rocío en estos años, sino por mi palabra.",
             "As the Lord God of Israel liveth, before whom I stand, there shall not be dew nor rain these years, but according to my word."),
          nullptr},
         {"1 Reyes 17:1", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
@@ -267,14 +267,14 @@ inline EventDef get_scene_line(int line) {
         tr("La palabra de Jehová", "The word of the Lord"),
         {tr("Levántate, vete a Sarepta de Sidón, y mora allí.",
             "Arise, get thee to Zarephath, which belongeth to Zidon, and dwell there."),
-         tr("He aquí yo he dado orden allí a una mujer viuda que te sustente.",
+         tr("He aquí yo he mandado allí a una mujer viuda que te sustente.",
             "Behold, I have commanded a widow woman there to sustain thee."),
          nullptr},
         {"1 Reyes 17:8-9", nullptr}, SC_NO_OPTIONS, Portrait::NONE
     };
     case Sc::AP2_ELIAS_AGUA: return {
         tr("Elías", "Elijah"),
-        {tr("Te ruego que me traigas un poco de agua en un vaso, para que beba.",
+        {tr("Ruégote que me traigas una poca de agua en un vaso, para que beba.",
             "Fetch me, I pray thee, a little water in a vessel, that I may drink."),
          nullptr, nullptr},
         {"1 Reyes 17:10", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
@@ -327,11 +327,11 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::AP3_ELIAS_TURBAS: return {
         tr("Elías", "Elijah"),
-        {tr("Yo no he turbado a Israel, sino tú y la casa de tu padre, dejando los mandamientos de Jehová y siguiendo a los baales.",
+        {tr("Yo no he alborotado a Israel, sino tú y la casa de tu padre, dejando los mandamientos de Jehová, y siguiendo a los Baales.",
             "I have not troubled Israel; but thou, and thy father's house, in that ye have forsaken the Lord, and followed Baalim."),
-         tr("Envía, pues, ahora y congrégame a todo Israel en el monte Carmelo.",
+         tr("Envía pues ahora y júntame a todo Israel en el monte de Carmelo.",
             "Now therefore send, and gather to me all Israel unto mount Carmel."),
-         tr("Y a los cuatrocientos cincuenta profetas de Baal, y a los cuatrocientos profetas de Asera, que comen de la mesa de Jezabel.",
+         tr("Y los cuatrocientos y cincuenta profetas de Baal, y los cuatrocientos profetas de los bosques, que comen de la mesa de Jezabel.",
             "And the four hundred and fifty prophets of Baal, and the four hundred prophets of the groves, which eat at Jezebel's table.")},
         {"1 Reyes 18:18-19", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
     };
@@ -346,7 +346,7 @@ inline EventDef get_scene_line(int line) {
         tr("Elías", "Elijah"),
         {tr("Invocad luego vosotros el nombre de vuestro dios, y yo invocaré el nombre de Jehová.",
             "And call ye on the name of your gods, and I will call on the name of the Lord."),
-         tr("Y el Dios que respondiere por medio de fuego, ése sea Dios.",
+         tr("Y el Dios que respondiere por fuego, ése sea Dios.",
             "And the God that answereth by fire, let him be God."),
          nullptr},
         {"1 Reyes 18:24", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
@@ -368,7 +368,7 @@ inline EventDef get_scene_line(int line) {
         tr("El mensajero de Jezabel", "Jezebel's messenger"),
         {tr("Palabra de la reina, tisbita. Acab le ha contado lo del Carmelo: el fuego, y los profetas degollados junto al Cisón.",
             "Word from the queen, Tishbite. Ahab hath told her of Carmel: the fire, and the prophets slain by the brook Kishon."),
-         tr("«Así me hagan los dioses, y aun me añadan, si mañana a estas horas yo no he puesto tu persona como la de uno de ellos».",
+         tr("«Así me hagan los dioses, y así me añadan, si mañana a estas horas yo no haya puesto tu persona como la de uno de ellos».",
             "«So let the gods do to me, and more also, if I make not thy life as the life of one of them by to morrow about this time»."),
          nullptr},
         {"1 Reyes 19:1-2", nullptr}, SC_NO_OPTIONS, Portrait::OFICIAL_REAL
@@ -480,7 +480,7 @@ inline EventDef get_scene_line(int line) {
     // =========================================================================
     case Sc::AP7_VIUDA: return {
         tr("La mujer del profeta", "The prophet's wife"),
-        {tr("Tu siervo mi marido ha muerto; y tú sabes que tu siervo era temeroso de Jehová.",
+        {tr("Tu siervo mi marido es muerto; y tú sabes que tu siervo era temeroso de Jehová.",
             "Thy servant my husband is dead; and thou knowest that thy servant did fear the Lord."),
          tr("Y ha venido el acreedor para tomarse dos hijos míos por siervos.",
             "And the creditor is come to take unto him my two sons to be bondmen."),
@@ -496,7 +496,7 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::AP7_VIUDA_ACEITE: return {
         tr("La mujer del profeta", "The prophet's wife"),
-        {tr("Tu sierva ninguna cosa tiene en casa, sino una vasija de aceite.",
+        {tr("Tu sierva ninguna cosa tiene en casa, sino una botija de aceite.",
             "Thine handmaid hath not any thing in the house, save a pot of oil."),
          nullptr, nullptr},
         {"2 Reyes 4:2", nullptr}, SC_NO_OPTIONS, Portrait::MUJER_PROFETA
@@ -510,7 +510,7 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::AP7_ELISEO_VASIJAS: return {
         tr("Eliseo", "Elisha"),
-        {tr("Ve y pide para ti vasijas prestadas de todos tus vecinos, vasijas vacías, no pocas.",
+        {tr("Ve, y pide para ti vasos prestados de todos tus vecinos, vasos vacíos, no pocos.",
             "Go, borrow thee vessels abroad of all thy neighbours, even empty vessels; borrow not a few."),
          tr("Entra, y cierra la puerta tras ti y tras tus hijos; echa en todas las vasijas, y la que esté llena, ponla aparte.",
             "Go in, and shut the door upon thee and upon thy sons; pour out into all those vessels, and set aside that which is full."),
@@ -526,7 +526,7 @@ inline EventDef get_scene_line(int line) {
     // =========================================================================
     case Sc::AP8_SUNAMITA_APOSENTO: return {
         tr("La sunamita", "The Shunammite"),
-        {tr("Yo entiendo que este que siempre pasa por nuestra casa es varón santo de Dios.",
+        {tr("Yo entiendo que este que siempre pasa por nuestra casa, es varón de Dios santo.",
             "I perceive that this is an holy man of God, which passeth by us continually."),
          tr("Te hemos hecho un pequeño aposento de paredes, con cama, mesa, silla y candelero, para cuando vinieres a nosotros.",
             "We have made thee a little chamber on the wall, with a bed, a table, a stool and a candlestick, for when thou comest to us."),
@@ -580,9 +580,9 @@ inline EventDef get_scene_line(int line) {
     // =========================================================================
     case Sc::AP9_JORAM_CARTA: return {
         tr("Joram, rey de Israel", "Jehoram, king of Israel"),
-        {tr("«Sabe que te envío a Naamán mi siervo, para que lo sanes de su lepra». Con el sello de Ben-adad, rey de Siria.",
+        {tr("«Sabe por ellas que yo envío a ti mi siervo Naamán, para que lo sanes de su lepra». Con el sello de Ben-adad, rey de Siria.",
             "«I have sent Naaman my servant to thee, that thou mayest recover him of his leprosy». Under the seal of Ben-hadad, king of Syria."),
-         tr("¿Soy yo Dios, que mate y dé vida? Considerad, pues, y ved cómo busca ocasión contra mí.",
+         tr("¿Soy yo Dios, que mate y dé vida? Considerad ahora, y ved cómo busca ocasión contra mí.",
             "Am I God, to kill and to make alive? Consider, I pray you, and see how he seeketh a quarrel against me."),
          nullptr},
         {"2 Reyes 5:6-7", nullptr}, SC_NO_OPTIONS, Portrait::NONE
@@ -755,7 +755,7 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::J3_ELIAS_BURLA: return {
         tr("Elías", "Elijah"),
-        {tr("Gritad en alta voz, porque dios es; quizá está meditando, o tiene algún trabajo, o va de camino.",
+        {tr("Gritad en alta voz, que dios es: quizá está conversando, o tiene algún empeño, o va de camino.",
             "Cry aloud: for he is a god; either he is talking, or he is pursuing, or he is in a journey."),
          tr("Tal vez duerme, y hay que despertarle.",
             "Or peradventure he sleepeth, and must be awaked."),
@@ -794,9 +794,9 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::J4_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("He sentido un vivo celo por Jehová Dios de los ejércitos; porque los hijos de Israel han dejado tu pacto, han derribado tus altares,",
+        {tr("Sentido he un vivo celo por Jehová Dios de los ejércitos; porque los hijos de Israel han dejado tu alianza, han derribado tus altares,",
             "I have been very jealous for the Lord God of hosts: for the children of Israel have forsaken thy covenant, thrown down thine altars,"),
-         tr("y han matado a espada a tus profetas; y sólo yo he quedado, y me buscan para quitarme la vida.",
+         tr("y han muerto a cuchillo tus profetas; y yo solo he quedado, y me buscan para quitarme la vida.",
             "and slain thy prophets with the sword; and I, even I only, am left; and they seek my life, to take it away."),
          nullptr},
         {"1 Reyes 19:10", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
@@ -831,9 +831,9 @@ inline EventDef get_scene_line(int line) {
     };
     case Sc::J5_ELIAS: return {
         tr("Elías", "Elijah"),
-        {tr("Te he encontrado, porque te has vendido a hacer lo malo delante de Jehová.",
+        {tr("Hete encontrado, porque te has vendido a mal hacer delante de Jehová.",
             "I have found thee: because thou hast sold thyself to work evil in the sight of the Lord."),
-         tr("He aquí yo traigo mal sobre ti, y barreré tu posteridad, y destruiré de Acab a todo varón en Israel.",
+         tr("He aquí yo traigo mal sobre ti, y barreré tu posteridad.",
             "Behold, I will bring evil upon thee, and will take away thy posterity, and will cut off from Ahab every male in Israel."),
          nullptr},
         {"1 Reyes 21:20-21", nullptr}, SC_NO_OPTIONS, Portrait::ELIAS
@@ -987,7 +987,7 @@ inline EventDef get_scene_line(int line) {
         tr("Eliseo", "Elisha"),
         {tr("¿Es tiempo de tomar plata, y de tomar vestidos, olivares, viñas, ovejas, bueyes, siervos y siervas?",
             "Is it a time to receive money, and to receive garments, and oliveyards, and vineyards, and sheep, and oxen, and menservants, and maidservants?"),
-         tr("Por tanto, la lepra de Naamán se te pegará a ti y a tu descendencia para siempre.",
+         tr("La lepra de Naamán se te pegará a ti, y a tu simiente para siempre.",
             "The leprosy therefore of Naaman shall cleave unto thee, and unto thy seed for ever."),
          nullptr},
         {"2 Reyes 5:26-27", nullptr}, SC_NO_OPTIONS, Portrait::ELISEO

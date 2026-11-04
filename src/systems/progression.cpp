@@ -35,7 +35,7 @@ void ProgressionSystem::init() {
     upgrades.push_back(make_upgrade(Meta::VIDA, C::Prophet, Icon::SANCT_CORAZON,
         tr("Provisión del Cuervo", "The Raven's Provision"),
         tr("Más vida máxima desde la primera sala.", "More max health from the first room."),
-        tr("«Los cuervos le traían pan y carne por la mañana y por la tarde.»",
+        tr("«Los cuervos le traían pan y carne por la mañana, y pan y carne a la tarde.»",
            "«The ravens brought him bread and meat in the morning and in the evening.»"),
         {40, 80, 130, 200, 300}));
     upgrades.push_back(make_upgrade(Meta::DANO, C::Prophet, Icon::SANCT_HOGUERA,
@@ -58,7 +58,7 @@ void ProgressionSystem::init() {
     upgrades.push_back(make_upgrade(Meta::ALIENTO, C::Gifts, Icon::SANCT_ALIENTO,
         tr("Aliento de Vida", "Breath of Life"),
         tr("Al caer, te levantas con media vida en vez de morir.", "When you fall, you rise with half your health instead of dying."),
-        tr("«El alma del niño volvió a él, y revivió.»", "«The soul of the child came into him again, and he revived.»"),
+        tr("«El alma del niño volvió a sus entrañas, y revivió.»", "«The soul of the child came into him again, and he revived.»"),
         {180, 420}));
     upgrades.push_back(make_upgrade(Meta::PRIMICIAS, C::Gifts, Icon::SANCT_PRIMICIAS,
         tr("Primicias", "Firstfruits"),
@@ -68,12 +68,12 @@ void ProgressionSystem::init() {
     upgrades.push_back(make_upgrade(Meta::SUERTES, C::Gifts, Icon::SANCT_SUERTES,
         tr("Echar Suertes", "Casting Lots"),
         tr("Ante tres cartas que no te sirven, pides otras tres.", "Facing three cards you don't want, ask for three more."),
-        tr("«La suerte se echa en el regazo; mas de Jehová es la decisión.»", "«The lot is cast into the lap; but the decision is the Lord's.»"),
+        tr("«La suerte se echa en el seno: mas de Jehová es el juicio de ella.»", "«The lot is cast into the lap; but the decision is the Lord's.»"),
         {70, 150, 260}));
     upgrades.push_back(make_upgrade(Meta::ALFORJA, C::Gifts, Icon::SANCT_ALFORJA,
         tr("Alforja Ancha", "Wide Satchel"),
         tr("Más huecos en la alforja para llevar consumibles.", "More satchel slots to carry consumables."),
-        tr("«Ciñe tus lomos y toma esta redoma en tu mano.»", "«Gird up thy loins, and take this box in thine hand.»"),
+        tr("«Ciñe tus lomos, y toma esta alcuza de aceite en tu mano.»", "«Gird up thy loins, and take this box in thine hand.»"),
         {90, 200}));
     upgrades.push_back(make_upgrade(Meta::TINAJA, C::Gifts, Icon::SANCT_TINAJA,
         tr("La Tinaja de Sarepta", "The Jar of Zarephath"),

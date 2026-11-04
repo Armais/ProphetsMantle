@@ -214,7 +214,7 @@ inline EventDef get_event_def(int id) {
     };
     case Ev::HIJO_DE_LA_VIUDA: return {
         tr("El hijo de la viuda", "The widow's son"),
-        {tr("«¿Qué tengo yo contigo, varón de Dios? ¿Has venido a matar a mi hijo?».", "«What have I to do with thee, thou man of God? Art thou come to slay my son?»."),
+        {tr("«¿Qué tengo yo contigo, varón de Dios? ¿Has venido a mí para hacerme morir mi hijo?».", "«What have I to do with thee, thou man of God? Art thou come to slay my son?»."),
          tr("El niño no respira. La madre te lo pone en los brazos y te mira.", "The child does not breathe. The mother lays him in your arms and looks at you."),
          tr("Subes al aposento alto. Nadie ha hecho nunca lo que vas a intentar.", "You carry him to the upper chamber. No one has ever done what you are about to try.")},
         {"1 Reyes 17:17-24", nullptr},
@@ -232,7 +232,7 @@ inline EventDef get_event_def(int id) {
         tr("El altar del Carmelo", "The altar on Carmel"),
         {tr("Doce piedras, una por cada tribu. La leña está puesta y el buey encima.", "Twelve stones, one for each tribe. The wood is laid and the bullock upon it."),
          tr("Todo Israel mira. Los profetas de Baal llevan medio día gritando en vano.", "All Israel is watching. Baal's prophets have shouted in vain half a day."),
-         tr("«Llenad cuatro cántaros de agua, y derramadlos sobre el holocausto».", "«Fill four barrels with water, and pour it on the burnt sacrifice».")},
+         tr("«Henchid cuatro cántaros de agua, y derramadla sobre el holocausto».", "«Fill four barrels with water, and pour it on the burnt sacrifice».")},
         {"1 Reyes 18:33", nullptr},
         {{tr("Verter doce cántaros", "Pour twelve barrels"),
           tr("El agua corre y llena la zanja. Cuando caiga el fuego, nadie podrá dudar.", "The water runs and fills the trench. When the fire falls, no one can doubt.")},
@@ -245,7 +245,7 @@ inline EventDef get_event_def(int id) {
     // profetas que sigue escondiendo (18:3-4, 13).
     case Ev::ABDIAS: return {
         tr("Abdías, mayordomo del rey", "Obadiah, the king's steward"),
-        {tr("«Yo temo a Jehová desde mi juventud. Cuando Jezabel mataba a los profetas, escondí a cien en dos cuevas, y los sustenté con pan y agua».", "«I fear the Lord from my youth. When Jezebel slew the prophets, I hid an hundred in two caves, and fed them with bread and water»."),
+        {tr("«Tu siervo teme a Jehová desde su mocedad. Cuando Jezabel mataba a los profetas de Jehová, escondí cien varones de los profetas de cincuenta en cincuenta en cuevas, y los mantuve a pan y agua».", "«I fear the Lord from my youth. When Jezebel slew the prophets, I hid an hundred in two caves, and fed them with bread and water»."),
          tr("«Siguen allí, señor mío: cincuenta y cincuenta, sin ver el sol. ¿Qué hago hoy con ellos?».", "«They are there yet, my lord: fifty and fifty, seeing no sun. What shall I do with them to day?»."),
          nullptr},
         {"1 Reyes 18:3-4, 13", nullptr},
@@ -313,7 +313,7 @@ inline EventDef get_event_def(int id) {
         tr("Las tres unciones", "The three anointings"),
         {tr("«Vuelve por tu camino, por el desierto de Damasco.", "«Go, return on thy way to the wilderness of Damascus."),
          tr("Ungirás a Hazael por rey de Siria, y a Jehú por rey sobre Israel,", "Anoint Hazael to be king over Syria, and Jehu to be king over Israel,"),
-         tr("y a Eliseo hijo de Safat ungirás para que sea profeta en tu lugar».", "and Elisha the son of Shaphat shalt thou anoint to be prophet in thy room».")},
+         tr("y a Eliseo hijo de Safat, de Abelmehula, ungirás para que sea profeta en lugar de ti».", "and Elisha the son of Shaphat shalt thou anoint to be prophet in thy room».")},
         {"1 Reyes 19:15-16", nullptr},
         {{tr("Ungir a los tres", "Anoint all three"),
           tr("Pones aceite sobre dos reyes que aún no reinan y un profeta que aún ara. Lo que viene después ya no es tuyo.", "You pour oil on two kings who do not yet reign and a prophet still at the plough. What comes after is no longer yours.")},
@@ -356,7 +356,7 @@ inline EventDef get_event_def(int id) {
     // hoguera. Sin retrato la caja tiene 3 lineas de 280 u.
     case Ev::VINA_NABOT: return {
         tr("La palabra de Jehová", "The word of the Lord"),
-        {tr("«Levántate, desciende a encontrarte con Acab rey de Israel; he aquí él está en la viña de Nabot, a la cual ha descendido a tomar posesión».", "«Arise, go down to meet Ahab king of Israel; behold, he is in the vineyard of Naboth, whither he is gone down to possess it»."),
+        {tr("«Levántate, desciende a encontrarte con Acab rey de Israel; he aquí él está en la viña de Nabot, a la cual ha descendido para tomar posesión de ella».", "«Arise, go down to meet Ahab king of Israel; behold, he is in the vineyard of Naboth, whither he is gone down to possess it»."),
          tr("«Y le hablarás diciendo: Así ha dicho Jehová: ¿No mataste, y también has despojado?».", "«And thou shalt speak unto him, saying, Thus saith the Lord, Hast thou killed, and also taken possession?»."),
          tr("Es toda la palabra. Hay que bajar a decirla a la cara del rey, con la reina y la guardia al lado.", "That is the whole of the word. It must be carried down and said to the king's face, with the queen and the guard beside him.")},
         {"1 Reyes 21:17-19", nullptr},
@@ -383,8 +383,8 @@ inline EventDef get_event_def(int id) {
     // =========================================================================
     case Ev::AGUAS_JERICO: return {
         tr("Los hombres de Jericó", "The men of Jericho"),
-        {tr("«La situación de esta ciudad es buena, como mi señor ve.", "«The situation of this city is pleasant, as my lord seeth."),
-         tr("Mas las aguas son malas, y la tierra estéril».", "But the water is naught, and the ground barren»."),
+        {tr("«He aquí, el asiento de esta ciudad es bueno, como mi señor ve.", "«The situation of this city is pleasant, as my lord seeth."),
+         tr("Mas las aguas son malas, y la tierra enferma».", "But the water is naught, and the ground barren»."),
          tr("Te traen una vasija nueva, y sal dentro de ella.", "They bring you a new cruse, with salt in it.")},
         {"2 Reyes 2:19-20", nullptr},
         // El manantial NO se sana aqui: sanarlo es el jefe del capitulo (el Espiritu de
@@ -401,8 +401,8 @@ inline EventDef get_event_def(int id) {
     case Ev::CINCUENTA_BUSCAN: return {
         tr("Los cincuenta de Jericó", "The fifty of Jericho"),
         {tr("«El espíritu de Elías reposó sobre Eliseo». Los hijos de los profetas se inclinan hasta tierra.", "«The spirit of Elijah doth rest on Elisha». The sons of the prophets bow to the ground."),
-         tr("«Hay aquí cincuenta varones fuertes: que vayan y busquen a tu señor.", "«Behold, there be with thy servants fifty strong men: let them go and seek thy master."),
-         tr("Quizá lo ha levantado el Espíritu y lo ha echado en algún monte o en algún valle».", "Peradventure the Spirit hath taken him up, and cast him upon some mountain, or into some valley».")},
+         tr("«He aquí hay con tus siervos cincuenta varones fuertes: vayan ahora y busquen a tu señor.", "«Behold, there be with thy servants fifty strong men: let them go and seek thy master."),
+         tr("Quizá lo ha levantado el espíritu de Jehová, y lo ha echado en algún monte o en algún valle».", "Peradventure the Spirit hath taken him up, and cast him upon some mountain, or into some valley».")},
         {"2 Reyes 2:16-18", nullptr},
         {{tr("Ceder y dejarles buscar", "Yield, and let them search"),
           tr("Insisten hasta avergonzarte, y cedes. Tres días buscan por montes y valles. «¿No os dije que no fueseis?».", "They urge you till you are ashamed, and you yield. Three days they search hill and valley. «Did I not say unto you, Go not?».")},
@@ -419,7 +419,7 @@ inline EventDef get_event_def(int id) {
         {{tr("Seguir camino sin volverte", "Walk on without turning"),
           tr("Subes al monte Carmelo con la burla a la espalda. Que la lleve quien la ha dicho.", "You go up to mount Carmel with the mockery behind you. Let it stay with those who said it.")},
          {tr("Volverte y maldecirlos", "Turn back and curse them"),
-          tr("Los maldijiste en el nombre de Jehová. Y salieron dos osos del monte, y despedazaron de ellos a cuarenta y dos muchachos.", "You cursed them in the name of the Lord. And there came forth two she bears out of the wood, and tare forty and two children of them.")}},
+          tr("Los maldijiste en el nombre de Jehová. Y salieron dos osos del monte, y despedazaron de ellos cuarenta y dos muchachos.", "You cursed them in the name of the Lord. And there came forth two she bears out of the wood, and tare forty and two children of them.")}},
         Portrait::NONE
     };
     case Ev::HIEL_DE_JERICO: return {
@@ -457,8 +457,8 @@ inline EventDef get_event_def(int id) {
     case Ev::ZANJAS_MOAB: return {
         tr("El valle de las zanjas", "The valley of ditches"),
         {tr("Siete días de rodeo por el desierto de Edom, y no queda agua para el ejército ni para las bestias. Josafat pregunta si hay aquí profeta de Jehová.", "Seven days' march about the wilderness of Edom, and no water for the host nor for the cattle. Jehoshaphat asks if there be here a prophet of the Lord."),
-         tr("«Traedme ahora un tañedor». Y mientras el tañedor toca, la mano de Jehová viene sobre ti.", "«Bring me a minstrel». And as the minstrel plays, the hand of the Lord comes upon you."),
-         tr("«Haced en este valle muchos estanques. No veréis viento, ni veréis lluvia; pero este valle será lleno de agua».", "«Make this valley full of ditches. Ye shall not see wind, neither shall ye see rain; yet that valley shall be filled with water».")},
+         tr("«Ahora traedme un tañedor». Y mientras el tañedor toca, la mano de Jehová viene sobre ti.", "«Bring me a minstrel». And as the minstrel plays, the hand of the Lord comes upon you."),
+         tr("«Haced en este valle muchas acequias. No veréis viento, ni veréis lluvia, y este valle será lleno de agua».", "«Make this valley full of ditches. Ye shall not see wind, neither shall ye see rain; yet that valley shall be filled with water».")},
         {"2 Reyes 3:9-23", nullptr},
         {{tr("Cavar el valle entero", "Dig the whole valley"),
           tr("Cavan hasta la noche sin una nube encima. Al alba el valle está lleno, y rojo como sangre para los de Moab.", "They dig till night without a cloud above. At dawn the valley is full, and red as blood to the Moabites.")},
@@ -531,7 +531,7 @@ inline EventDef get_event_def(int id) {
         {{tr("Ir tú, detrás de ella", "Go yourself, after her"),
           tr("Te levantas y la sigues. El camino hasta Sunem se hace largo, y la puerta del aposento está cerrada.", "You arise and follow her. The way to Shunem is long, and the door of the chamber is shut.")},
          {tr("Mandar a Guiezi con el báculo", "Send Gehazi with the staff"),
-          tr("«Toma mi báculo, y ponlo sobre el rostro del niño». Volvió a tu encuentro: no hubo voz ni sentido.", "«Take my staff, and lay it upon the face of the child». He came back to meet you: there was neither voice nor hearing.")}},
+          tr("«Toma mi bordón en tu mano, y pondrás mi bordón sobre el rostro del niño». Volvió a tu encuentro: no hubo voz ni sentido.", "«Take my staff, and lay it upon the face of the child». He came back to meet you: there was neither voice nor hearing.")}},
         Portrait::SUNAMITA, Npc::SUNAMITA
     };
     case Ev::HACHA_QUE_FLOTA: return {
@@ -568,8 +568,8 @@ inline EventDef get_event_def(int id) {
     case Ev::NAAMAN_PUERTA: return {
         tr("Naamán, general de Siria", "Naaman, captain of Syria"),
         {tr("Está a tu puerta con sus caballos y sus carros, y no se ha bajado.", "He stands at your door with his horses and his chariots, and has not come down."),
-         tr("«He aquí, yo decía para mí: Saldrá él luego, e invocando el nombre de Jehová", "«Behold, I thought, He will surely come out to me, and call on the name of the Lord"),
-         tr("alzará su mano y tocará el lugar, y sanará la lepra».", "and strike his hand over the place, and recover the leper».")},
+         tr("«He aquí, yo decía para mí: Saldrá él luego, y estando en pie invocará el nombre de Jehová su Dios,", "«Behold, I thought, He will surely come out to me, and call on the name of the Lord"),
+         tr("y alzará su mano, y tocará el lugar, y sanará la lepra».", "and strike his hand over the place, and recover the leper».")},
         {"2 Reyes 5:11", nullptr},
         {{tr("Mandarle al Jordán", "Send him to the Jordan"),
           tr("Se zambulló siete veces, y su carne se volvió como la de un niño. Y tú con él.", "He dipped seven times, and his flesh came again like a child's. And yours with his.")},
@@ -597,7 +597,7 @@ inline EventDef get_event_def(int id) {
         tr("Naamán, limpio", "Naaman, made clean"),
         {tr("«He aquí, ahora conozco que no hay Dios en toda la tierra, sino en Israel». Vuelve del Jordán con piel de niño.", "«Behold, now I know that there is no God in all the earth, but in Israel». He comes back from the Jordan with the skin of a child."),
          tr("Te ofrece plata, oro y vestidos; y pide una carga de tierra de Israel, la de dos mulas, para no orar ya sobre otro suelo.", "He offers silver, gold and raiment; and asks two mules' burden of the earth of Israel, to pray on no other ground."),
-         tr("«En esto perdone Jehová a tu siervo: cuando mi señor entre en el templo de Rimón, apoyado en mi mano».", "«In this thing the Lord pardon thy servant: when my master goeth into the house of Rimmon, leaning on my hand».")},
+         tr("«En esto perdone Jehová a tu siervo: que cuando mi señor entrare en el templo de Rimón, y para adorar en él se apoyare sobre mi mano».", "«In this thing the Lord pardon thy servant: when my master goeth into the house of Rimmon, leaning on my hand».")},
         {"2 Reyes 5:15-19", nullptr},
         {{tr("«Ve en paz»", "«Go in peace»"),
           tr("Se lo dices como a un hombre nuevo. Carga su tierra y vuelve a Damasco sin quemar incienso a otro dios.", "You say it as to a new man. He loads his earth and returns to Damascus to burn incense to no other god.")},
@@ -709,7 +709,7 @@ inline EventDef get_event_def(int id) {
     };
     case Ev::ASC_BETEL: return {
         tr("Los hijos de los profetas", "The sons of the prophets"),
-        {tr("«¿Sabes que Jehová te quitará hoy a tu señor de sobre tu cabeza?».", "«Knowest thou that the Lord will take away thy master from thy head today?»."),
+        {tr("«¿Sabes cómo Jehová quitará hoy a tu señor de tu cabeza?».", "«Knowest thou that the Lord will take away thy master from thy head today?»."),
          tr("«Sí, yo lo sé; callad».", "«Yea, I know it; hold ye your peace»."),
          tr("Y otra vez: «Quédate ahora aquí, que Jehová me ha enviado a Jericó».", "And again: «Tarry here, I pray thee; for the Lord hath sent me to Jericho».")},
         {"2 Reyes 2:3-4", nullptr},
@@ -732,8 +732,8 @@ inline EventDef get_event_def(int id) {
         Portrait::NONE
     };
     case Ev::ASC_JORDAN: return {
-        tr("«Pide lo que quieras»", "«Ask what I shall do for thee»"),
-        {tr("«Pide lo que quieras que haga por ti, antes que yo sea quitado de ti».", "«Ask what I shall do for thee, before I be taken away from thee»."),
+        tr("«Pide lo que quieres»", "«Ask what I shall do for thee»"),
+        {tr("«Pide lo que quieres que haga por ti, antes que sea quitado de contigo».", "«Ask what I shall do for thee, before I be taken away from thee»."),
          tr("Se ha parado en medio del cauce seco, y espera tu respuesta.", "He has stopped in the midst of the dry channel, and waits for your answer."),
          nullptr},
         {"2 Reyes 2:9-10", nullptr},

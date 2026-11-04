@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// MANTLE - Lore biblico (1 y 2 Reyes, Reina-Valera 1960)
+// MANTLE - Lore biblico (1 y 2 Reyes, Reina-Valera 1909)
 // =============================================================================
 //
 // Tabla de datos pura: citas, narracion por capitulo y referencias por objeto,
@@ -11,8 +11,10 @@
 // Todo el texto es UTF-8 (MSVC necesita /utf-8, ver CMakeLists.txt) y solo usa
 // codepoints del charset horneado en render/renderer.h (GLYPH_EXTRA).
 //
-// Registro (decision del usuario, 2026-09-10): arcaizante, el de la Reina-Valera 1960
-// tambien en lo inventado; las citas, tal cual. Cada intro arranca DONDE TERMINA la
+// Registro (decision del usuario, 2026-09-10): arcaizante, el de la Reina-Valera,
+// tambien en lo inventado; las citas, tal cual y SIEMPRE de la Reina-Valera 1909, que es
+// dominio publico (2026-11-04: la 1960 tiene derechos, ver assets/CREDITS.md; las citas
+// se cotejaron una a una con el texto de eBible.org). Cada intro arranca DONDE TERMINA la
 // apertura guionizada de su capitulo (game/scenes.h) y no repite ni un versiculo ni un
 // hecho que la apertura acabe de jugar ni que el pozo (game/events.h) juegue despues.
 // La guia de estilo completa: docs/encuentros-y-lore.md.
@@ -66,7 +68,7 @@ inline ChapterLore get_chapter_lore(int chapter) {
             tr("Junto al arroyo callado, sin cuervos ya, Elías espera. La palabra no ha dicho todavía adónde ir.", "By the silent brook, the ravens gone, Elijah waiteth. The word hath not yet said whither to go.")
         };
         case 2: return {
-            {"1 Reyes 17:14", tr("La harina de la tinaja no escaseará, ni el aceite de la vasija disminuirá.", "The barrel of meal shall not waste, neither shall the cruse of oil fail.")},
+            {"1 Reyes 17:14", tr("La tinaja de la harina no escaseará, ni se disminuirá la botija del aceite.", "The barrel of meal shall not waste, neither shall the cruse of oil fail.")},
             // 17:8-11 los acaba de jugar la apertura (la palabra, el agua, el bocado de pan).
             // El punado de harina (17:12) es el pozo y no se adelanta. Estas dos lineas decian
             // antes lo que el jugador ACABA de ver en pantalla —la viuda con su hijo (la figura
@@ -95,7 +97,7 @@ inline ChapterLore get_chapter_lore(int chapter) {
             tr("«¡Jehová es el Dios!», dijo el pueblo sobre su rostro. Esa noche Elías está a la puerta de Jezreel, empapado.", "«The Lord, he is the God!», said the people upon their faces. That night Elijah is at the gate of Jezreel, drenched.")
         };
         case 4: return {
-            {"1 Reyes 19:9", tr("Y allí se metió en una cueva, donde pasó la noche.", "And he came thither unto a cave, and lodged there.")},
+            {"1 Reyes 19:9", tr("Y allí se metió en una cueva, donde tuvo la noche.", "And he came thither unto a cave, and lodged there.")},
             // El juramento de Jezabel (19:2) y la huida (19:3, «un dia de camino») son la
             // apertura; el enebro y los cuarenta dias (19:4-8) y el silbo apacible (19:11-12,
             // que era el versiculo de aqui y el resultado del pozo palabra por palabra) son
@@ -116,7 +118,7 @@ inline ChapterLore get_chapter_lore(int chapter) {
              tr("Hoy baja el rey a tomar posesión de ella.", "To day the king goeth down to take possession of it."),
              nullptr},
             tr("Enfrenta al rey y a la reina en el campo que robaron.", "Face the king and the queen in the field they stole."),
-            tr("«Donde lamieron los perros la sangre de Nabot, lamerán también tu sangre».", "«Where the dogs licked the blood of Naboth shall dogs lick thy blood».")
+            tr("«Donde lamieron los perros la sangre de Nabot, los perros lamerán también tu sangre».", "«Where the dogs licked the blood of Naboth shall dogs lick thy blood».")
         };
         case 6: return {
             {"2 Reyes 2:21", tr("Yo sané estas aguas, y no habrá más en ellas muerte ni enfermedad.", "I have healed these waters; there shall not be from thence any more death or barrenness.")},
@@ -130,7 +132,7 @@ inline ChapterLore get_chapter_lore(int chapter) {
             tr("Y fueron sanas las aguas hasta el día de hoy.", "So the waters were healed unto this day.")
         };
         case 7: return {
-            {"2 Reyes 4:3", tr("Pide para ti vasijas prestadas de todos tus vecinos; y no pidas pocas.", "Borrow thee vessels abroad of all thy neighbours; borrow not a few.")},
+            {"2 Reyes 4:3", tr("Pide para ti vasos prestados de todos tus vecinos, vasos vacíos, no pocos.", "Borrow thee vessels abroad of all thy neighbours; borrow not a few.")},
             // La suplica de la viuda (4:1-4) es la apertura; el derramamiento (4:5-6), el
             // pozo. Aqui: la viuda pidiendo vasijas, y lo que pasa lejos de esta aldea.
             {tr("La viuda va de puerta en puerta pidiendo vasijas prestadas, y no pide pocas.", "The widow goeth from door to door borrowing vessels, and she borroweth not a few."),
@@ -138,16 +140,16 @@ inline ChapterLore get_chapter_lore(int chapter) {
              tr("Mientras, la guerra de Moab sigue en el sur, y hay hambre en Gilgal.", "Meanwhile the war with Moab goeth on in the south, and there is a dearth in Gilgal."),
              nullptr},
             tr("Reúne vasijas. Que el aceite no se detenga.", "Gather vessels. Let the oil not stay."),
-            tr("«Vende el aceite y paga tus deudas; y tú y tus hijos vivid de lo que quede».", "«Sell the oil, and pay thy debt; and live thou and thy children of the rest».")
+            tr("«Vende el aceite, y paga a tus acreedores; y tú y tus hijos vivid de lo que quedare».", "«Sell the oil, and pay thy debt; and live thou and thy children of the rest».")
         };
         case 8: return {
-            {"2 Reyes 4:34", tr("Y se tendió sobre el niño, y el cuerpo del niño entró en calor.", "And he stretched himself upon the child; and the flesh of the child waxed warm.")},
+            {"2 Reyes 4:34", tr("Así se tendió sobre él, y calentose la carne del joven.", "And he stretched himself upon the child; and the flesh of the child waxed warm.")},
             // El aposento y la promesa (4:9-16) son la apertura. Aqui: el nino nace, crece y
             // muere (4:17-21). La madre en el Carmelo (4:25-30) es el pozo; el aposento
             // cerrado, el jefe; los siete estornudos, el outro.
-            {tr("Y la mujer concibió, y dio a luz un hijo el año siguiente, en el tiempo que Eliseo le había dicho.", "And the woman conceived, and bare a son at that season that Elisha had said unto her."),
-             tr("El niño creció. Y un día salió a su padre con los segadores, y dijo: «¡Ay, mi cabeza, mi cabeza!».", "The child grew. And one day he went out to his father to the reapers, and said: «My head, my head!»."),
-             tr("Murió al mediodía sobre las rodillas de su madre. Ella lo acostó en la cama del varón de Dios, y cerró la puerta.", "He died at noon upon his mother's knees. She laid him on the bed of the man of God, and shut the door."),
+            {tr("Mas la mujer concibió, y parió un hijo a aquel tiempo que Eliseo le había dicho.", "And the woman conceived, and bare a son at that season that Elisha had said unto her."),
+             tr("Y como el niño fue grande, aconteció que un día salió a su padre, a los segadores. Y dijo: «¡Mi cabeza, mi cabeza!».", "The child grew. And one day he went out to his father to the reapers, and said: «My head, my head!»."),
+             tr("Estuvo sentado sobre las rodillas de su madre hasta medio día, y muriose. Ella entonces subió, y púsolo sobre la cama del varón de Dios, y cerrándole la puerta, saliose.", "He died at noon upon his mother's knees. She laid him on the bed of the man of God, and shut the door."),
              nullptr},
             tr("«Déjala, porque su alma está en amargura».", "«Let her alone; for her soul is vexed within her»."),
             tr("El niño estornudó siete veces, y abrió sus ojos.", "The child sneezed seven times, and opened his eyes.")
@@ -167,9 +169,9 @@ inline ChapterLore get_chapter_lore(int chapter) {
             {"2 Reyes 6:16", tr("No tengas miedo, porque más son los que están con nosotros que los que están con ellos.", "Fear not: for they that be with us are more than they that be with them.")},
             // Los avisos al rey (6:9-10) y «a Dotan» son la apertura. Aqui: Ben-adad sabe al
             // fin quien avisa (6:12), manda mirar (6:13) y cerca la ciudad de noche (6:14).
-            {tr("«El profeta Eliseo está en Israel, y declara al rey las palabras que tú hablas en tu cámara más secreta».", "«Elisha, the prophet that is in Israel, telleth the king of Israel the words that thou speakest in thy bedchamber»."),
-             tr("«Id, y mirad dónde está, para que yo envíe a prenderlo». Y le fue dicho: «He aquí que él está en Dotán».", "«Go and spy where he is, that I may send and fetch him». And it was told him: «Behold, he is in Dothan»."),
-             tr("Entonces envió gente de a caballo, y carros, y un gran ejército; y vinieron de noche, y sitiaron la ciudad.", "Therefore sent he thither horses, and chariots, and a great host: and they came by night, and compassed the city about."),
+            {tr("«El profeta Eliseo está en Israel, el cual declara al rey de Israel las palabras que tú hablas en tu más secreta cámara».", "«Elisha, the prophet that is in Israel, telleth the king of Israel the words that thou speakest in thy bedchamber»."),
+             tr("«Id, y mirad dónde está, para que yo envíe a tomarlo». Y fuele dicho: «He aquí él está en Dotán».", "«Go and spy where he is, that I may send and fetch him». And it was told him: «Behold, he is in Dothan»."),
+             tr("Entonces envió el rey allá gente de a caballo, y carros, y un grande ejército, los cuales vinieron de noche, y cercaron la ciudad.", "Therefore sent he thither horses, and chariots, and a great host: and they came by night, and compassed the city about."),
              nullptr},
             tr("«Te ruego, Jehová, que abras sus ojos para que vea».", "«Lord, I pray thee, open his eyes that he may see»."),
             tr("Un estruendo de carros, y el campamento de Siria huyó al anochecer. Y un seah de flor de harina se vendió por un siclo a la puerta de Samaria.", "A noise of chariots, and the host of Syria fled in the twilight. And a measure of fine flour was sold for a shekel in the gate of Samaria.")
@@ -219,7 +221,7 @@ inline PrologueScene get_prologue_scene(int i) {
             tr("Hizo lo malo ante los ojos del Señor, más que todos los reyes antes de él.", "He did evil in the sight of the Lord, more than all the kings before him."),
             nullptr}};
         case 2: return {"1 Reyes 16:31-32", {
-            tr("Tomó por mujer a Jezabel, hija del rey de los sidonios.", "He took to wife Jezebel, daughter of the king of the Sidonians."),
+            tr("Tomó por mujer a Jezabel hija de Etbaal, rey de los sidonios.", "He took to wife Jezebel, daughter of the king of the Sidonians."),
             tr("Con ella entró Baal en Israel: templo, altar, y una imagen en la casa del rey.", "With her Baal entered Israel: temple, altar, and an image in the king's house."),
             nullptr}};
         case 3: return {"1 Reyes 18:4", {
@@ -231,8 +233,8 @@ inline PrologueScene get_prologue_scene(int i) {
             tr("Elías, de Tisbé de Galaad, subió al monte a solas.", "Elijah, of Tishbe of Gilead, went up the mountain alone."),
             tr("Y el Señor le habló.", "And the Lord spoke to him.")}};
         case 5: return {"1 Reyes 17:1", {
-            tr("«Vive el Señor, Dios de Israel, delante de quien estoy:", "«As the Lord God of Israel liveth, before whom I stand:"),
-            tr("no habrá rocío ni lluvia en estos años, sino por mi palabra.»", "there shall not be dew nor rain these years, but according to my word.»"),
+            tr("«Vive Jehová Dios de Israel, delante del cual estoy,", "«As the Lord God of Israel liveth, before whom I stand:"),
+            tr("que no habrá lluvia ni rocío en estos años, sino por mi palabra.»", "there shall not be dew nor rain these years, but according to my word.»"),
             nullptr}};
         // ANUNCIA, no narra: la orden entera (17:2-4) la juega la audiencia con Acab dos
         // minutos despues, y ver a los cuervos (17:6) es el pozo. El arte (el arroyo con
@@ -252,7 +254,7 @@ inline PrologueScene get_prologue_scene(int i) {
 inline ChapterLore get_ascension_lore(int page, bool asked_double = true) {
     switch (page) {
         case 0: return {
-            {"2 Reyes 2:9", tr("Pide lo que quieras que haga por ti, antes que yo sea quitado de ti.", "Ask what I shall do for thee, before I be taken away from thee.")},
+            {"2 Reyes 2:9", tr("Pide lo que quieres que haga por ti, antes que sea quitado de contigo.", "Ask what I shall do for thee, before I be taken away from thee.")},
             {tr("Elías y Eliseo cruzaron el Jordán en seco, golpeando las aguas con el manto.", "Elijah and Elisha crossed the Jordan dry-shod, smiting the waters with the mantle."),
              asked_double
                  ? tr("«Te ruego que una doble porción de tu espíritu sea sobre mí».", "«I pray thee, let a double portion of thy spirit be upon me».")
@@ -265,14 +267,14 @@ inline ChapterLore get_ascension_lore(int page, bool asked_double = true) {
         };
         case 1: return {
             {"2 Reyes 2:11", tr("Un carro de fuego con caballos de fuego apartó a los dos; y Elías subió al cielo en un torbellino.", "A chariot of fire and horses of fire parted them both; and Elijah went up by a whirlwind into heaven.")},
-            {tr("Y aconteció que yendo ellos y hablando, he aquí un carro de fuego.", "And it came to pass, as they still went on and talked, that behold, a chariot of fire."),
+            {tr("Y aconteció que, yendo ellos hablando, he aquí un carro de fuego.", "And it came to pass, as they still went on and talked, that behold, a chariot of fire."),
              tr("Y Eliseo lo veía, y clamaba: «¡Padre mío, padre mío, carro de Israel y su gente de a caballo!».", "And Elisha saw it, and cried: «My father, my father, the chariot of Israel, and the horsemen thereof!»."),
              tr("Y nunca más le vio.", "And he saw him no more."),
              nullptr},
             "", ""
         };
         default: return {
-            {"2 Reyes 2:14", tr("¿Dónde está Jehová, el Dios de Elías? Y golpeó las aguas, y se apartaron.", "Where is the Lord God of Elijah? And he smote the waters, and they parted.")},
+            {"2 Reyes 2:14", tr("¿Dónde está Jehová, el Dios de Elías? Y así que hubo herido las aguas, apartáronse a uno y a otro lado.", "Where is the Lord God of Elijah? And he smote the waters, and they parted.")},
             {tr("Eliseo alzó el manto que se le había caído a Elías, y volvió al Jordán.", "Elisha took up the mantle that fell from Elijah, and went back to the Jordan."),
              tr("Golpeó las aguas con él, y se apartaron a un lado y a otro, y pasó.", "He smote the waters with it, and they parted hither and thither, and he went over."),
              tr("El manto no era suyo. Le fue prestado.", "The mantle was not his own. It was lent to him."),
@@ -292,7 +294,7 @@ inline const char* get_ascension_inheritance_line(bool asked_double) {
 
 inline ChapterLore get_epilogue_lore() {
     return {
-        {"2 Reyes 13:21", tr("Cuando llegó a tocar el muerto los huesos de Eliseo, revivió, y se levantó sobre sus pies.", "When the dead man touched the bones of Elisha, he revived, and stood up on his feet.")},
+        {"2 Reyes 13:21", tr("Cuando llegó a tocar el muerto los huesos de Eliseo, revivió, y levantose sobre sus pies.", "When the dead man touched the bones of Elisha, he revived, and stood up on his feet.")},
         {tr("Elías nunca murió: subió en un torbellino, y su manto quedó en la tierra.", "Elijah never died: he went up in a whirlwind, and his mantle stayed on the earth."),
          tr("Eliseo murió, y lo sepultaron. Y aun sus huesos daban vida.", "Elisha died, and they buried him. And even his bones gave life."),
          tr("Israel volvió a olvidar. Y volvió a haber profetas.", "Israel forgot again. And there were prophets again."),
@@ -307,25 +309,25 @@ inline ChapterLore get_epilogue_lore() {
 inline Scripture get_item_scripture(u32 item_id) {
     switch (item_id) {
         case 0:  return {"1 Samuel 17:40", tr("Tomó cinco piedras lisas del arroyo, y su honda en su mano.", "He took five smooth stones out of the brook, and his sling was in his hand.")};
-        case 1:  return {"Números 17:8",   tr("La vara de Aarón había reverdecido, y echado flores y almendras.", "Aaron's rod had budded, and brought forth buds, and bloomed blossoms, and yielded almonds.")};
-        case 2:  return {"1 Reyes 19:6",   tr("A su cabecera una torta cocida sobre las ascuas, y una vasija de agua.", "At his head a cake baken on the coals, and a cruse of water.")};
-        case 3:  return {"1 Reyes 19:16",  tr("Y ungirás a Eliseo hijo de Safat, para que sea profeta en tu lugar.", "And Elisha the son of Shaphat shalt thou anoint to be prophet in thy room.")};
-        case 4:  return {"Éxodo 12:11",    tr("Vuestros lomos ceñidos, vuestro calzado en vuestros pies.", "Your loins girded, your shoes on your feet.")};
-        case 5:  return {"Éxodo 16:31",    tr("Era como semilla de culantro, blanco, y su sabor como de hojuelas con miel.", "It was like coriander seed, white; and the taste of it like wafers made with honey.")};
+        case 1:  return {"Números 17:8",   tr("La vara de Aarón había brotado, y echado flores, y producido almendras.", "Aaron's rod had budded, and brought forth buds, and bloomed blossoms, and yielded almonds.")};
+        case 2:  return {"1 Reyes 19:6",   tr("A su cabecera una torta cocida sobre las ascuas, y un vaso de agua.", "At his head a cake baken on the coals, and a cruse of water.")};
+        case 3:  return {"1 Reyes 19:16",  tr("Y a Eliseo hijo de Safat ungirás para que sea profeta en lugar de ti.", "And Elisha the son of Shaphat shalt thou anoint to be prophet in thy room.")};
+        case 4:  return {"Éxodo 12:11",    tr("Ceñidos vuestros lomos, vuestros zapatos en vuestros pies.", "Your loins girded, your shoes on your feet.")};
+        case 5:  return {"Éxodo 16:31",    tr("Era como simiente de culantro, blanco, y su sabor como de hojuelas con miel.", "It was like coriander seed, white; and the taste of it like wafers made with honey.")};
         case 6:  return {"Éxodo 31:18",    tr("Dos tablas del testimonio, escritas con el dedo de Dios.", "Two tables of testimony, written with the finger of God.")};
         case 7:  return {"Éxodo 25:10",    tr("Harán también un arca de madera de acacia.", "And they shall make an ark of shittim wood.")};
         case 8:  return {"Salmo 104:15",   tr("El vino que alegra el corazón del hombre.", "Wine that maketh glad the heart of man.")};
         case 9:  return {"2 Reyes 5:14",   tr("Se zambulló siete veces en el Jordán, y su carne se volvió como la de un niño.", "He dipped himself seven times in Jordan, and his flesh came again like the flesh of a little child.")};
         case 10: return {"1 Reyes 18:38",  tr("Entonces cayó fuego de Jehová, y consumió el holocausto.", "Then the fire of the Lord fell, and consumed the burnt sacrifice.")};
-        case 11: return {"Josué 4:7",      tr("Estas piedras servirán de memorial a los hijos de Israel para siempre.", "These stones shall be for a memorial unto the children of Israel for ever.")};
+        case 11: return {"Josué 4:7",      tr("Estas piedras serán por memoria a los hijos de Israel para siempre.", "These stones shall be for a memorial unto the children of Israel for ever.")};
         case 12: return {"1 Reyes 18:38",  tr("Consumió la leña, las piedras y el polvo, y aun lamió el agua de la zanja.", "It consumed the wood, the stones and the dust, and licked up the water in the trench.")};
-        case 13: return {"1 Reyes 17:16",  tr("La harina de la tinaja no escaseó, ni el aceite de la vasija menguó.", "The barrel of meal wasted not, neither did the cruse of oil fail.")};
-        case 14: return {"2 Reyes 4:4",    tr("Echarás aceite en todas las vasijas, y pondrás aparte la que esté llena.", "Thou shalt pour out into all those vessels, and set aside that which is full.")};
-        case 15: return {"2 Reyes 2:13",   tr("Alzó el manto que se le había caído a Elías, y volvió a la orilla del Jordán.", "He took up the mantle that fell from Elijah, and went back to the bank of Jordan.")};
-        case 16: return {"2 Reyes 13:17",  tr("Saeta de salvación de Jehová, y saeta de salvación contra Siria.", "The arrow of the Lord's deliverance, and the arrow of deliverance from Syria.")};
-        case 17: return {"2 Reyes 20:7",   tr("Tomad masa de higos. Y tomándola, la pusieron sobre la llaga, y sanó.", "Take a lump of figs. And they took and laid it on the boil, and he recovered.")};
-        case 18: return {"2 Reyes 2:21",   tr("Echó la sal en ellas, y dijo: Yo sané estas aguas.", "He cast the salt in there, and said: I have healed these waters.")};
-        case 19: return {"2 Reyes 1:8",    tr("Un varón que tenía vestido de pelo, y ceñía sus lomos con un cinto de cuero.", "A hairy man, and girt with a girdle of leather about his loins.")};
+        case 13: return {"1 Reyes 17:16",  tr("La tinaja de la harina no escaseó, ni menguó la botija del aceite.", "The barrel of meal wasted not, neither did the cruse of oil fail.")};
+        case 14: return {"2 Reyes 4:4",    tr("Echa en todos los vasos, y en estando uno lleno, ponlo aparte.", "Thou shalt pour out into all those vessels, and set aside that which is full.")};
+        case 15: return {"2 Reyes 2:13",   tr("Alzó luego el manto de Elías que se le había caído, y volvió, y parose a la orilla del Jordán.", "He took up the mantle that fell from Elijah, and went back to the bank of Jordan.")};
+        case 16: return {"2 Reyes 13:17",  tr("Saeta de salud de Jehová, y saeta de salud contra Siria.", "The arrow of the Lord's deliverance, and the arrow of deliverance from Syria.")};
+        case 17: return {"2 Reyes 20:7",   tr("Tomad masa de higos. Y tomándola, pusieron sobre la llaga, y sanó.", "Take a lump of figs. And they took and laid it on the boil, and he recovered.")};
+        case 18: return {"2 Reyes 2:21",   tr("Echó dentro la sal, y dijo: Así ha dicho Jehová: Yo sané estas aguas.", "He cast the salt in there, and said: I have healed these waters.")};
+        case 19: return {"2 Reyes 1:8",    tr("Un varón velloso, y ceñía sus lomos con un cinto de cuero.", "A hairy man, and girt with a girdle of leather about his loins.")};
         case 20: return {"2 Reyes 20:11",  tr("E hizo volver la sombra por los grados que había descendido.", "And he brought the shadow back by the degrees it had gone down.")};
         case 21: return {"2 Reyes 4:43",   tr("Da a la gente para que coman, porque así ha dicho Jehová: Comerán, y sobrará.", "Give unto the people, that they may eat, for thus saith the Lord: They shall eat, and shall leave thereof.")};
         default: return {"", nullptr};
@@ -334,16 +336,16 @@ inline Scripture get_item_scripture(u32 item_id) {
 
 inline Scripture get_miracle_scripture(MiracleID id) {
     switch (id) {
-        case MiracleID::CuervosDeQuerit:   return {"1 Reyes 17:6",  tr("Los cuervos le traían pan y carne por la mañana y por la tarde.", "The ravens brought him bread and flesh in the morning and in the evening.")};
+        case MiracleID::CuervosDeQuerit:   return {"1 Reyes 17:6",  tr("Los cuervos le traían pan y carne por la mañana, y pan y carne a la tarde.", "The ravens brought him bread and flesh in the morning and in the evening.")};
         case MiracleID::PalabraDeSequia:   return {"1 Reyes 17:1",  tr("No habrá lluvia ni rocío en estos años, sino por mi palabra.", "There shall not be dew nor rain these years, but according to my word.")};
         case MiracleID::FuegoDelCielo:     return {"1 Reyes 18:38", tr("Entonces cayó fuego de Jehová, y consumió el holocausto.", "Then the fire of the Lord fell, and consumed the burnt sacrifice.")};
         case MiracleID::CarroDeFuego:      return {"2 Reyes 2:11",  tr("Un carro de fuego con caballos de fuego apartó a los dos.", "A chariot of fire and horses of fire parted them both.")};
         case MiracleID::AltarConsumido:    return {"1 Reyes 18:38", tr("Consumió la leña, las piedras y el polvo.", "It consumed the wood, the stones and the dust.")};
         case MiracleID::SanarAguas:        return {"2 Reyes 2:21",  tr("Yo sané estas aguas, y no habrá más en ellas muerte.", "I have healed these waters; there shall not be from thence any more death.")};
-        case MiracleID::AceiteInagotable:  return {"2 Reyes 4:6",   tr("Cuando las vasijas fueron llenas, el aceite se detuvo.", "When the vessels were full, the oil stayed.")};
-        case MiracleID::OjosAbiertos:      return {"2 Reyes 6:17",  tr("Jehová abrió los ojos del criado, y vio el monte lleno de carros de fuego.", "The Lord opened the eyes of the young man, and he saw the mountain full of chariots of fire.")};
+        case MiracleID::AceiteInagotable:  return {"2 Reyes 4:6",   tr("Como los vasos fueron llenos, cesó el aceite.", "When the vessels were full, the oil stayed.")};
+        case MiracleID::OjosAbiertos:      return {"2 Reyes 6:17",  tr("Jehová abrió los ojos del mozo, y miró: y he aquí que el monte estaba lleno de carros de fuego.", "The Lord opened the eyes of the young man, and he saw the mountain full of chariots of fire.")};
         case MiracleID::EjercitoCelestial: return {"2 Reyes 6:17",  tr("El monte estaba lleno de gente de a caballo y de carros de fuego.", "The mountain was full of horses and chariots of fire.")};
-        case MiracleID::DoblePorcion:      return {"2 Reyes 2:9",   tr("Te ruego que una doble porción de tu espíritu sea sobre mí.", "I pray thee, let a double portion of thy spirit be upon me.")};
+        case MiracleID::DoblePorcion:      return {"2 Reyes 2:9",   tr("Ruégote que las dos partes de tu espíritu sean sobre mí.", "I pray thee, let a double portion of thy spirit be upon me.")};
         default:                           return {"", nullptr};
     }
 }
@@ -352,19 +354,19 @@ inline Scripture get_miracle_scripture(MiracleID id) {
 inline Scripture get_enemy_lore(EnemyType type) {
     switch (type) {
         case EnemyType::SoldadoDeAcab:
-            return {"1 Reyes 18:10", tr("Acab hizo jurar a las naciones que no te habían hallado.", "Ahab took an oath of the nations that they had not found thee.")};
+            return {"1 Reyes 18:10", tr("Acab ha conjurado a reinos y naciones si no te han hallado.", "Ahab took an oath of the nations that they had not found thee.")};
         case EnemyType::ArqueroReal:
-            return {"1 Reyes 22:34", tr("Un hombre disparó su arco a la ventura, e hirió al rey de Israel.", "A certain man drew a bow at a venture, and smote the king of Israel.")};
+            return {"1 Reyes 22:34", tr("Un hombre disparando su arco a la ventura, hirió al rey de Israel.", "A certain man drew a bow at a venture, and smote the king of Israel.")};
         case EnemyType::ProfetaDeBaal:
-            return {"1 Reyes 18:28", tr("Clamaban a grandes voces, y se sajaban con cuchillos hasta chorrear la sangre.", "They cried aloud, and cut themselves with knives till the blood gushed out.")};
+            return {"1 Reyes 18:28", tr("Clamaban a grandes voces, y sajábanse con cuchillos y con lancetas, hasta chorrear la sangre.", "They cried aloud, and cut themselves with knives till the blood gushed out.")};
         case EnemyType::LeonDelDesierto:
             return {"1 Reyes 13:24", tr("Y encontrándole un león en el camino, le mató.", "And a lion found him on the road, and slew him.")};
         case EnemyType::SoldadoSirio:
             return {"2 Reyes 6:14",  tr("Envió allá gente de a caballo, y carros, y un gran ejército.", "He sent thither horses, and chariots, and a great host.")};
         case EnemyType::GeneralSirio:
-            return {"2 Reyes 5:1",   tr("Naamán era varón grande delante de su señor; pero leproso.", "Naaman was a great man with his master; but he was a leper.")};
+            return {"2 Reyes 5:1",   tr("Naamán era gran varón delante de su señor, pero leproso.", "Naaman was a great man with his master; but he was a leper.")};
         case EnemyType::IdolatraDeRimon:
-            return {"2 Reyes 5:18",  tr("Cuando mi señor entra en el templo de Rimón para adorar en él.", "When my master goeth into the house of Rimmon to worship there.")};
+            return {"2 Reyes 5:18",  tr("Cuando mi señor entrare en el templo de Rimón, y para adorar en él se apoyare sobre mi mano.", "When my master goeth into the house of Rimmon to worship there.")};
         case EnemyType::AguaCorrupta:
             return {"2 Reyes 2:19",  tr("Las aguas son malas, y la tierra es estéril.", "The water is naught, and the ground barren.")};
         default:

@@ -109,8 +109,8 @@ los jefes 1 (rastreador) y 3 (Abdias); el mecanismo queda para el resto. El log 
 Veredicto del usuario al jugar las escenas guionizadas: *los dialogos suenan roboticos, a
 IA*, y *a partir del cap. 2 la historia se contradice* entre aperturas, intros, pozo y jefes.
 Se reescribieron las tres tablas de texto (`scenes.h`, `lore.h`, `events.h`) con dos
-decisiones suyas: **registro arcaizante, tipo Reina-Valera 1960 tambien en lo inventado**
-(KJV en ingles; las citas, verbatim), y **la apertura del cap. 7 es la viuda del profeta
+decisiones suyas: **registro arcaizante, tipo Reina-Valera tambien en lo inventado**
+(KJV en ingles; las citas, verbatim y de la RV1909, dominio publico, desde 2026-11-04), y **la apertura del cap. 7 es la viuda del profeta
 (2 R 4:1-4)** en vez de los tres reyes de Edom, que se funden en «El valle de las zanjas».
 Esta seccion SUPERA la lista de aperturas de la seccion siguiente.
 
