@@ -1,27 +1,26 @@
-"""tools/branding/src/mark_512.png -> android/app/src/main/res/mipmap-*/
+"""El icono de Android -> android/app/src/main/res/mipmap-*/
 
     python tools/branding/make_android_icons.py            # escribe los iconos
-    python tools/branding/make_android_icons.py preview    # ademas, la tira a 48 dp
+    python tools/branding/make_android_icons.py preview    # ademas, la tira a 48/96 dp
 
 Escribe DOS familias, porque Android tiene dos:
 
 - `mipmap-*dpi/ic_launcher.png`      icono heredado, 48 dp. Android 7 y anteriores (minSdk 21).
+  El launcher lo pinta TAL CUAL, asi que va en su losa redondeada (`Art.badge`).
 - `mipmap-*dpi/ic_launcher_{foreground,background}.png` + `mipmap-anydpi-v26/ic_launcher.xml`
   icono ADAPTATIVO, 108 dp de lienzo. Android 8 en adelante.
 
 **Por que hace falta el adaptativo** (2026-09-11, el usuario: "el icono se ve pequeno"): desde
 API 26 el launcher no dibuja el `mipmap` heredado tal cual — lo mete dentro de su mascara y lo
-ENCOGE, ademas de ponerle fondo. El arte acaba ocupando una fraccion del cuadro. Con icono
-adaptativo el lienzo es de 108 dp y la mascara ensena los 72 dp centrales: el arte que llena
-esos 72 dp llena el icono entero.
+ENCOGE, ademas de ponerle fondo. Con icono adaptativo el lienzo es de 108 dp, la mascara
+ensena los 72 dp centrales y solo el circulo de 66 esta garantizado.
 
-Y una trampa propia de este arte: `mark_512.png` sale de Blender con 122 px de alfa vacio
-ARRIBA (bbox (0,122,512,512)). Encuadrarlo por el lienzo, como se hacia antes, dejaba el
-dibujo pegado al borde de abajo y con una banda muerta del 24% encima — o sea, pequeno y
-descentrado antes incluso de que el launcher lo tocara. Por eso `_crop` va primero, siempre.
-
-Reusa `_fit` y `_outline` de make_icon.py: el contorno se REDIBUJA en cada tamano porque el
-del render de Blender esta en pixeles de una imagen de 512 y al bajar a 48 se evapora.
+Desde el 2026-11-10 las dos capas salen de `compose.Art` (el icono dinamico, ver
+tools/branding/CLAUDE.md): el FONDO es el fuego del cielo a sangre, evaluado en todo el lienzo
+de 108 dp (es procedural: no se acaba en el borde del render), y el FRENTE es Elias con la
+llama, colocado (`Art.ADAPT`) para que cara y llama caigan dentro del circulo seguro. Que las
+dos capas vayan separadas no es solo obligacion del formato: los launchers con paralaje las
+mueven por separado y la llama "flota" sobre el fuego.
 """
 import os
 import sys
@@ -29,7 +28,8 @@ import sys
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from make_icon import _fit, _outline, SRC, ROOT   # noqa: E402
+from make_icon import ROOT              # noqa: E402
+from compose import Art                 # noqa: E402
 
 RES = os.path.join(ROOT, 'android', 'app', 'src', 'main', 'res')
 
@@ -39,65 +39,30 @@ DENSITIES = [('mipmap-mdpi', 1), ('mipmap-hdpi', 1.5), ('mipmap-xhdpi', 2),
 
 LEGACY_DP = 48        # el icono heredado se dibuja a 48 dp
 CANVAS_DP = 108       # lienzo del adaptativo
-SAFE_DP = 72          # lo que la mascara deja ver, y donde tiene que caber TODO
-
-# Fondo: el pardo oscuro de la paleta del juego (Color::baal_dark, 44/24/16), con el centro
-# un punto mas claro. Plano se ve muerto a 48 dp; el degradado le da volumen sin competir con
-# el naranja de Elias ni el azul de Eliseo.
-BG_IN = (74, 46, 30)
-BG_OUT = (30, 18, 13)
-
-
-def _crop(src):
-    """Recorta al alfa. Sin esto el arte hereda los 122 px muertos del render."""
-    box = src.getbbox()
-    return src.crop(box) if box else src
-
-
-def _canvas(size, art, art_side, outline_px):
-    """`art` centrado en un cuadrado transparente de `size`, escalado a `art_side`."""
-    img = _outline(_fit(art, art_side), outline_px)
-    out = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    out.paste(img, ((size - img.size[0]) // 2, (size - img.size[1]) // 2), img)
-    return out
-
-
-def _background(size):
-    """Degradado radial. Se dibuja a 1/4 y se reescala: mas rapido y sin bandas."""
-    n = max(8, size // 4)
-    bg = Image.new('RGB', (n, n))
-    px = bg.load()
-    c = (n - 1) / 2.0
-    for y in range(n):
-        for x in range(n):
-            d = min(1.0, (((x - c) ** 2 + (y - c) ** 2) ** 0.5) / (c * 1.35))
-            t = d * d
-            px[x, y] = tuple(int(BG_IN[i] + (BG_OUT[i] - BG_IN[i]) * t) for i in range(3))
-    return bg.resize((size, size), Image.BICUBIC).convert('RGBA')
+SAFE_DP = 72          # lo que la mascara deja ver
 
 
 def build(preview=False):
-    art = _crop(Image.open(os.path.join(SRC, 'mark_512.png')).convert('RGBA'))
-
+    art = Art()
     for folder, k in DENSITIES:
         out_dir = os.path.join(RES, folder)
         os.makedirs(out_dir, exist_ok=True)
 
-        # --- heredado (Android <= 7): margen del 6%, como el .ico ---------------
+        # --- heredado (Android <= 7): la losa, con un margen del 4% como los de sistema ---
         legacy_px = int(round(LEGACY_DP * k))
-        leg = _canvas(legacy_px, art, int(legacy_px * 0.94),
-                      max(1, int(round(legacy_px / 48.0))))
-        leg.save(os.path.join(out_dir, 'ic_launcher.png'))
+        inner = int(round(legacy_px * 0.92))
+        leg = Image.new('RGBA', (legacy_px, legacy_px), (0, 0, 0, 0))
+        b = art.badge(inner)
+        leg.alpha_composite(b, ((legacy_px - inner) // 2, (legacy_px - inner) // 2))
+        leg.save(os.path.join(out_dir, 'ic_launcher.png'), optimize=True)
 
         # --- adaptativo (Android >= 8) -----------------------------------------
         canvas_px = int(round(CANVAS_DP * k))
-        safe_px = int(round(SAFE_DP * k))
-        fg = _canvas(canvas_px, art, safe_px, max(1, int(round(canvas_px / 108.0))))
-        fg.save(os.path.join(out_dir, 'ic_launcher_foreground.png'))
-        _background(canvas_px).save(os.path.join(out_dir, 'ic_launcher_background.png'))
-
-        print('%-18s heredado %3d  adaptativo %3d (seguro %3d)'
-              % (folder, legacy_px, canvas_px, safe_px))
+        art.background(canvas_px).convert('RGB').save(
+            os.path.join(out_dir, 'ic_launcher_background.png'), optimize=True)
+        art.foreground(canvas_px).save(
+            os.path.join(out_dir, 'ic_launcher_foreground.png'), optimize=True)
+        print('%-18s heredado %3d  adaptativo %3d' % (folder, legacy_px, canvas_px))
 
     # --- el XML que ata las dos capas ------------------------------------------
     any_dir = os.path.join(RES, 'mipmap-anydpi-v26')

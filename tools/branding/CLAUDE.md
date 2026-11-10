@@ -1,5 +1,73 @@
 # `tools/branding/` - icono y logo
 
+### El icono DINAMICO (2026-11-10) — el vigente
+
+Peticion del usuario: *"otro icono para el apk y el exe que sea mas dinamico, mas visual, usa
+las mejores practicas en el diseno de iconos"*. El busto a dos (mas abajo) se leia a 32 px pero
+era una foto de carnet: dos munecos de frente, quietos, sobre transparente. El nuevo aplica lo
+que piden las guias (Material, Apple HIG, las tiendas) y hacen los iconos de juego que
+funcionan:
+
+- **Un solo foco**: Elias en busto, tres cuartos, **contrapicado** (camara baja: el heroe
+  crece). Dos cabezas a 32 px compiten; una cara con gesto manda.
+- **Diagonal**: la llama arriba a la derecha -> la cara -> el manto barriendo abajo a la
+  izquierda. Lo simetrico se lee como retrato; la diagonal, como movimiento.
+- **Fondo a sangre** con el fuego del cielo (1 R 18:38): degradado radial desde la llama
+  (blanco-oro -> naranja -> carmesi -> casi negro), 14 rayos y ascuas. Nada de transparente.
+- **Contraste figura/fondo**: la luz se queda CERCA de la llama y el resto cae pronto a
+  carmesi oscuro (la tunica de Elias es naranja: con fondo naranja se fundia a 32 px), y un
+  filo de luz **calido hacia la llama y frio en el lado contrario** (`_light_wrap`).
+- **Encuadre por tamano** (`compose.CROPS` / `crop_for`): de 64 px arriba el busto con el
+  manto; 40-48 cara y llama; 32 y menos, mas cerrado. **Contorno redibujado en pixeles de
+  destino** (`Art._at`, 1 px hasta 64, 2 hasta 128). **Destello de fuego en los ojos** con
+  radio minimo de medio pixel: es lo que hace que la cara tenga mirada a 32 px.
+- Sin texto, sin marco de escena: losa redondeada (radio 20,5 %) con filo oscuro y un brillo
+  fino arriba para Windows y la ventana; a sangre para Android (el launcher pone su mascara).
+
+**El pipeline**, en dos pasos:
+
+```bash
+EGL_PLATFORM=surfaceless <venv-bpy>/bin/python -c "import sys; sys.path.insert(0,'tools/blender'); \
+    from mantle_sprites import run, logo; logo.main_heroe(run.ROOT, '/tmp/mantle_hero')"
+python tools/branding/make_icon.py preview           # -> assets/branding/{mantle.ico, mark_256.png}
+python tools/branding/make_android_icons.py preview  # -> android/app/src/main/res/mipmap-*
+```
+
+1. `logo.main_heroe` (Blender, EEVEE, `parts.set_quality('cine')`): SOLO la figura sobre
+   transparente -> `src/heroe_1024.png`, y `src/heroe.json` con donde caen la punta del cayado,
+   la cara y los iris (0..1 del cuadro). La pose (`HERO_POSE`), el giro y la camara son
+   constantes del modulo. Se renderiza mirando a la izquierda y `compose` la VOLTEA.
+2. `compose.py` (numpy + PIL, sin Blender): fondo, llama, resplandor, ascuas, light wrap,
+   losa y capas del adaptativo. `make_icon.py` y `make_android_icons.py` solo empaquetan.
+
+Lo que costo pasadas, mirando cada prueba (no repetir):
+
+- **La llama en 3D sale un huevo amarillo**: la emision satura y no hay degradado. Se pinta en
+  2D (`_flame`: cinco gotas anidadas de rojo a blanco, cimbreadas por el viento, dos lenguas
+  laterales, fundidas con un desenfoque — sin el, sale a bandas como un mapa de cotas — y un
+  resplandor aditivo). La gota del sprite se borra: asomaba como una canica bajo la pintada.
+- **El brazo del cayado se ABRE, no se adelanta**: con X negativo la vara cruza el pecho; y el
+  brazo libre ABAJO, que adelantado ponia en primer plano un antebrazo y una mano enormes.
+- En la capa delantera del adaptativo la llama perdia el nucleo blanco (alli no hay fondo al
+  que sumar el resplandor): se suma tambien dentro de su silueta.
+- PIL no desenfoca imagenes en coma flotante (`mode='F'`): `compose._blur` son tres pasadas de
+  caja por eje en numpy.
+
+**Gates**: la tira de `make_icon.py preview` (cada tamano a tamano real y x4, claro y oscuro,
+32 px marcado) y la de `make_android_icons.py preview` (circulo, redondeado y squircle a 48 y
+96 dp + el heredado). Verificado el 2026-11-10: a 32 px se reconoce el profeta barbudo con la
+llama; a 16, la cara con el destello y la llama; en las tres mascaras caben cara y llama.
+El fondo del adaptativo es procedural (`Art._bg_window`) y se evalua en los 108 dp enteros: el
+render de la figura no llega a los bordes del lienzo. `ADAPT` coloca cara y llama en el circulo
+seguro de 66 dp.
+
+Las fuentes del icono anterior (`src/logo.png`, `src/mark_512.png`) se retiraron: nada las
+consumia. `logo.main()` las sigue sabiendo generar (ya con los munecos adultos).
+
+---
+
+## Historico: el busto a dos (2026-08-26 .. 2026-11-10)
+
 ### Icono y logo (2026-08-26, rehecho el mismo dia)
 
 **El primer icono lo rechazo el usuario** ("no se ven a Elias ni Eliseo ni ningun manto") y la

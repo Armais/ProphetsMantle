@@ -231,3 +231,156 @@ def main(root, tmp_dir, only=None, log=print):
             % (name, px, px, hi.x - lo.x, hi.z - lo.z, cov, path))
     parts.clear_scene()
     return paths
+
+
+# =============================================================================
+# El icono DINAMICO (2026-11-10): Elias en contrapicado, la llama en alto y el manto al viento
+# =============================================================================
+#
+# Peticion del usuario: "otro icono para el apk y el exe que sea mas dinamico, mas visual,
+# usa las mejores practicas en el diseno de iconos". El busto a dos de arriba se leia (las dos
+# cabezas aguantaban 32 px) pero era una foto de carnet: dos munecos de frente, quietos.
+# Lo que piden las guias de iconos (Material, Apple HIG, las tiendas) y lo que hacen los iconos
+# de juego que funcionan:
+#
+#   - UN foco, no dos: un personaje de cerca, con gesto. Dos cabezas a 32 px compiten.
+#   - DIAGONAL: la llama arriba a la derecha, la cara en el centro, el manto barriendo hacia
+#     abajo a la izquierda. Una composicion en diagonal se lee como movimiento; una simetrica,
+#     como un retrato.
+#   - Contrapicado (camara baja mirando arriba): el heroe crece. A la altura de los ojos es
+#     un vecino.
+#   - Luz de drama: la llama ilumina de lado y un contraluz frio recorta el borde contra el
+#     fondo calido (lo que separa la figura del fondo a 32 px es ese filo).
+#   - Fondo A SANGRE (el estallido del fuego del cielo lo pinta tools/branding/make_icon.py),
+#     nada de recorte transparente: en Android el adaptativo pone el fondo igual.
+#
+# Esto solo renderiza la FIGURA (fondo transparente) con EEVEE y apunta en un json donde caen
+# la llama y la cara, para que el empaquetado ponga ahi el resplandor y reencuadre a 16-32 px.
+
+HERO_PX = 1024
+HERO_POSE = {
+    # El brazo del cayado se ABRE (Y) y no se alza: mas alla de la horizontal vuelca el
+    # baculo (regla de cine.py), y adelantandolo (X negativo) la vara CRUZA el pecho — fue la
+    # primera prueba. Abierto y casi vertical, la vara sube junto al hombro y la llama queda
+    # fuera de la cabeza, en la esquina de arriba.
+    'upper_arm.R': {'rot': [('X', 2.0), ('Y', -20.0)]},
+    'forearm.R': {'rot': [('X', -10.0)]},
+    # El brazo libre, ABAJO: adelantado cruzaba el pecho con un antebrazo y una mano enormes
+    # en primer plano (a 1024 px una salchicha; a 32, una mancha color carne).
+    'upper_arm.L': {'rot': [('X', 10.0), ('Y', 16.0)]},
+    'forearm.L': {'rot': [('X', -6.0)]},
+    'chest': {'rot': [('X', -6.0)]},
+    'head': {'rot': [('X', -9.0), ('Z', -6.0)]},
+}
+HERO_TURN = -24.0      # grados: tres cuartos (la imagen se voltea al empaquetar)
+HERO_CAM = dict(lens=70.0, dist=2.5, elev=-9.0, aim=(-0.10, 0.0, 1.58))
+
+
+def scene_heroe():
+    char = C.build('elias')
+    arm = char['arm']
+    arm.rotation_mode = 'XYZ'
+    arm.rotation_euler = (0.0, 0.0, math.radians(HERO_TURN))
+    rig.pose_apply(arm, HERO_POSE)
+    # Llama grande en la punta: la del sprite es una gota pensada para 128 px. Va colgada
+    # de la punta que ya existe, asi que sigue al cayado a donde lo lleve la pose.
+    # La LLAMA no es una malla: en 3D salia un huevo amarillo plano (la emision satura y
+    # Workbench/EEVEE no dan el degradado de una llama). La pinta make_icon.py en 2D, con su
+    # nucleo blanco, su borde rojo y su resplandor, donde cae la punta del cayado (el json).
+    # Aqui la gota del sprite se quita: asoma como una canica bajo la llama pintada.
+    tip = bpy.data.objects.get('elias_tip')
+    flame = []
+    if tip is not None:
+        bpy.context.view_layer.update()
+        flame.append(tip.matrix_world.translation.copy())
+        for o in list(bpy.data.objects):
+            if o.name.startswith('elias_tip'):
+                bpy.data.objects.remove(o, do_unlink=True)
+    # El MANTO al viento: sale de los hombros y barre hacia el lado CONTRARIO a la llama y
+    # hacia abajo, con su orillo de oro. Es la pieza que da el movimiento (y el titulo).
+    mantle_span(name='hero_manto', x0=-0.18, x1=1.05, y=0.24, z_top=1.47, sag=0.05,
+                drop=0.66, fold=0.17, waves=3.2, tilt=-0.40, flare=0.32)
+    for o in bpy.data.objects:
+        if o.name.startswith('hero_manto'):
+            o.rotation_euler = (math.radians(-14.0), 0.0, math.radians(HERO_TURN * 0.6))
+    return char, flame
+
+
+def _hero_lights():
+    """EEVEE: la llama como luz principal (calida, de arriba a la derecha), contraluz frio
+    fuerte desde atras a la izquierda y un relleno bajo y tenue."""
+    from . import icons as I
+    I._eevee_look()
+    for o in list(bpy.data.objects):
+        if o.type == 'LIGHT':
+            bpy.data.objects.remove(o, do_unlink=True)
+    I._light('hero_key', 'SUN', (40, 0, 52), 4.2, (1.0, 0.78, 0.50), angle=10)
+    I._light('hero_rim', 'SUN', (-62, 0, -38), 7.5, (0.70, 0.82, 1.0), angle=3)
+    I._light('hero_fill', 'SUN', (95, 0, -150), 0.6, (1.0, 0.55, 0.35), angle=25)
+    w = bpy.context.scene.world
+    bg = w.node_tree.nodes.get('Background') if w and w.node_tree else None
+    if bg is not None:
+        bg.inputs[0].default_value = (0.55, 0.35, 0.30, 1.0)
+        bg.inputs[1].default_value = 0.45
+
+
+def main_heroe(root, tmp_dir, log=print):
+    """-> tools/branding/src/heroe_1024.png + heroe.json (donde caen la llama y la cara)."""
+    import json
+    from bpy_extras.object_utils import world_to_camera_view
+    out_dir = os.path.join(root, 'tools', 'branding', 'src')
+    os.makedirs(out_dir, exist_ok=True)
+    parts.clear_scene()
+    parts.set_quality('cine')            # a 1024 px las facetas de la hoja se verian
+    try:
+        char, flame = scene_heroe()
+        cam = R.setup_scene(tmp_dir)
+        sc = bpy.context.scene
+        sc.render.resolution_x = sc.render.resolution_y = HERO_PX * SS
+        cd = cam.data
+        cd.type = 'PERSP'
+        cd.lens = HERO_CAM['lens']
+        cd.shift_x = cd.shift_y = 0.0
+        ax, ay, az = HERO_CAM['aim']
+        e = math.radians(HERO_CAM['elev'])
+        d = HERO_CAM['dist']
+        cam.location = Vector((ax, ay - d * math.cos(e), az + d * math.sin(e)))
+        cam.rotation_euler = (math.radians(90.0) - e, 0.0, 0.0)
+        _hero_lights()
+        bpy.context.view_layer.update()
+        raw = R._render_to_array()
+        img = R.post_soft(raw, HERO_PX, SS, outline=True, outline_px=9, gain=1.0)
+        path = os.path.join(out_dir, 'heroe_%d.png' % HERO_PX)
+        R.save_png(img, path, 'mantle_heroe')
+
+        def proj(p):
+            v = world_to_camera_view(sc, cam, p)
+            return [round(v.x, 4), round(1.0 - v.y, 4)]      # 0..1, y hacia abajo
+        bpy.context.view_layer.update()
+        head = bpy.data.objects.get('elias_head')
+        meta = {'size': HERO_PX,
+                'flame': proj(flame[0] if flame else Vector((0, 0, 2))),
+                'head': proj(head.matrix_world.translation if head else Vector((0, 0, 1.62)))}
+        if head:
+            vs = head.data.vertices
+            c = sum((head.matrix_world @ v.co for v in vs), Vector()) / len(vs)
+            meta['head'] = proj(c)
+        # Los iris, para el destello de fuego en los ojos que pinta make_icon (la mirada es
+        # lo primero que se busca en una cara, y a 1024 px el iris son cuatro pixeles oscuros)
+        eyes = []
+        for s in ('L', 'R'):
+            ob = bpy.data.objects.get('elias_iris_' + s)
+            if ob is not None:
+                vs = ob.data.vertices
+                c = sum((ob.matrix_world @ v.co for v in vs), Vector()) / len(vs)
+                eyes.append(proj(c))
+        meta['eyes'] = eyes
+        with open(os.path.join(out_dir, 'heroe.json'), 'w') as f:
+            json.dump(meta, f, indent=1)
+        cov = 100.0 * (img[..., 3] > 0.05).mean()
+        log('  heroe %dx%d  cobertura %.1f%%  llama %s  cara %s -> %s'
+            % (HERO_PX, HERO_PX, cov, meta['flame'], meta['head'], path))
+    finally:
+        parts.set_quality('sheet')
+        parts.clear_scene()
+    return path

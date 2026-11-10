@@ -1,40 +1,41 @@
-"""tools/branding/src/{logo,mark_512}.png -> assets/branding/{mantle.ico,mark_256.png}.
+"""El icono del juego -> assets/branding/{mantle.ico, mark_256.png}.
 
     python tools/branding/make_icon.py            # escribe el .ico y el PNG de ventana
-    python tools/branding/make_icon.py preview    # ademas, una tira con todos los tamanos
+    python tools/branding/make_icon.py preview    # ademas, la tira de contacto (16..256 px)
 
-El arte lo genera Blender (tools/blender/mantle_sprites/logo.py). Esto solo empaqueta.
+Desde el 2026-11-10 el arte es el de `compose.py`: Elias en contrapicado con la llama en alto
+sobre el fuego del cielo, en losa redondeada (la figura la renderiza Blender con
+`logo.main_heroe`, ver tools/branding/CLAUDE.md). Esto solo empaqueta.
 
-Dos cosas que NO son obvias:
+Dos cosas que NO son obvias y siguen valiendo:
 
 1. **El .ico se escribe a mano.** `Image.save(sizes=[...])` mete la MISMA imagen reescalada
-   en todos los tamanos, y aqui hace falta arte distinto: `logo` (los dos profetas) de 64 px
-   para arriba, y `mark` (el manto con la llama) de 48 para abajo. Dos figuras a 16x16 son
-   una mancha parda. El formato es trivial: una cabecera, una entrada de 16 bytes por
-   tamano y el PNG de cada uno detras — Windows acepta payload PNG dentro del .ico desde
-   Vista.
+   en todos los tamanos, y aqui cada tamano lleva su encuadre (de 48 px para abajo, cara y
+   llama; de 64 para arriba, el busto con el manto) y su contorno redibujado. El formato es
+   trivial: una cabecera, una entrada de 16 bytes por tamano y el PNG de cada uno detras —
+   Windows acepta payload PNG dentro del .ico desde Vista.
 
-2. **El contorno se vuelve a dibujar en cada tamano.** El de Blender esta en pixeles del
-   render (5 px en una imagen de 512), asi que al bajar a 16 se queda en 0,16 px: se
-   evapora justo donde mas falta hace. Se redibuja despues de reescalar, con el grosor
-   pensado para ese tamano.
+2. **El contorno se vuelve a dibujar en cada tamano** (`compose.Art._at`): el del render son
+   9 px de 1024, y a 32 px se evapora justo donde mas falta hace.
+
+`_fit` y `_outline` se quedan: los usa `contact.py` para juzgar bocetos sueltos.
 """
+import io
 import os
 import struct
-import tempfile
 import sys
+import tempfile
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from compose import Art                               # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 BRAND = os.path.join(ROOT, 'assets', 'branding')     # lo que se distribuye
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')   # las fuentes
 
-# tamano -> encuadre del que sale. Las dos piezas son la MISMA composicion (el busto a dos):
-# `logo` con hombros y `mark` recortado a las dos cabezas. El corte esta en 64 porque por
-# debajo de ahi el encuadre ancho empasta y hace falta el cerrado, no otro motivo.
-SIZES = [(256, 'logo'), (128, 'logo'), (64, 'logo'),
-         (48, 'mark'), (32, 'mark'), (24, 'mark'), (16, 'mark')]
+SIZES = [256, 128, 64, 48, 32, 24, 16]
 
 OUTLINE = (26, 18, 22, 255)
 
@@ -47,8 +48,7 @@ def _outline(img, px):
     grown = a.filter(ImageFilter.MaxFilter(px * 2 + 1))
     ring = Image.new('RGBA', img.size, OUTLINE)
     ring.putalpha(grown)
-    out = Image.alpha_composite(ring, img)
-    return out
+    return Image.alpha_composite(ring, img)
 
 
 def _fit(src, size):
@@ -61,27 +61,12 @@ def _fit(src, size):
     return out
 
 
-def build(preview=False):
-    src = {'logo': Image.open(os.path.join(SRC, 'logo.png')).convert('RGBA'),
-           'mark': Image.open(os.path.join(SRC, 'mark_512.png')).convert('RGBA')}
-
-    frames = []
-    for size, which in SIZES:
-        # Margen del 6%: sin el, el contorno se come el borde del cuadro al dilatar
-        img = _fit(src[which], int(size * 0.94))
-        img = _outline(img, 1 if size <= 32 else 2)
-        img = _fit(img, size)
-        frames.append((size, img))
-
-    # --- .ico a mano ---------------------------------------------------------
+def write_ico(frames, path):
     blobs = []
-    for size, img in frames:
-        import io as _io
-        buf = _io.BytesIO()
+    for _, img in frames:
+        buf = io.BytesIO()
         img.save(buf, format='PNG', optimize=True)
         blobs.append(buf.getvalue())
-
-    ico = os.path.join(BRAND, 'mantle.ico')
     header = struct.pack('<HHH', 0, 1, len(frames))
     offset = len(header) + 16 * len(frames)
     entries = b''
@@ -89,31 +74,55 @@ def build(preview=False):
         d = 0 if size >= 256 else size          # 0 significa 256 en el formato
         entries += struct.pack('<BBBBHHII', d, d, 0, 0, 1, 32, len(blob), offset)
         offset += len(blob)
-    with open(ico, 'wb') as f:
+    with open(path, 'wb') as f:
         f.write(header + entries + b''.join(blobs))
 
-    # --- PNG para SDL_SetWindowIcon ------------------------------------------
-    win = os.path.join(BRAND, 'mark_256.png')
-    _fit(_outline(_fit(src['mark'], 240), 2), 256).save(win)
 
-    print('mantle.ico  %d tamanos (%s)  %d bytes'
-          % (len(frames), ', '.join(str(s) for s, _ in SIZES), os.path.getsize(ico)))
-    print('mark_256.png %d bytes' % os.path.getsize(win))
-
-    if preview:
-        strip = Image.new('RGBA', (sum(s for s, _ in SIZES) + 8 * len(SIZES), 272),
-                          (245, 243, 240, 255))
-        x = 4
+def preview(art, frames, path=None):
+    """La tira de contacto: cada tamano A TAMANO REAL y ampliado x4 (nearest) sobre fondo
+    claro y oscuro, con la columna de 32 px marcada — el tamano que decide (el explorador de
+    Windows, la barra de tareas)."""
+    pad = 10
+    big = [16, 24, 32, 48]
+    w = pad + sum(s + pad for s in SIZES) + sum(s * 4 + pad for s in big) + pad
+    h = pad * 3 + 256 * 2
+    sheet = Image.new('RGBA', (w, h), (70, 68, 76, 255))
+    d = ImageDraw.Draw(sheet)
+    d.rectangle([0, 0, w, pad + 256 + pad // 2], fill=(242, 239, 233, 255))
+    d.rectangle([0, pad + 256 + pad // 2, w, h], fill=(28, 26, 32, 255))
+    for row, y in enumerate((pad, pad * 2 + 256)):
+        x = pad
         for size, img in frames:
-            strip.paste(img, (x, 8), img)
-            x += size + 8
-        # A un directorio temporal: es una ayuda para mirar los siete tamanos de un vistazo,
-        # no un asset, y assets/ no crece con material de depuracion.
-        p = os.path.join(tempfile.gettempdir(), 'mantle_icon_preview.png')
-        strip.save(p)
-        print('preview -> %s' % p)
+            sheet.alpha_composite(img, (x, y + 256 - size))
+            if size == 32:
+                d.rectangle([x - 3, y + 256 - size - 3, x + size + 2, y + 256 + 2],
+                            outline=(255, 214, 110, 255), width=1)
+            x += size + pad
+        for s in big:
+            img = dict(frames)[s].resize((s * 4, s * 4), Image.NEAREST)
+            sheet.alpha_composite(img, (x, y + 256 - s * 4))
+            x += s * 4 + pad
+    path = path or os.path.join(tempfile.gettempdir(), 'mantle_icon_preview.png')
+    sheet.convert('RGB').save(path)
+    return path
+
+
+def build(show=False):
+    art = Art()
+    frames = [(s, art.badge(s)) for s in SIZES]
+    ico = os.path.join(BRAND, 'mantle.ico')
+    write_ico(frames, ico)
+    # PNG para SDL_SetWindowIcon (barra de tareas y ventana, tambien en Linux y Mac)
+    win = os.path.join(BRAND, 'mark_256.png')
+    dict(frames)[256].save(win, optimize=True)
+    print('mantle.ico  %d tamanos (%s)  %d bytes'
+          % (len(frames), ', '.join(str(s) for s in SIZES), os.path.getsize(ico)))
+    print('mark_256.png %d bytes' % os.path.getsize(win))
+    if show:
+        # A un directorio temporal: es una ayuda para mirar, no un asset (assets/ no crece)
+        print('preview -> %s' % preview(art, frames))
     return ico
 
 
 if __name__ == '__main__':
-    build(preview='preview' in sys.argv)
+    build(show='preview' in sys.argv)
