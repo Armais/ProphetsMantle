@@ -118,7 +118,7 @@ def _float_robe(name, arm, mat, hem=0.36, flutes=11, amp=0.12):
 
 def _glow_eyes(name, arm, col, r=0.034, y=-0.118):
     """Ojos que brillan en una cara en sombra (espectro, Muerte, espiritu)."""
-    _drop(name, 'eye_L', 'eye_R', 'iris_L', 'iris_R', 'brow_L', 'brow_R', 'nose', 'mouth')
+    _drop(name, *C.FACE_KEYS)
     core = _glow(name, 'eyeglow', col)
     halo = get_mat(f'{name}_eyehalo', vivid(hexc(col), 1.0, 0.75))
     for s in (1.0, -1.0):
@@ -328,7 +328,7 @@ def _extras_espiritu(n, arm):
     foam = _M(n, 'foam', '#7fe0b0')
     slime = _M(n, 'slime', '#3fae7c')
     _float_robe(n, arm, water, hem=0.46, flutes=13, amp=0.18)
-    _drop(n, 'hair', 'hair_fringe', 'hair_side_L', 'hair_side_R')
+    _drop(n, 'hair', 'hair_fringe', 'hair_fringe2', 'hair_side_L', 'hair_side_R')
     _glow_eyes(n, arm, '#ff4b3a', r=0.040)
     # Corona de espuma: puntas que suben de la cabeza
     for k in range(7):
@@ -360,7 +360,7 @@ def _extras_acreedor(n, arm):
     turban = _M(n, 'turban', '#d9a43a')
     turban2 = _M(n, 'turban2', '#b9802a')
     gem = _M(n, 'gem', '#2e7d5b')
-    _drop(n, 'hair', 'hair_fringe')
+    _drop(n, 'hair', 'hair_fringe', 'hair_fringe2')
     # Turbante: tres vueltas de tela y una gema al frente
     for k in range(3):
         z = 1.715 + k * 0.05
@@ -400,7 +400,7 @@ def _extras_muerte(n, arm):
     bone = _M(n, 'bone', '#e8e2d0')
     socket = _M(n, 'socket', '#0a0808')
     # Calavera: cuencas negras con brasa al fondo y dientes
-    _drop(n, 'eye_L', 'eye_R', 'iris_L', 'iris_R', 'brow_L', 'brow_R', 'nose', 'mouth')
+    _drop(n, *C.FACE_KEYS)
     ember = _glow(n, 'ember', '#ff5a3a')
     for s in (1.0, -1.0):
         _H(arm, sphere(f'{n}_socket_{s}', (C.EYE_X * s, -0.100, C.EYE_Z), 0.048, socket,
@@ -484,7 +484,7 @@ def _extras_guiezi(n, arm):
 def _extras_benadad(n, arm):
     gold = _M(n, 'gold', '#d9ab3a')
     red = _M(n, 'red', '#8f1d2c')
-    _drop(n, 'hair_fringe')
+    _drop(n, 'hair_fringe', 'hair_fringe2')
     # Tiara asiria: cono truncado alto con bandas y un pincho
     _H(arm, tube(f'{n}_tiara', (0, 0.01, 1.70), (0, 0.02, 2.00), 0.152, 0.120, gold, rim_round=0.02))
     for k, z in enumerate((1.75, 1.84, 1.93)):

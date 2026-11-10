@@ -7,52 +7,133 @@ from .rig import build_armature
 
 STAFF_TILT = 25.0   # degrees; must match the forearm.R bend of humanoid_base('swing'/'raise')
 
-# Stylisation ("Clash Royale" figurines): oversized heads + saturated palette
-HEAD_SCALE = 1.45        # humanoid head parts scaled about HEAD_PIVOT
+# Estilizacion ADULTA (2026-11-10, el usuario: "que no se vean tan infantiles, sino mas
+# maduros"). Hasta entonces era la figurita de Clash Royale: cabeza x1,45, ojos de boton
+# blancos, nariz de bola, manos de bola y paleta saturada x1,35 — un juguete. Lo que lo
+# hace adulto, por orden de peso a 128 px: (1) la CABEZA a escala casi real (~6 cabezas de
+# alto en vez de 4,5), (2) la cara esculpida — arco de la ceja que hace sombra, ojos
+# pequenos y entornados bajo el parpado, nariz en cuna, mandibula y pomulos — y (3) color
+# de tierra en vez de caramelo. El esqueleto, las animaciones y la posicion de cada pieza
+# de la cabeza (casco, corona, pano) NO cambian: el craneo nuevo ocupa el mismo sitio.
+HEAD_SCALE = 1.06        # humanoid head parts scaled about HEAD_PIVOT (era 1.45)
 HEAD_PIVOT = (0, 0, 1.56)
-LION_HEAD_SCALE = 1.30
-SAT = 1.35               # material saturation boost (skin uses SKIN_SAT)
-SKIN_SAT = 1.15
+LION_HEAD_SCALE = 1.12
+SAT = 1.0                # material saturation boost (skin uses SKIN_SAT); era 1.35
+SKIN_SAT = 0.96
+VAL = 0.97               # un punto mas oscuro: la gama de tierra pesa, la de caramelo no
 
 
 def _mat(name, key, col, skin=False):
-    return get_mat(f'{name}_{key}', vivid(hexc(col), SKIN_SAT if skin else SAT))
+    return get_mat(f'{name}_{key}', vivid(hexc(col), SKIN_SAT if skin else SAT, VAL))
+
+
+def _squash_y(ob, k, cy=0.0):
+    """Aplasta una pieza en profundidad (Y) sobre `cy`. Las tunicas son conos REDONDOS y el
+    tronco es mas ancho que hondo: de perfil la falda redonda era una barriga."""
+    for v in ob.data.vertices:
+        v.co.y = cy + (v.co.y - cy) * k
+    return ob
+
+
+def _soft(ob, levels=2):
+    """Subdivision: la caja biselada deja una cara PLANA en medio que la luz de estudio pinta
+    como un panel con su marco (el pecho de robot). Subdividida es carne o tela."""
+    m = ob.modifiers.new('soft', 'SUBSURF')
+    m.levels = m.render_levels = levels
+    # Todas las caras SUAVES: la cara plana del medio, subdividida y en flat, salia a rayas
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    return ob
+
+
+def _cloak(name, mat, z0, z1, r0, r1, arc=210.0, cy=0.0, flutes=6, amp=0.06, depth=0.75):
+    """Capa que cuelga por la espalda: un trozo de cono ABIERTO (solo la mitad de atras y
+    los hombros, `arc` grados centrados en +Y), con pliegues que crecen hacia el bajo.
+    La caja plana de antes se leia como una tabla (o una mochila) colgada del cuello."""
+    import bmesh
+    bm = bmesh.new()
+    nu, nv = 28, 8
+    rows = []
+    for j in range(nv + 1):
+        t = j / nv                              # 0 arriba, 1 en el bajo
+        z = z0 + (z1 - z0) * t
+        r = r0 + (r1 - r0) * t
+        row = []
+        for i in range(nu + 1):
+            u = i / nu
+            a = math.radians(90.0 - arc * 0.5 + arc * u)      # 90 = +Y (la espalda)
+            k = 1.0 + amp * t * math.cos(flutes * (a - math.pi / 2) * 2.0)
+            row.append(bm.verts.new((math.cos(a) * r * k, cy + math.sin(a) * r * k * depth, z)))
+        rows.append(row)
+    for j in range(nv):
+        for i in range(nu):
+            f = bm.faces.new((rows[j][i], rows[j][i + 1], rows[j + 1][i + 1], rows[j + 1][i]))
+            f.smooth = True
+    return parts._finish(name, bm, mat)
+
+
+def _shade(col, k):
+    """`col` ('#rrggbb') oscurecido o aclarado por `k` (0.7 = 30% mas oscuro)."""
+    r, g, b = hexc(col)
+    return '#%02x%02x%02x' % tuple(int(max(0, min(255, c * 255 * k))) for c in (r, g, b))
 
 
 # =============================================================================
-# Face (head sphere: centre (0,0,1.62), r 0.135, z-scale 1.1, front = -Y)
+# Face (craneo: centro (0,0,1.625), r 0.130, escala (0.90, 0.98, 1.10); front = -Y)
 # =============================================================================
-# The head is ~20 px on screen, so the eyes have to be figurine-sized to read at all:
-# bone-white sclera + a very dark iris + a thick brow. Internal features get NO outline
-# from the post pass (it only dilates the silhouette), so all the contrast is colour.
-EYE_X, EYE_Y, EYE_Z = 0.055, -0.100, 1.648
-EYE_R, EYE_FLAT = 0.039, 0.50      # sclera radius and its squash along Y
-IRIS_Y, IRIS_R = -0.126, 0.027
-BROW_Z, BROW_Y = 1.702, -0.112
+# Una cara ADULTA se lee por sus sombras, no por el blanco de los ojos: el arco de la ceja
+# avanza y deja los ojos hundidos, el parpado de arriba los entorna, la nariz es una cuna
+# que sale de la frente y la mandibula se estrecha hacia el menton. Internal features get
+# NO outline from the post pass (it only dilates the silhouette): el contraste lo ponen el
+# cavity de Workbench (que oscurece cada hueco) y el color.
+EYE_X, EYE_Y, EYE_Z = 0.045, -0.112, 1.645
+EYE_R, EYE_FLAT = 0.021, 0.45      # sclera radius and its squash along Y (era 0.039: boton)
+IRIS_Y, IRIS_R = -0.119, 0.0125
+BROW_Z, BROW_Y = 1.680, -0.131
 # degrees the OUTER end of the brow rises (mirrored per side): >0 = ceno duro, <0 = afligido
 BROW_TILT = {'calm': 4.0, 'noble': 10.0, 'angry': 20.0, 'wild': 13.0, 'sad': -14.0}
+# Piezas de la cara que un jefe con otra cara (espectro, calavera) tiene que quitar
+FACE_KEYS = ('eye_L', 'eye_R', 'iris_L', 'iris_R', 'lid_L', 'lid_R', 'brow_L', 'brow_R',
+             'brow_ridge', 'nose', 'nose_tip', 'cheek_L', 'cheek_R', 'mouth')
 
 
 def _face(name, spec, A, skin):
     """Eyes, brows, nose and mouth, all riding the head bone (so HEAD_SCALE grows them)."""
     if not spec.get('face', True):
         return
-    white = get_mat('eye_white', vivid(hexc('#f2ece0'), 1.0))
+    white = get_mat('eye_white', vivid(hexc('#e6ddcc'), 1.0))
     iris = _mat(name, 'iris', spec.get('eyes', '#241a14'))
     brow_col = spec.get('brow_color') or spec.get('hair') or spec.get('beard') or '#2a1a12'
     brow_mat = _mat(name, 'brow', brow_col)
     tilt = BROW_TILT.get(spec.get('brow', 'calm'), 0.0)
+    fem = bool(spec.get('slim'))      # las mujeres: arco y nariz mas finos, sin menton marcado
+    # Arco superciliar: la repisa de hueso que da sombra a los ojos. Es lo que mas envejece
+    # una cara de muneco — sin el, los ojos flotan en una bola.
+    A(box(f'{name}_brow_ridge', (0, -0.108 if fem else -0.114, 1.672),
+          (0.160, 0.026, 0.022) if fem else (0.175, 0.036, 0.030), skin, round=0.95), 'head')
     for s, sx in (('L', 1.0), ('R', -1.0)):
         x = EYE_X * sx
         A(sphere(f'{name}_eye_{s}', (x, EYE_Y, EYE_Z), EYE_R, white,
-                 scale=(1.0, EYE_FLAT, 1.05)), 'head')
-        A(sphere(f'{name}_iris_{s}', (x, IRIS_Y, EYE_Z - 0.004), IRIS_R, iris,
-                 scale=(1.0, 0.55, 1.1)), 'head')
-        A(box(f'{name}_brow_{s}', (x, BROW_Y, BROW_Z), (0.068, 0.036, 0.020), brow_mat,
+                 scale=(1.30, EYE_FLAT, 0.72)), 'head')
+        A(sphere(f'{name}_iris_{s}', (x, IRIS_Y, EYE_Z - 0.002), IRIS_R, iris,
+                 scale=(1.0, 0.5, 1.05)), 'head')
+        # Parpado de arriba: tapa el tercio alto del ojo -> mirada entornada, no de susto
+        A(box(f'{name}_lid_{s}', (x, -0.117, EYE_Z + 0.011), (0.056, 0.016, 0.013), skin,
+              rot=Matrix.Rotation(math.radians(-tilt * 0.5 * sx), 4, 'Y'), round=0.9), 'head')
+        A(box(f'{name}_brow_{s}', (x, BROW_Y, BROW_Z), (0.060, 0.016, 0.015), brow_mat,
               rot=Matrix.Rotation(math.radians(-tilt * sx), 4, 'Y'), round=0.9), 'head')
-    A(sphere(f'{name}_nose', (0, -0.122, 1.600), 0.030, skin, scale=(1.0, 1.0, 0.85)), 'head')
+        # Pomulo: bajo el ojo, un poco hacia fuera
+        A(sphere(f'{name}_cheek_{s}', (0.060 * sx, -0.084, 1.606), 0.028, skin,
+                 scale=(1.0, 0.7, 0.62)), 'head')
+    # Nariz en CUNA (estrecha arriba, ancha abajo) que nace del arco de la ceja; la bola de
+    # antes era la nariz de un payaso.
+    nk = 0.8 if fem else 1.0
+    A(box(f'{name}_nose', (0, -0.125, 1.613), (0.030 * nk, 0.032 * nk, 0.068), skin,
+          round=0.5, taper=(0.5, 0.45)), 'head')
+    A(sphere(f'{name}_nose_tip', (0, -0.138 if fem else -0.141, 1.586), 0.019 * nk, skin,
+             scale=(1.3, 0.9, 0.85)), 'head')
     if spec.get('mouth', True) and not spec.get('beard'):
-        A(box(f'{name}_mouth', (0, -0.124, 1.552), (0.058, 0.024, 0.016),
+        A(box(f'{name}_mouth', (0, -0.122, 1.540), (0.046, 0.012, 0.010),
               _mat(name, 'mouth', spec.get('mouth_color', '#6b3226')), round=0.9), 'head')
 
 
@@ -100,40 +181,75 @@ def build_humanoid(name, spec):
         return attach(ob, arm, bone)
 
     # --- head -----------------------------------------------------------
-    A(sphere(f'{name}_head', (0, 0, 1.62), 0.135, skin, scale=(1, 0.98, 1.1)), 'head')
-    A(tube(f'{name}_neck', (0, 0, 1.43), (0, 0, 1.53), 0.05, 0.05, skin), 'neck')
+    # Craneo ovalado (mas alto que ancho) + mandibula que se estrecha + menton: la bola
+    # perfecta era la mitad del muneco. Ocupa el mismo sitio que la esfera de antes (r 0.135
+    # en z 1.62), asi que casco, corona, pano y capucha siguen encajando sin tocarlos.
+    A(sphere(f'{name}_head', (0, 0, 1.625), 0.130, skin, scale=(0.90, 0.98, 1.10)), 'head')
+    fem = bool(spec.get('slim'))
+    A(sphere(f'{name}_jaw', (0, -0.035, 1.555), 0.090, skin,
+             scale=(0.92, 0.96, 0.88) if fem else (1.0, 1.0, 0.90)), 'head')
+    if not fem:
+        A(sphere(f'{name}_chin', (0, -0.090, 1.497), 0.034, skin, scale=(1.3, 0.9, 0.9)), 'head')
+    for s, x in (('L', 0.115), ('R', -0.115)):
+        A(sphere(f'{name}_ear_{s}', (x, 0.008, 1.615), 0.030, skin, scale=(0.5, 0.85, 1.25)), 'head')
+    A(tube(f'{name}_neck', (0, 0, 1.43), (0, 0, 1.53), 0.062, 0.058, skin), 'neck')
     _face(name, spec, A, skin)
     if spec.get('hair'):
         hair = M('hair', spec['hair'])
-        # Casquete: arranca por encima de las cejas (z 1.70) y cae por detras. Todo lo que
-        # baje del entrecejo tapa la cara y devuelve la "bola de pelo" de antes.
-        A(sphere(f'{name}_hair', (0, 0.036, 1.702), 0.136, hair, scale=(1.02, 1.0, 0.70)), 'head')
-        A(box(f'{name}_hair_fringe', (0, -0.074, 1.718), (0.198, 0.095, 0.040), hair,
-              round=0.8, taper=(0.82, 0.9)), 'head')
-        for s, x in (('L', 0.122), ('R', -0.122)):
-            A(sphere(f'{name}_hair_side_{s}', (x, 0.048, 1.638), 0.064, hair,
-                     scale=(0.65, 1.0, 1.05)), 'head')
+        # Casquete: arranca por encima del arco de la ceja (z 1.70) y cae por detras. Todo lo
+        # que baje del entrecejo tapa la cara y devuelve la "bola de pelo" de antes.
+        A(sphere(f'{name}_hair', (0, 0.030, 1.700), 0.132, hair, scale=(0.94, 1.0, 0.72)), 'head')
+        # Raya en medio: dos flequillos que bajan hacia las sienes. El bloque recto de antes
+        # era una cinta (o el borde de un casco).
+        for k, sx in (('', 1.0), ('2', -1.0)):
+            A(box(f'{name}_hair_fringe{k}', (0.050 * sx, -0.078, 1.712), (0.105, 0.080, 0.036),
+                  hair, rot=Matrix.Rotation(math.radians(-13.0 * sx), 4, 'Y'),
+                  round=0.85, taper=(0.82, 0.9)), 'head')
+        for s, x in (('L', 0.110), ('R', -0.110)):
+            A(sphere(f'{name}_hair_side_{s}', (x, 0.045, 1.640), 0.058, hair,
+                     scale=(0.6, 1.0, 1.05)), 'head')
         if spec.get('hair_long'):
-            A(box(f'{name}_hair_back', (0, 0.108, 1.498), (0.205, 0.098, 0.27), hair,
+            A(box(f'{name}_hair_back', (0, 0.100, 1.500), (0.205, 0.095, 0.29), hair,
                   round=0.6, taper=(0.8, 0.85)), 'head')
+            if spec.get('brow') == 'wild':
+                # Melena de profeta del desierto: tres mechones que se abren por la espalda.
+                # Elias es "varon velludo" (2 Reyes 1:8); con el bloque liso parecia peluca.
+                for i, (dx, dy, dz) in enumerate(((0.07, -0.02, 1.775), (-0.06, 0.04, 1.785),
+                                                  (0.0, 0.09, 1.76))):
+                    A(sphere(f'{name}_hair_tuft{i}', (dx, dy, dz), 0.055, hair,
+                             scale=(1.1, 1.0, 0.55)), 'head')
+                for i, (dx, rz) in enumerate(((-0.075, -14.0), (0.0, 0.0), (0.075, 14.0))):
+                    A(box(f'{name}_hair_lock{i}', (dx, 0.105, 1.335), (0.075, 0.07, 0.15),
+                          hair, rot=Matrix.Rotation(math.radians(rz), 4, 'Y'),
+                          round=0.8, taper=(1.3, 1.15)), 'head')
+    elif spec.get('fringe'):
+        # Calvo con corona de pelo por detras y sobre las orejas (Eliseo, 2 Reyes 2:23): un
+        # craneo pelado del todo es un bebe; con el cerco de pelo es un hombre maduro.
+        A(sphere(f'{name}_hair_fringe', (0, 0.050, 1.598), 0.124, M('fringe', spec['fringe']),
+                 scale=(1.0, 0.95, 0.40)), 'head')
     if spec.get('beard'):
         beard = M('beard', spec['beard'])
-        A(sphere(f'{name}_beard', (0, -0.046, 1.524), 0.104, beard, scale=(0.94, 1.06, 0.74)), 'head')
-        A(sphere(f'{name}_mustache', (0, -0.108, 1.576), 0.062, beard, scale=(1.0, 0.62, 0.40)), 'head')
+        A(sphere(f'{name}_beard', (0, -0.058, 1.520), 0.095, beard, scale=(0.98, 0.92, 0.88)), 'head')
+        A(sphere(f'{name}_mustache', (0, -0.126, 1.560), 0.042, beard, scale=(1.35, 0.5, 0.42)), 'head')
+        # Patillas: atan la barba al pelo (o a la sien del calvo). Sin ellas la barba es
+        # una bola pegada a la cara, como la de un disfraz.
+        for s, x in (('L', 0.097), ('R', -0.097)):
+            A(box(f'{name}_sideburn_{s}', (x, -0.030, 1.585), (0.030, 0.070, 0.100), beard,
+                  round=0.8), 'head')
         if spec.get('beard_long'):
-            A(tube(f'{name}_beard2', (0, -0.052, 1.545), (0, -0.030, 1.395), 0.088, 0.042,
+            A(tube(f'{name}_beard2', (0, -0.075, 1.490), (0, -0.058, 1.360), 0.078, 0.030,
                    beard, rim_round=0.02), 'head')
-            A(sphere(f'{name}_beard_tip', (0, -0.030, 1.395), 0.042, beard, scale=(1, 1, 0.8)), 'head')
+            A(sphere(f'{name}_beard_tip', (0, -0.058, 1.362), 0.030, beard, scale=(1, 1, 0.9)), 'head')
     if spec.get('helmet'):
         helm = M('helmet', spec['helmet'])
         # Cupula alta + aro abierto + nasal: por delante la esfera sube hasta z~1.66, justo
         # sobre las cejas, asi que el rostro queda a la vista.
-        A(sphere(f'{name}_helm', (0, 0.008, 1.752), 0.143, helm, scale=(1, 1, 0.74)), 'head')
-        A(tube(f'{name}_helm_rim', (0, 0, 1.698), (0, 0, 1.742), 0.157, 0.157, helm,
-               caps=False), 'head')
+        A(sphere(f'{name}_helm', (0, 0.008, 1.752), 0.136, helm, scale=(0.94, 1, 0.74)), 'head')
+        A(_squash_y(tube(f'{name}_helm_rim', (0, 0, 1.698), (0, 0, 1.742), 0.146, 0.146, helm,
+                         caps=False, rim_round=0.01), 1.0), 'head')
         A(box(f'{name}_helm_nasal', (0, -0.138, 1.642), (0.028, 0.032, 0.110), helm, round=0.8), 'head')
-        for s, x in (('L', 0.130), ('R', -0.130)):
-            A(box(f'{name}_helm_cheek_{s}', (x, -0.030, 1.578), (0.024, 0.098, 0.105), helm,
+        for s, x in (('L', 0.118), ('R', -0.118)):
+            A(box(f'{name}_helm_cheek_{s}', (x, -0.030, 1.578), (0.022, 0.092, 0.100), helm,
                   round=0.6, taper=(1.0, 1.1)), 'head')
         if spec.get('plume'):
             plume = M('plume', spec['plume'])
@@ -212,48 +328,70 @@ def build_humanoid(name, spec):
     # --- torso ----------------------------------------------------------
     # `slim` solo estrecha el tronco; hombros y brazos se quedan sobre sus huesos para no
     # descolocar las animaciones. Con el pelo largo y la falda acampanada ya lee femenino.
+    # Tronco en V: pecho ancho arriba, cintura estrecha. Biselado entero (round 0.9) porque
+    # con 0.55 cada caja dejaba una cara plana con su marco y el cavity lo dibujaba como el
+    # panel de un robot de juguete.
     slim = 0.85 if spec.get('slim') else 1.0
-    A(box(f'{name}_torso_lo', (0, 0, 1.15), (0.34 * slim, 0.20, 0.22), tunic, round=0.55), 'spine')
+    A(_soft(box(f'{name}_torso_lo', (0, 0, 1.15), (0.31 * slim, 0.20, 0.24), tunic, round=0.9,
+                taper=(1.14, 1.04))), 'spine')
     chest_mat = M('armor', spec['armor']) if spec.get('armor') else tunic
-    A(box(f'{name}_torso_up', (0, 0, 1.36), (0.40 * slim, 0.22, 0.22), chest_mat,
-          round=0.55, taper=(0.92, 0.95)), 'chest')
-    for s, x in (('L', 0.22), ('R', -0.22)):
-        A(sphere(f'{name}_shoulder_{s}', (x, 0, 1.42), 0.08, chest_mat), 'chest')
+    A(_soft(box(f'{name}_torso_up', (0, 0, 1.355), (0.39 * slim, 0.225, 0.24), chest_mat,
+                round=0.9, taper=(1.10, 0.92))), 'chest')
+    for s, x in (('L', 0.215), ('R', -0.215)):
+        A(sphere(f'{name}_shoulder_{s}', (x, 0, 1.415), 0.082, chest_mat,
+                 scale=(1.12, 1.0, 0.86)), 'chest')
     if spec.get('belt'):
-        A(tube(f'{name}_belt', (0, 0, 1.01), (0, 0, 1.08), 0.205, 0.205,
-               M('belt', spec['belt']), rim_round=0.02), 'hips')
+        # Ceñido a la cintura (y aplastado como la tunica): el aro redondo de antes sobresalia
+        # cinco centimetros por delante y se leia como un flotador.
+        A(_squash_y(tube(f'{name}_belt', (0, 0, 1.012), (0, 0, 1.068), 0.198, 0.198,
+                         M('belt', spec['belt']), rim_round=0.016), 0.80), 'hips')
     if spec.get('sash'):
         A(box(f'{name}_sash', (0, -0.115, 1.25), (0.09, 0.02, 0.44), M('sash', spec['sash']),
               round=0.9), 'spine')
     # tunic skirt / robe. Con parts.DETAIL (paneles) la tela cae con pliegues: nueve
     # lobulos que crecen hacia el bajo. En una hoja de 128 px no se ven y no se piden.
-    folds = dict(flutes=9, flute_amp=0.07) if parts.DETAIL else {}
+    # Desde 2026-11-10 las hojas tambien llevan pliegues (suaves): el cono liso era lo que
+    # mas leia "plastico" en una tunica de 60 px. En los paneles (DETAIL) van mas marcados.
+    folds = dict(flutes=9, flute_amp=0.07) if parts.DETAIL else dict(flutes=7, flute_amp=0.05)
     if spec.get('tunic_len', 'short') == 'long':
-        robe = M('robe', spec.get('robe', spec['tunic']))
+        robe_col = spec.get('robe', spec['tunic'])
+        robe = M('robe', robe_col)
         r_waist, r_hem = (0.165, 0.335) if spec.get('slim') else (0.19, 0.30)
-        A(tube(f'{name}_robe', (0, 0, 1.00), (0, 0, 0.10), r_waist, r_hem, robe, segs=32,
-               rim_round=0.03, **folds), 'hips')
+        A(_squash_y(tube(f'{name}_robe', (0, 0, 1.00), (0, 0, 0.10), r_waist, r_hem, robe,
+                         segs=32, rim_round=0.03, **folds), 0.80), 'hips')
+        # Orla del bajo, un tono mas oscura: el borde gastado de una prenda que se lleva
+        A(_squash_y(tube(f'{name}_robe_hem', (0, 0, 0.175), (0, 0, 0.095), r_hem * 0.965,
+                         r_hem * 1.03, M('robe_hem', _shade(robe_col, 0.72)), segs=32,
+                         rim_round=0.02, **folds), 0.80), 'hips')
     else:
-        A(tube(f'{name}_skirt', (0, 0, 1.00), (0, 0, 0.62), 0.19, 0.24, tunic, segs=32,
-               rim_round=0.03, **folds), 'hips')
+        A(_squash_y(tube(f'{name}_skirt', (0, 0, 1.00), (0, 0, 0.62), 0.19, 0.24, tunic,
+                         segs=32, rim_round=0.03, **folds), 0.80), 'hips')
     if spec.get('mantle'):
         mantle = M('mantle', spec['mantle'])
-        A(box(f'{name}_mantle', (0, 0.135, 1.18), (0.42, 0.07, 0.56), mantle,
-              round=0.9, taper=(1.12, 1.0)), 'chest')
-        for s, x in (('L', 0.21), ('R', -0.21)):
-            A(box(f'{name}_mantle_sh_{s}', (x, 0.02, 1.45), (0.16, 0.22, 0.09), mantle,
-                  round=0.8), 'chest')
+        # Manto que CAE por la espalda hasta las corvas y se abre abajo, con cuello vuelto:
+        # la losa corta de antes era una mochila.
+        # Capa de verdad: abraza los hombros y cae por la espalda abriendose hasta las
+        # corvas, con pliegues. Las cajas de antes eran una tabla y dos hombreras de rugby.
+        A(_cloak(f'{name}_mantle', mantle, 1.47, 0.62, 0.215, 0.33, arc=230.0, cy=0.025,
+                 depth=0.70), 'chest')
+        A(tube(f'{name}_mantle_collar', (0, 0.012, 1.425), (0, 0.012, 1.50), 0.135, 0.100,
+               mantle, rim_round=0.02, caps=False), 'chest')
     if spec.get('cape'):
         cape = M('cape', spec['cape'])
         A(box(f'{name}_cape', (0, 0.15, 1.02), (0.40, 0.05, 0.88), cape,
               round=0.9, taper=(0.78, 1.0)), 'chest')
 
     # --- arms -----------------------------------------------------------
+    # Brazo con musculo (biceps mas grueso que la muneca) y MANO cerrada mas pequena: la
+    # bola de 0.055 era la mano de un playmobil.
     for s, x in (('L', 0.22), ('R', -0.22)):
-        A(tube(f'{name}_uarm_{s}', (x, 0, 1.42), (x, 0, 1.16), 0.058, 0.052, sleeves), 'upper_arm.' + s)
+        A(tube(f'{name}_uarm_{s}', (x, 0, 1.42), (x, 0, 1.16), 0.062, 0.050, sleeves,
+               rim_round=0.015), 'upper_arm.' + s)
         fmat = M('bracer', spec['bracer']) if spec.get('bracer') else skin
-        A(tube(f'{name}_farm_{s}', (x, 0, 1.16), (x, 0, 0.92), 0.05, 0.045, fmat), 'forearm.' + s)
-        A(sphere(f'{name}_hand_{s}', (x, 0, 0.88), 0.055, skin), 'hand.' + s)
+        A(tube(f'{name}_farm_{s}', (x, 0, 1.16), (x, 0, 0.92), 0.052, 0.038, fmat,
+               rim_round=0.012), 'forearm.' + s)
+        A(sphere(f'{name}_hand_{s}', (x, -0.004, 0.885), 0.044, skin, scale=(0.82, 0.95, 1.18)),
+          'hand.' + s)
     if spec.get('bandages'):
         band = M('bandage', '#e8e4d8')
         A(tube(f'{name}_band_head', (0, 0, 1.58), (0, 0, 1.63), 0.14, 0.14, band, rim_round=0.012), 'head')
@@ -284,13 +422,14 @@ def build_humanoid(name, spec):
         if w == 'staff_fire':
             fire = M('fire', wc.get('tip', '#ff8c1a'))
             core = M('fire_core', wc.get('core', '#ffd23f'))
-            tip_obj = sphere(f'{name}_tip', tip_center + Vector((0, 0, 0.02)), 0.10, fire, scale=(1, 1, 1.25))
-            tip_child = sphere(f'{name}_tip_core', tip_center + Vector((0, 0, 0.05)), 0.05, core, scale=(1, 1, 1.4))
+            # Gota de llama, no piruleta: la esfera de 0.10 era mas grande que la cabeza nueva
+            tip_obj = sphere(f'{name}_tip', tip_center + Vector((0, 0, 0.03)), 0.078, fire, scale=(1, 1, 1.45))
+            tip_child = sphere(f'{name}_tip_core', tip_center + Vector((0, 0, 0.05)), 0.042, core, scale=(1, 1, 1.6))
         elif w == 'staff_light':
             light = M('light', wc.get('tip', '#eaf6ff'))
             halo = M('light_halo', wc.get('core', '#8ad0ff'))
-            tip_obj = sphere(f'{name}_tip', tip_center + Vector((0, 0, 0.02)), 0.075, light)
-            tip_child = tube(f'{name}_tip_halo', tip_center + Vector((0, 0, -0.05)), tip_center + Vector((0, 0, 0.09)), 0.11, 0.11, halo, segs=6, caps=False)
+            tip_obj = sphere(f'{name}_tip', tip_center + Vector((0, 0, 0.02)), 0.066, light)
+            tip_child = tube(f'{name}_tip_halo', tip_center + Vector((0, 0, -0.03)), tip_center + Vector((0, 0, 0.07)), 0.088, 0.088, halo, segs=6, caps=False)
         else:
             idol = M('idol', wc.get('tip', '#7a1f1f'))
             horn = M('horn', '#e8dcc0')
@@ -452,16 +591,16 @@ def build_blob(name, spec):
 # =============================================================================
 SPECS = {
     'elias': ('humanoid', dict(
-        skin='#e0b080', hair='#2a1a12', hair_long=True, beard='#2a1a12', beard_long=True,
+        skin='#d6a476', hair='#2a1a12', hair_long=True, beard='#2a1a12', beard_long=True,
         eyes='#20303c', brow='wild',
-        tunic='#c8782a', tunic_len='long', robe='#a85a24', sleeves='#c8782a',
-        belt='#5a3a1a', mantle='#4a2c1a', shoes='#4a3018',
+        tunic='#b8682a', tunic_len='long', robe='#94501f', sleeves='#b8682a',
+        belt='#4a2e16', mantle='#4a2c1a', shoes='#3e2814',
         weapon='staff_fire', weapon_colors=dict(wood='#5a3a1a', tip='#ff7a12', core='#ffd23f'),
         attack='swing')),
     'eliseo': ('humanoid', dict(
-        skin='#d9a066', hair=None, beard='#4a3628',
-        eyes='#2d3f5e', brow='calm',
-        tunic='#3d6fb4', tunic_len='long', robe='#2f5a94', sleeves='#3d6fb4',
+        skin='#d09a66', hair=None, fringe='#4a3628', beard='#4a3628',
+        eyes='#2d3f5e', brow='noble',
+        tunic='#3a66a6', tunic_len='long', robe='#2c5288', sleeves='#3a66a6',
         belt='#3e9b5f', sash='#3e9b5f', mantle='#e4ecef', shoes='#4a3018',
         weapon='staff_light', weapon_colors=dict(wood='#7a5a3a', tip='#f4fbff', core='#8ad0ff'),
         attack='swing')),
@@ -585,7 +724,7 @@ SPECS = {
     # gracia), pero ropa de faena. Sin el manto blanco y sin el cayado de luz, que son las
     # dos cosas que aun no le han dado.
     'eliseo_labrador': ('humanoid', dict(
-        skin='#d9a066', hair=None, beard='#4a3628',
+        skin='#d09a66', hair=None, fringe='#4a3628', beard='#4a3628',
         eyes='#2d3f5e', brow='calm',
         tunic='#a8814e', tunic_len='short', sleeves='#8d6a3f',
         belt='#5a4028', shoes='#4a3018',

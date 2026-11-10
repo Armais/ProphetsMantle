@@ -148,25 +148,36 @@ def srgb(rgb255):
 # =============================================================================
 # Escena y luces
 # =============================================================================
+def _set(obj, attr, val):
+    """Ajuste que puede no existir: Blender 4.2 (EEVEE Next, el `bpy` de PyPI de los
+    contenedores Linux) quito las sombras suaves, el tamano de mapa de sombras y el bloom
+    de la escena. En 4.1 (el Blender del escritorio) todo existe y no cambia nada."""
+    if hasattr(obj, attr):
+        setattr(obj, attr, val)
+
+
 def setup_eevee(sc):
-    sc.render.engine = 'BLENDER_EEVEE'
+    try:
+        sc.render.engine = 'BLENDER_EEVEE'
+    except TypeError:                       # 4.2+: el EEVEE nuevo se llama asi
+        sc.render.engine = 'BLENDER_EEVEE_NEXT'
     sc.render.film_transparent = True
     sc.render.filter_size = 1.2
     ee = sc.eevee
     ee.taa_render_samples = 32
-    ee.use_gtao = True
-    ee.gtao_distance = 0.9
-    ee.gtao_factor = 1.0
-    ee.use_soft_shadows = True
-    ee.shadow_cube_size = '1024'
-    ee.shadow_cascade_size = '2048'
-    ee.use_shadow_high_bitdepth = True
+    _set(ee, 'use_gtao', True)
+    _set(ee, 'gtao_distance', 0.9)
+    _set(ee, 'gtao_factor', 1.0)
+    _set(ee, 'use_soft_shadows', True)
+    _set(ee, 'shadow_cube_size', '1024')
+    _set(ee, 'shadow_cascade_size', '2048')
+    _set(ee, 'use_shadow_high_bitdepth', True)
     # Bloom: sobre pelicula transparente no escribe alfa (leccion de vfx.py), pero las
     # antorchas van casi siempre DELANTE de algo opaco (muro, suelo) y ahi si luce.
-    ee.use_bloom = True
-    ee.bloom_threshold = 1.1
-    ee.bloom_intensity = 0.08
-    ee.bloom_radius = 5.5
+    _set(ee, 'use_bloom', True)
+    _set(ee, 'bloom_threshold', 1.1)
+    _set(ee, 'bloom_intensity', 0.08)
+    _set(ee, 'bloom_radius', 5.5)
     sc.view_settings.view_transform = 'Standard'
     sc.view_settings.look = 'None'
 

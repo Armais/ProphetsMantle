@@ -37,6 +37,8 @@ SS = 2
 HEAD_FRAC  = 0.26   # a que fraccion de la altura, contando desde arriba, esta la cara
 FRAME_FRAC = 0.55   # cuanto de la altura del personaje entra en el retrato
 AIM_Z = 1.44        # solo el valor por defecto antes de medir
+BUST_Z = 1.52       # humanoides: a donde mira la camara (la barbilla del craneo adulto)
+BUST_ORTHO = 0.78   # humanoides: alto del cuadro en metros (cabeza + hombros + pecho)
 ORTHO = 0.98
 
 # Mismo orden que `PortraitID` en src/ui/codex.h. Los ocho enemigos van PRIMERO y en el
@@ -485,10 +487,11 @@ def main(sprites_dir, tmp_dir, only=None, log=print):
             continue
         parts.clear_scene()
         scene = SCENES.get(name)
+        kind = None
         if scene:
             scene()
         else:
-            C.build(name)
+            kind = (C.build(name) or {}).get('kind')
         lo, hi = _bbox()                      # medir ANTES de meter la camara en la escena
         # `clear_scene` se lleva la camara por delante: se vuelve a montar por retrato
         cam = setup(tmp_dir)
@@ -498,6 +501,14 @@ def main(sprites_dir, tmp_dir, only=None, log=print):
             # a una persona, le cortaria justo la mitad que cuenta el pasaje.
             cam = setup_scene_cam(tmp_dir, lo, hi)
             z, ortho = cam.location.z, cam.data.ortho_scale
+        elif kind == 'humanoid':
+            # BUSTO por la cabeza de verdad (2026-11-10). Con la cabeza a escala adulta
+            # (HEAD_SCALE 1.06) encuadrar por la caja dejaba la cara en un tercio del cuadro:
+            # la caja la estiran el cayado, la corona o el penacho, no la cara. Se mira a
+            # BUST_Z (barbilla) y entran cabeza, hombros y pecho; lo ancho (cuernos, alas)
+            # sigue ensanchando el cuadro.
+            z = BUST_Z
+            ortho = max(BUST_ORTHO, (hi.x - lo.x) * 0.62)
         else:
             z = hi.z - HEAD_FRAC * h
             # El ancho tambien manda: el Agua Corrupta es mas ancha que alta y encuadrada

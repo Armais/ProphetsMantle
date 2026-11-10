@@ -10,10 +10,14 @@ tools/
                             characters procedurally, animates them per AnimID and renders the sheets
                             (run.py: `main(only=[...])`, default quantize=False = smooth post_soft;
                             quantize=True = legacy pixel-art). FRAME=128, SS=2, feet baseline = row 112.
-                            Stylisation in characters.py: HEAD_SCALE 1.45 (parts on the head bone scaled about
-                            HEAD_PIVOT), LION_HEAD_SCALE, palette through parts.vivid() (SAT 1.35, skin 1.15).
-                            Faces: `characters._face()` (sclera + iris + brow + nose + mouth, EYE_*/BROW_TILT
-                            constants, `eyes`/`brow`/`brow_color`/`mouth` keys per SPEC) hangs off the `head`
+                            Stylisation in characters.py (ADULTA desde 2026-11-10, ver la seccion
+                            "Personajes maduros"): HEAD_SCALE 1.06 (era 1.45; parts on the head bone scaled
+                            about HEAD_PIVOT), LION_HEAD_SCALE 1.12, palette through parts.vivid() (SAT 1.0,
+                            skin 0.96, VAL 0.97; era 1.35/1.15).
+                            Faces: `characters._face()` (arco superciliar + ojo pequeno con parpado + iris +
+                            ceja + pomulos + nariz en cuna + boca; EYE_*/BROW_TILT constants,
+                            `eyes`/`brow`/`brow_color`/`mouth` keys per SPEC; `FACE_KEYS` = las piezas que
+                            un jefe con otra cara quita) hangs off the `head`
                             bone, so hair/hood/helmet MUST leave z>=1.60 of the head clear or the rostro
                             disappears again. Smoothing: `parts.box(round=..., taper=...)` bevels every edge
                             (opt-in, so tiles.py stays crisp) and `parts.tube(caps=, rim_round=)` gives open
@@ -323,3 +327,50 @@ detrás del altar y no se ve. Lo que costó tres pasadas y conviene no volver a 
   grandes**, no una corona de esferas iguales (el cavity subraya cada una y sale el "collar
   de perlas" que ya avisa la sección del tileset); lo que estrecha la boca va **pegado a
   las masas y de su mismo color**, o asoma dentro del vano como dos bultos flotando.
+
+## Personajes maduros (2026-11-10)
+
+Peticion del usuario: *"posiblemente tengas que mejorar los modelos 3D de los personajes, que
+no se vean tan infantiles, sino mas maduros"*. Era la figurita de Clash Royale: cabeza x1,45
+(4,5 cabezas de alto), ojos de boton blancos, nariz de bola, manos de bola, cajas con su
+"panel" en el pecho y una paleta saturada x1,35. Lo que la hizo adulta, por orden de peso a
+128 px (todo en `characters.py`, y por tanto en hojas, jefes, retratos, PNJ, estampas y paneles):
+
+- **La cabeza a escala casi real**: `HEAD_SCALE` 1,06 (~6 cabezas de alto). El craneo es un
+  ovalo (`_head` escala 0.90/0.98/1.10) con **mandibula y menton** y **orejas**; ocupa el mismo
+  sitio que la esfera de antes, asi que casco, corona, pano y capucha encajan sin tocarlos.
+- **La cara se lee por sus sombras**: arco superciliar (`_brow_ridge`) que hunde los ojos,
+  ojo pequeno y almendrado (`EYE_R` 0,021, era 0,039) con **parpado** que lo entorna, cejas
+  finas, pomulos discretos, nariz en CUNA que nace de la frente. Las mujeres (`slim`) llevan
+  arco y nariz mas finos y sin menton marcado. Sin el arco, los ojos flotaban en una bola.
+- **Barba unida al pelo** por patillas; Elias con melena y mechones (`brow='wild'` + pelo
+  largo: "varon velludo", 2 Reyes 1:8) y raya en medio (`hair_fringe` + `hair_fringe2`);
+  Eliseo calvo pero con **corona de pelo** (`fringe`): pelado del todo era un bebe.
+- **Tronco en V subdividido** (`_soft`: Subsurf 2 con TODAS las caras suaves — con las planas
+  en flat la subdivision salia a rayas), brazo con biceps que se afina, mano cerrada pequena.
+- **Tunica aplastada en Y** (`_squash_y` 0,80) con pliegues tambien en las hojas (7 lobulos,
+  0,05) y orla oscura en el bajo; el cinturon cenido (el aro redondo era un flotador).
+- **Capa de verdad** (`_cloak`): un cono abierto de 230 grados que abraza los hombros y cae
+  hasta las corvas con pliegues. La losa de antes era una tabla (o una mochila) y sus
+  "hombreras", de rugby.
+- **Color de tierra**: `SAT` 1,0, `SKIN_SAT` 0,96, `VAL` 0,97, y Elias/Eliseo un punto mas
+  profundos en su SPEC. El naranja contra azul que los distingue se conserva.
+- Jefes: `bosses._glow_eyes` y la calavera quitan la cara con `C.FACE_KEYS`, y los que se
+  ponen turbante o tiara quitan tambien `hair_fringe2`.
+- **Retratos por BUSTO** (`portraits.BUST_Z` 1,52 / `BUST_ORTHO` 0,78) para los humanoides:
+  con la cabeza adulta, encuadrar por la caja dejaba la cara en un tercio del cuadro (la
+  estiraban el cayado, la corona o el penacho). Leon, agua y vinetas siguen por la caja.
+- **Banco de pruebas** que vale para cualquier retoque: render de un busto a 512 px mas cuatro
+  frames de la hoja a tamano real, para varios personajes en una imagen. Se mira ANTES de
+  lanzar las 21 hojas (2,5 min por tanda de siete en un contenedor de 4 nucleos).
+
+Re-renderizado entero el mismo dia en el contenedor Linux (`bpy` 4.2): 12 hojas + 9 jefes,
+`portraits.png`, `npcs.png`, las 46 estampas (`tools/estampas`) y los 23 paneles de `cine.py`.
+Los recortes de fotograma que avisa `render_sheet` (muerte del Capitan y del Espiritu, ataque
+de la Muerte) ya estaban en las hojas de antes.
+
+**`look.py` y Blender 4.2**: el EEVEE de 4.2 se llama `BLENDER_EEVEE_NEXT` y ya no tiene sombras
+suaves, tamano de mapa de sombras ni bloom en la escena. `setup_eevee` prueba el nombre viejo y
+cae al nuevo, y `_set` salta lo que no exista; en el Blender 4.1 del escritorio no cambia nada.
+Comparado panel a panel: misma luz, misma niebla, sombras proyectadas algo mas suaves. ~3,5 min
+por panel por CPU (llvmpipe).
