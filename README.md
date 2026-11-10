@@ -30,6 +30,10 @@ Written from scratch in C++17 on SDL3, with no game engine.
 - **Faith** is the core resource: it powers the 10 miracles and scales across 6 tiers.
 - **39 encounters** drawn from the biblical text, 22 items, 18 achievements, and a
   meta-progression hub (El Santuario) with 21 ranked upgrades.
+- **Skill pays off.** Chain hits without getting touched to build *Zeal* (Fervor, Zeal,
+  Burning Zeal): more damage, crits and faith while it lasts, and offerings when it cools
+  down clean — one hit breaks it. Dash through an arrow or a boss attack at the last
+  instant for a perfect dodge: slow motion, the dash back at once and a guaranteed crit.
 - Scripture is quoted verbatim from public-domain translations: Reina-Valera 1909 in
   Spanish, King James Version in English. Enemies and events are checked
   against the text.
@@ -108,6 +112,11 @@ Escrito desde cero en C++17 sobre SDL3, sin motor de juego.
 - **La fe** es el recurso central: alimenta los 10 milagros y escala en 6 niveles.
 - **39 encuentros** sacados del texto bíblico, 22 objetos, 18 logros y un lugar de
   meta-progreso (El Santuario) con 21 mejoras por rangos.
+- **Jugar bien se nota.** Encadena golpes sin que te toquen y crece el *Celo* (Fervor, Celo,
+  Celo Ardiente): más daño, críticos y fe mientras dura, y ofrendas si se enfría limpio — un
+  golpe lo rompe. Atraviesa con el dash una flecha o el ataque de un jefe en el último
+  instante y es una esquiva perfecta: cámara lenta, el dash de vuelta al momento y un
+  crítico asegurado.
 - Las citas bíblicas van literales y salen de traducciones de dominio público: la
   Reina-Valera 1909 en español y la King James en inglés. Enemigos y sucesos se
   contrastan con el texto.

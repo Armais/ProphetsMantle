@@ -449,6 +449,35 @@ migración desde cualquier versión anterior.
 
 ---
 
+## 4ter. Destreza: que jugar bien se note (2026-11-10)
+
+El usuario: *"mejora este juego para hacerlo mas divertido"*. El tacto ya hacia que cada golpe
+pesara; lo que faltaba es que jugar BIEN se sintiera distinto de jugar regular. Referencias:
+la racha que se cobra al cerrarla (los "combo meter" de los juegos de accion) y la esquiva
+perfecta con camara lenta (Bayonetta, Hades con su dash). Tres piezas, ninguna toca el mundo
+fijo ni el guardado:
+
+1. ✅ **Celo, la racha** (1 R 19:10: "sentido he un vivo celo por Jehova"). Golpes y bajas
+   encadenados sin que te toquen. Grados Fervor / Celo / Celo Ardiente con dano, critico, fe y
+   vida mientras dura; si se enfria limpia **paga ofrendas**; un golpe recibido la rompe sin
+   paga. Es riesgo contra recompensa: seguir peleando para no perderla o dejarla cerrar.
+2. ✅ **Critico**: un tiro de cada ~20 entra x1,5 con su numero, su sonido y su pausa.
+3. ✅ **Esquiva perfecta**: atravesar en pleno dash un proyectil, un telegrafo o la carga de
+   un jefe congela el tiempo un instante, recarga el dash, da fe y racha, y deja el siguiente
+   tiro critico. Convierte el dash de "boton de huir" en la jugada que mas paga.
+
+Cifras, donde vive cada cosa y la medida (el jefe del Carmelo pasa de 23,5 a 20,6 s con el
+bot de punteria perfecta): `src/core/CLAUDE.md`, "Destreza".
+
+## 4quater. Personajes de proporciones adultas (2026-11-10)
+
+El usuario: *"que no se vean tan infantiles, sino mas maduros"*. Fin de la figurita cabezona:
+cabeza a escala casi real (~6 cabezas de alto), cara esculpida por sus sombras (arco de la
+ceja, ojos entornados, nariz en cuna, mandibula), capa que cae y color de tierra. Sigue siendo
+el mismo muneco 3D suave (no pixel art, no realismo): lo que cambia es la EDAD que aparenta.
+Detalle en `tools/blender/CLAUDE.md`, "Personajes maduros". El icono del juego se rehizo con
+ellos (`tools/branding/CLAUDE.md`).
+
 ## 5. Personajes no jugables
 
 El PNJ del encuentro se dibujaba con la celda de **antorcha** del tileset. Eso se acabó.
@@ -495,7 +524,7 @@ El PNJ del encuentro se dibujaba con la celda de **antorcha** del tileset. Eso s
 | Cobertura bíblica | los episodios de titular | **todo** Elías y Eliseo en 1-2 Reyes |
 | PNJ | icono del tileset | entidad con sprite propio |
 | Duración de run | 20-35 min | 45-60 min (el autoguardado por sala ya sostiene la sesión móvil de 5-15) |
-| Estética | "Pixel Art 16-bit" | figurita 3D suave (decidido 2026-08-19) |
+| Estética | "Pixel Art 16-bit" | figurita 3D suave (decidido 2026-08-19), de proporciones adultas (2026-11-10) |
 | Personajes desbloqueables | tercer profeta jugable | **cosméticos** (decidido 2026-08-25) |
 | Meta-progresión | 8 mejoras de cifra | El Santuario con rangos y dones que cambian la partida (2026-10-03) |
 | Consumibles | carta de elección, 1 hueco | se encuentran en el mundo; alforja de 2-4 huecos (2026-10-03) |

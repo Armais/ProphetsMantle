@@ -2,7 +2,7 @@
 
 ## Overview
 
-MANTLE is a 2D top-down roguelike action game (smooth "3D figurine" look, Clash-Royale-like, NOT pixel art anymore) inspired by the biblical prophets Elijah (Elias) and Elisha (Eliseo). Built in C++17 with SDL3, it targets Desktop (Windows/Linux/Mac), Web (Emscripten), Android, and iOS. The game follows a two-act structure where Act I stars Elias and Act II stars Eliseo, connected by an "Ascension" transition where items and faith transfer between characters.
+MANTLE is a 2D top-down roguelike action game (smooth "3D figurine" look with ADULT proportions since 2026-11-10 — no longer the big-headed Clash-Royale style; NOT pixel art) inspired by the biblical prophets Elijah (Elias) and Elisha (Eliseo). Built in C++17 with SDL3, it targets Desktop (Windows/Linux/Mac), Web (Emscripten), Android, and iOS. The game follows a two-act structure where Act I stars Elias and Act II stars Eliseo, connected by an "Ascension" transition where items and faith transfer between characters.
 
 ## Build System
 
@@ -145,6 +145,7 @@ docs/               - temas largos, se leen bajo demanda
 | Input | `input/input.h` | `Input` | Action enum, device-agnostic |
 | Audio | `audio/audio.h` | `Audio` | MIX_Mixer*, MIX_Track*, MIX_Audio* |
 | Faith | `game/faith.h` | `FaithSystem` | Core mechanic, 6 tiers |
+| Destreza | `core/config.h` (`Config::Skill`) | `Engine::Zeal` | Racha (Celo), criticos y esquiva perfecta; ver `src/core/CLAUDE.md` |
 | Combat | `game/combat.h` | (free functions) | O(n^2) collision, projectiles |
 | Rooms | `game/rooms.h` | `Room`, `FloorMap` | tiles de 16 unidades; **zona continua** por capitulo (`RoomType::Zone`, celdas de 40x22 cosidas en 6x4 / 6x5 hasta 240x110; arena del jefe dentro de la celda B, pegada a un borde distinto por capitulo; el jefe se averigua con pistas, `get_boss_intel`); interior 20x11 |
 | Save | `systems/save.h` | `SaveSystem` | Binary format, version 12 (migra v3..v11) |
