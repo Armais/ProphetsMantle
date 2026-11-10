@@ -381,8 +381,11 @@ void update_hazards(ECSWorld& world, FaithSystem& faith, CombatEvents& events, f
                 on_player_hit(world, faith, h);
             } else if (world.healths[p].iframes_timer > 0.0f) {
                 // Esquivado con i-frames (el dash a traves del barrido): ya no vuelve a
-                // morder en este peligro, aunque los i-frames se acaben a mitad.
+                // morder en este peligro, aunque los i-frames se acaban a mitad.
                 h.hit_done = true;
+                // Y si fue EN PLENO dash, es la esquiva perfecta (Config::Skill): el barrido,
+                // la carga o la onda atravesados en el ultimo instante.
+                if (world.player_dashing() && h.damage > 0.0f) world.perfect_dodges++;
             }
         }
         if (h.hits_enemies && h.damage > 0.0f && h.t - dt < h.warn + 0.02f) {

@@ -213,6 +213,61 @@ constexpr float SCENE_WALK_MAX      = 4.5f;   // tope duro en segundos
 } // namespace Feel
 
 // =============================================================================
+// Destreza: lo que el juego PREMIA por jugar bien (2026-11-10)
+// =============================================================================
+// Peticion del usuario: "mejora este juego para hacerlo mas divertido". El tacto (Feel) ya
+// hacia que cada golpe PESARA; lo que faltaba es que jugar BIEN se notara: encadenar sin
+// recibir, esquivar en el ultimo instante, el golpe que sale mejor que los demas. Tres
+// piezas, y las tres se ven, se oyen y pagan algo:
+//   - CELO (la racha): golpes y bajas encadenados sin que te toquen. Sube de grado, da
+//     dano, fe y criticos mientras dura, y al cerrarse LIMPIA paga ofrendas. Un golpe
+//     recibido la rompe y no paga nada. "Sentido he un vivo celo por Jehova" (1 R 19:10).
+//   - CRITICO: un tiro de cada ~20 entra x1,5 con su numero, su sonido y su pausa.
+//   - ESQUIVA PERFECTA: atravesar un proyectil o un ataque de jefe EN PLENO dash congela
+//     el tiempo un instante, recarga el dash, da fe y Celo y deja el siguiente tiro critico.
+// Nada de esto mueve el `rand()` global: el critico tira de su propio generador
+// (`ECSWorld::crit_rng`), asi que drops y hallazgos salen igual que antes con la misma semilla.
+namespace Skill {
+
+// -- Critico ------------------------------------------------------------------
+constexpr float CRIT_BASE      = 0.05f;   // probabilidad de critico sin racha
+constexpr float CRIT_PER_TIER  = 0.015f;  // + por cada grado de Celo (hasta 0,095)
+constexpr float CRIT_MULT      = 1.5f;    // dano del critico
+constexpr float CRIT_HITSTOP   = 0.030f;  // pausa EXTRA sobre la del mordisco
+
+// -- Celo (la racha) ------------------------------------------------------------
+constexpr float ZEAL_WINDOW    = 3.2f;    // s sin conectar antes de que la racha se cierre
+constexpr int   ZEAL_KILL_BONUS = 2;      // una baja vale su golpe + esto
+constexpr int   ZEAL_SHOW_AT   = 3;       // por debajo no se pinta (un golpe suelto no es racha)
+constexpr int   ZEAL_TIERS     = 3;
+// Grado 0..3: a partir de cuantos se entra, y lo que da MIENTRAS dura
+constexpr int   ZEAL_TIER_AT[ZEAL_TIERS + 1]    = {0, 10, 25, 50};
+// Moderado a proposito (medido con feel_baseline): la racha tambien da FE, y la fe ya sube
+// el dano por su cuenta (FaithSystem::get_damage_multiplier); con 1,20 y +15 de fe por
+// grado el jefe del Carmelo caia en 13,6 s cuando antes no caia en 20. Medido con el bot
+// (punteria perfecta) en la pelea del Carmelo, `bot 60`: 23,5 s sin Destreza; 15,8 s con
+// dano x1,04..1,12 y critico x1,6 al 6+2 %; 24,6 s sin dano ni critico (la fe no era); y
+// 20,6 s con lo de abajo. El dano y el critico se componen al ralear antes al corro.
+constexpr float ZEAL_DMG[ZEAL_TIERS + 1]        = {1.00f, 1.03f, 1.06f, 1.10f};
+constexpr float ZEAL_KILL_FAITH[ZEAL_TIERS + 1] = {0.0f, 0.0f, 0.25f, 0.5f};  // fe extra por baja
+// Lo que da al SUBIR a ese grado (una vez por racha)
+constexpr float ZEAL_TIER_FAITH[ZEAL_TIERS + 1] = {0.0f, 2.0f, 4.0f, 8.0f};
+constexpr float ZEAL_TIER_HEAL[ZEAL_TIERS + 1]  = {0.0f, 0.0f, 10.0f, 20.0f};
+// Al cerrarse LIMPIA (se enfria sin que te hayan tocado): ofrendas por cada N de racha
+constexpr int   ZEAL_PAYOUT_PER = 12;
+constexpr int   ZEAL_PAYOUT_MAX = 8;
+constexpr float ZEAL_END_SHOW   = 1.8f;   // s que se ve el rotulo de cierre
+
+// -- Esquiva perfecta -----------------------------------------------------------
+constexpr float DODGE_SLOWMO       = 0.42f;  // s REALES de camara lenta
+constexpr float DODGE_SLOWMO_SCALE = 0.30f;  // el mundo va a esta fraccion mientras dura
+constexpr float DODGE_FAITH        = 3.0f;
+constexpr int   DODGE_ZEAL         = 3;      // cuenta como tres golpes de racha
+constexpr float DODGE_FLASH        = 0.12f;  // fogonazo blanco suave (world_flash)
+
+} // namespace Skill
+
+// =============================================================================
 // Ajustes del jugador (GDD 4.2)
 // =============================================================================
 // Vive aqui y no en save.h porque lo nombran Input, Player y el menu de Opciones, y

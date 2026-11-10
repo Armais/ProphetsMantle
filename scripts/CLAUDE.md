@@ -410,3 +410,28 @@ version: hay que llegar al puesto de tiro por el MISMO camino que `mira_check`
 (`walks 536 200` -> `walks 536 312`); desde otro sitio el `walk` se atasca 94 unidades a la
 izquierda y un arbol seco tapa la linea de tiro, y parecia que el apuntado no funcionaba.
 `joylog` imprime ahora tambien `AIM dedo apuntando ataque aim_axis` del dedo de disparo.
+
+## Destreza: Celo, criticos y esquiva perfecta (2026-11-10)
+
+Diseno y cifras en `src/core/CLAUDE.md` ("Destreza"). Un comando nuevo, una linea mas en
+`stats` y un guion:
+
+- **`dodgetest`** suelta un proyectil HOSTIL encima del profeta, apuntandole. Con `press dash`
+  en el MISMO tick (sin `wait` entre medias) es una esquiva perfecta segura; sin el dash es un
+  golpe recibido, que es el control negativo. Es la unica forma de probar la ventana de
+  0,15 s del dash sin fiarla a la punteria de un arquero. Loguea
+  `Autoplay: dodgetest (..., dashing=0|1)`.
+- `stats` imprime una CUARTA linea, **`SKILL`**: la racha en curso y su grado, la mejor racha
+  del intento, las esquivas perfectas y los criticos.
+- Lineas nuevas del log: `Perfect dodge #N: ...`, `Zeal: grado N (Fervor|Celo|Celo Ardiente)
+  con M`, `Zeal: racha ROTA por un golpe (M, grado N)` y `Zeal: racha cerrada LIMPIA (M,
+  grado N) -> +K ofrendas`.
+
+**`scripts/destreza_check.txt`**: gates en su cabecera. Verificado el 2026-11-10: esquiva
+perfecta solo con dash (`dashing=1` -> `Perfect dodge #1`; `dashing=0` -> racha rota y ni una
+esquiva mas), grados 1 y 2 en la tanda de ocho soldados, criticos > 0 y el cierre limpio
+cobrando ofrendas (que llegan al banco por el camino de siempre: `Secret offerings: +1`).
+
+**`feel_baseline` cambia de cifras a proposito**: la racha (que viaja entre tramos si el
+siguiente empieza antes de que se enfrie) y los criticos acortan el TTK. Cifras nuevas y la
+medida del jefe del Carmelo en `src/core/CLAUDE.md`.

@@ -81,6 +81,56 @@ una regresión del motor y no lo es. Por eso `feel_baseline.txt` empieza ahora c
 el ajuste de auto-mira NO mueve la medida: `aimmode` 0, 1 y 2 dan cifras idénticas, porque
 el bot apunta a mano y los tres modos se reducen a usar ese vector.
 
+### Destreza: Celo, critico y esquiva perfecta (`Config::Skill`, 2026-11-10)
+
+Peticion del usuario: *"mejora este juego para hacerlo mas divertido"*. El tacto (`Feel`)
+hacia que cada golpe PESARA, pero jugar bien y jugar regular se sentian igual: no habia nada
+que premiara encadenar sin recibir, esquivar en el ultimo instante o el golpe que sale mejor.
+Tres piezas, las tres se ven, se oyen y pagan algo. Tunables en `namespace Config::Skill`.
+
+- **CELO, la racha** ("Sentido he un vivo celo por Jehova", 1 R 19:10). Cada golpe del
+  profeta (o de sus tiros, milagros, quemaduras y discipulos) suma 1 y cada baja 1+2; la
+  ventana es de 3,2 s. Grados a 10 / 25 / 50: **Fervor, Celo, Celo Ardiente**. Mientras dura
+  da dano (x1,03 / 1,06 / 1,10), critico (+1,5 % por grado) y fe por baja desde el grado 2;
+  al SUBIR de grado, fe (+2/+4/+8), vida en los grados 2 y 3 (+10/+20), aro, chispas, sonido,
+  sacudida y rumble. Si se ENFRIA limpia, **paga ofrendas** (1 por cada 12, hasta 8) que salen
+  en corona del profeta y el iman recoge: se ven llegar al contador. **Un golpe recibido la
+  rompe sin pagar** — ese es el riesgo que hace que la paga signifique algo. No viaja entre
+  capitulos (`zeal_reset` en `start_chapter`) y en el tutorial no paga (no regala moneda meta
+  ni cierra por su cuenta el paso de la ofrenda).
+- **CRITICO**: 5 % de base (+1,5 % por grado de Celo), x1,5 de dano, empujon x1,3, 0,03 s mas
+  de pausa (el UNICO golpe que pasa del tope de `HITSTOP_MAX`), su numero ("20!" en oro), el
+  sonido `CriticalHit` y la sacudida de golpe a jefe. Solo los tiros (proyectiles amigos).
+  **Tira de su PROPIO generador** (`ECSWorld::crit_rng`, xorshift32): con el `rand()` global
+  se habrian movido los drops y los hallazgos de todos los guiones con semilla fija.
+- **ESQUIVA PERFECTA**: atravesar EN PLENO dash (los 0,15 s del impulso, no los i-frames que
+  deja despues) un proyectil hostil, un peligro telegrafiado de jefe (`hazards.cpp`) o el
+  cuerpo de un JEFE que puede atacar (la carga del Capitan, el barrido de Acab; un raso no:
+  pasar por dentro de un soldado quieto no es esquivar nada). Paga: **camara lenta** 0,42 s
+  reales a x0,30, el dash recargado en el acto (se encadena), +3 de fe, +3 de racha, el
+  proximo tiro critico seguro (aro de oro a los pies hasta que sale), "¡ESQUIVA!", fogonazo
+  suave, musica agachada y rumble. Una por dash (`dodge_latched`).
+
+Donde vive: `combat.cpp` y `hazards.cpp` solo CUENTAN (`ECSWorld::zeal_hits / zeal_kills /
+crits / perfect_dodges`, y `crit_pending` para que `apply_damage` pinte el numero); el Engine
+decide que significa en `update_skill` (llamada antes de vaciar `combat_events`, porque lee
+los golpes recibidos de ese frame para romper la racha), `zeal_add`, `zeal_close` y
+`on_perfect_dodge`, y fija para el paso siguiente `world.zeal_dmg_mult` y `world.crit_chance`.
+La camara lenta escala `dt` dentro de `case Playing` justo despues del hit-stop: `dt` no se
+usa despues del `switch`, asi que no toca nada fuera de la partida. El HUD: `src/ui/CLAUDE.md`.
+
+**Medido** (bot de punteria perfecta, `defaults` + `metareset`, mismo guardado de partida,
+binario de antes contra el de despues): soldados 0,67 -> 0,67 s; leones 1,77 -> 1,07 s
+(11 -> 6 tiros: el leon salta y los tiros que fallan son caoticos — con criticos bastan seis);
+arqueros 0,74 -> 0,78 s y un golpe recibido menos; **jefe del Carmelo** (`bot 60`)
+**23,5 -> 20,6 s**. La primera version (dano x1,20 en Celo Ardiente, critico x1,6 con 6+3 %,
+mas fe por grado) lo dejaba en **15,8 s**: el dano y el critico se componen al ralear antes
+al corro, y la fe no tenia nada que ver (sin ellos y con la fe de la racha, 24,6 s). Por eso
+las cifras son modestas: la racha es un premio, no un atajo. Un jugador de verdad encaja
+golpes y la rompe; el bot casi nunca.
+
+Guion: **`scripts/destreza_check.txt`** (y el comando `dodgetest`, ver `scripts/CLAUDE.md`).
+
 ### Localizacion: el juego entero en ES + EN (2026-08-25)
 
 **Mecanismo: `tr("es", "en")`** (`core/i18n.h`), con las dos versiones **juntas en el punto

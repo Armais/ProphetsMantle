@@ -213,10 +213,21 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                 }
                 if (pr.damage > 0.0f && !pr.already_hit(enemy)) {
                     pr.mark_hit(enemy);
-                    knock(world, enemy, pr.direction, ENEMY_KNOCKBACK);
+                    // Destreza (Config::Skill): el grado de Celo sube el dano y el critico
+                    // sale de su propio generador. `crit_pending` lo lee apply_damage para
+                    // pintar el numero de critico y alargar la pausa; se baja al volver.
+                    // Contra lo intocable no se tira: el critico asegurado de la esquiva
+                    // perfecta se gastaria en un golpe que rebota.
+                    f32 dmg = pr.damage * world.zeal_dmg_mult;
+                    world.crit_pending = world.has(enemy, Component::Health) &&
+                                         !world.healths[enemy].invulnerable && world.roll_crit();
+                    if (world.crit_pending) dmg *= Config::Skill::CRIT_MULT;
+                    knock(world, enemy, pr.direction, world.crit_pending ? ENEMY_KNOCKBACK * 1.3f : ENEMY_KNOCKBACK);
                     events.enemy_hits++;
                     if (world.enemy_ais[enemy].is_boss) events.boss_hits++;
-                    if (apply_damage(world, proj, enemy, pr.damage)) on_enemy_killed(world, faith, enemy, events);
+                    const bool killed = apply_damage(world, proj, enemy, dmg);
+                    world.crit_pending = false;
+                    if (killed) on_enemy_killed(world, faith, enemy, events);
                     // Antorcha del Altar: el tiro del cayado PRENDE. No se acumula: refresca.
                     else if (pr.staff && world.mods.burning_shots && world.is_alive(enemy) &&
                              world.has(enemy, Component::Health) && world.healths[enemy].is_alive() &&
@@ -237,6 +248,8 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                         faith.on_take_damage();
                         events.player_hits++;
                     }
+                } else if (world.player_dashing() && world.projectiles[i].damage > 0.0f) {
+                    world.perfect_dodges++;   // lo atraveso en pleno dash: esquiva perfecta
                 }
                 world.destroy(i);
             }
@@ -248,6 +261,8 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                         faith.on_take_damage();
                         events.player_hits++;
                     }
+                } else if (world.player_dashing() && world.projectiles[j].damage > 0.0f) {
+                    world.perfect_dodges++;   // lo atraveso en pleno dash: esquiva perfecta
                 }
                 world.destroy(j);
             }
@@ -278,6 +293,12 @@ void system_collision(ECSWorld& world, FaithSystem& faith, CombatEvents& events)
                         play_anim(world.animations[enemy],
                                   facing_anim(AnimID::AttackDown, world.transforms[enemy].facing), true);
                     }
+                } else if (world.player_dashing() && world.enemy_ais[enemy].is_boss &&
+                           world.has(enemy, Component::Combat) && world.combats[enemy].can_attack()) {
+                    // Atravesar el cuerpo de un JEFE en pleno dash (la carga del Capitan, el
+                    // barrido de Acab) es esquiva perfecta. Un raso no: pasar por dentro de un
+                    // soldado quieto no es esquivar nada, y daria fe gratis.
+                    world.perfect_dodges++;
                 }
                 if (!col_a.is_trigger && !col_b.is_trigger) {
                     push(world, i, normal * (-overlap * 0.5f));
@@ -380,6 +401,12 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
         if (is_boss)             stop = std::max(stop, Config::Feel::HITSTOP_BOSS);
         if (target == world.player) stop = Config::Feel::HITSTOP_PLAYER;
         world.hitstop = std::max(world.hitstop, std::min(stop, Config::Feel::HITSTOP_MAX));
+        // El critico pesa mas que el tope de un golpe normal: es el unico que se lo salta
+        if (world.crit_pending && target != world.player) {
+            world.hitstop = std::max(world.hitstop, std::min(stop, Config::Feel::HITSTOP_MAX) +
+                                                    Config::Skill::CRIT_HITSTOP);
+            world.crits++;
+        }
         // Sonda de tacto (comando `feel`): solo mide.
         if (target == world.player) world.dmg_taken += dealt_now;
         else                        world.dmg_dealt += dealt_now;
@@ -388,7 +415,16 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
     Vec2 tpos = world.has(target, Component::Transform) ? world.transforms[target].position : Vec2{0, 0};
     f32 dealt = before - health.current;
     if (dealt > 0.0f && target != world.player && world.popups.size() < 24)
-        world.popups.push_back({tpos, dealt, 0.0f, is_boss});
+        world.popups.push_back({tpos, dealt, 0.0f, is_boss,
+                                world.crit_pending ? ECSWorld::DamagePopup::Crit : ECSWorld::DamagePopup::Damage});
+    // Celo: cuenta cada golpe que el PROFETA (sus tiros, su cayado, sus milagros, sus
+    // quemaduras o sus discipulos) mete a un hostil. Los peligros de un jefe que muerden a
+    // sus propios secuaces y el `killall` de los guiones llegan con atacante NONE: no cuentan.
+    const bool player_side = attacker != ENTITY_NONE && world.is_alive(attacker) &&
+        (attacker == world.player || is_ally(world, attacker) ||
+         (world.has(attacker, Component::Projectile) && world.projectiles[attacker].friendly));
+    const bool zeal_counts = dealt > 0.0f && target != world.player && is_hostile(world, target) && player_side;
+    if (zeal_counts) world.zeal_hits++;
     if (target == world.player) {
         health.iframes_timer = PLAYER_HIT_IFRAMES;
         spawn_particles(world, tpos, {230, 60, 50, 255}, 8, 80.0f, 0.4f);
@@ -401,6 +437,7 @@ bool apply_damage(ECSWorld& world, Entity attacker, Entity target, f32 damage) {
     }
 
     if (!health.is_alive()) {
+        if (zeal_counts) world.zeal_kills++;
         if (target != world.player) {
             // El final se telegrafia: mas pavesas, un anillo que se abre y el cadaver
             // saliendo despedido en la direccion del golpe. Antes desaparecia sin mas.

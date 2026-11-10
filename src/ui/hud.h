@@ -23,6 +23,9 @@
 #include "core/ecs.h"
 #include "input/input.h"   // TouchButton: en movil el HUD es tambien el mando
 
+// Nombre del grado de Celo (Config::Skill): RACHA / FERVOR / CELO / CELO ARDIENTE
+const char* zeal_tier_name(int tier);
+
 struct HUDContext {
     const FloorMap* floor_map = nullptr;
     const Room*     room      = nullptr;   // la activa: la zona, o el interior
@@ -68,6 +71,16 @@ struct HUDContext {
     int   offerings = -1;
     f32   offering_pop = 0.0f;
     int   offering_pop_amount = 0;
+    // CELO, la racha (Config::Skill). `zeal_window` = fraccion de ventana que queda (1 -> 0).
+    // El rotulo de cierre: `zeal_end_payout` ofrendas cobradas, o -1 si la rompio un golpe.
+    int   zeal_count = 0;
+    int   zeal_tier  = 0;
+    f32   zeal_window = 0.0f;
+    f32   zeal_pop = 0.0f;
+    f32   zeal_tier_flash = 0.0f;
+    f32   zeal_end_t = 0.0f;
+    int   zeal_end_count = 0;
+    int   zeal_end_payout = 0;
     // Dones de El Santuario que quedan (se pintan junto a la vida / la alforja)
     int   revives = 0;            // Aliento de Vida
     int   prayers = 0;            // Altar Portatil
@@ -217,6 +230,7 @@ private:
     void draw_inventory(Renderer& renderer, const Player& player, const HUDContext& ctx);
     void draw_belt(Renderer& renderer, const Player& player, const HUDContext& ctx);
     void draw_offerings(Renderer& renderer, const HUDContext& ctx);
+    void draw_zeal(Renderer& renderer, const HUDContext& ctx);
     void draw_pickup_card(Renderer& renderer, const HUDContext& ctx);
 public:
     // Rect de un hueco de la alforja (dibujo y toque comparten formula). -1 si no cabe.

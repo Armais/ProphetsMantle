@@ -493,3 +493,18 @@ El layout y por que esta en `src/input/CLAUDE.md` ("La pasada de móvil"). Lo de
   arrastra ya existia.
 - **Controles** (`render_controls`, tactil) describe el arco y dice que el tamaño y el zurdo
   estan en Opciones; las mitades cambian con `MenuSystem::touch_lefty`.
+
+## El contador de Celo y los numeros de destreza (2026-11-10)
+
+`HUD::draw_zeal` (columna derecha, bajo "Jefe / TAB: mapa": la unica franja que no pisa nada
+en PC ni en tactil). Tres lineas: el GRADO (RACHA / FERVOR / CELO / CELO ARDIENTE,
+`zeal_tier_name`, destella en blanco al subir), la CIFRA "xN" (late al sumar, crece un poco con
+el grado, y en Celo Ardiente arde entre rojo y oro) y la MECHA: lo que queda de ventana, que
+parpadea en su ultimo tercio. No se pinta por debajo de `Config::Skill::ZEAL_SHOW_AT` (3): un
+golpe suelto no es una racha. Al cerrarse deja 1,8 s un rotulo: "RACHA xN" con "+K ofrendas"
+en oro, o "RACHA ROTA xN" en rojo apagado. Se oculta con el mapa grande, como el minimapa.
+
+Numeros flotantes nuevos (`ECSWorld::DamagePopup`): `Crit` ("20!" en oro, con golpe de escala
+al nacer y sombra) y `Dodge` ("¡ESQUIVA!" / "DODGE!" sobre el profeta). Y un aro de oro que
+late a los pies mientras el proximo tiro es critico seguro (`ECSWorld::next_crit`): sin el,
+"la esquiva carga el siguiente tiro" seria una regla invisible.

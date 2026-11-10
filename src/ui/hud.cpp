@@ -579,6 +579,7 @@ void HUD::render(Renderer& renderer, const Player& player,
     if (!ctx.show_map) {
         draw_minimap(renderer, ctx, false);
         draw_objective(renderer, ctx);
+        draw_zeal(renderer, ctx);
     }
     draw_boss_bar(renderer, ctx);
     draw_message(renderer, ctx);
@@ -2240,6 +2241,104 @@ void HUD::draw_objective(Renderer& renderer, const HUDContext& ctx) {
     const char* maph = (ctx.input && ctx.input->touch_ui) ? tr("Toca: mapa", "Tap: map")
                                                           : tr("TAB: mapa", "TAB: map");
     renderer.draw_text(maph, Config::GAME_WIDTH - renderer.measure_text(maph, 0.6f) - 5.0f, y + 8.0f, {150, 150, 150, 255}, 0.6f);
+}
+
+// =============================================================================
+// CELO: el contador de racha (Config::Skill, 2026-11-10)
+// =============================================================================
+// Va en la columna derecha, bajo "Jefe / TAB: mapa": es la unica franja del HUD que no pisa
+// nada en PC ni en tactil (los botones viven abajo y en los pilares). Tres lineas: el grado,
+// la cifra (late al sumar, crece un poco con el grado) y la ventana que queda, que se vacia
+// como una mecha. Al cerrarse deja un rotulo: lo cobrado en ofrendas o "racha rota".
+const char* zeal_tier_name(int tier) {
+    switch (tier) {
+        case 1:  return tr("FERVOR", "FERVOR");
+        case 2:  return tr("CELO", "ZEAL");
+        case 3:  return tr("CELO ARDIENTE", "BURNING ZEAL");
+        default: return tr("RACHA", "STREAK");
+    }
+}
+
+static Color zeal_color(int tier, f32 time, u8 a) {
+    switch (tier) {
+        case 1:  return {255, 214, 110, a};
+        case 2:  return {255, 158, 64, a};
+        case 3: {
+            // Celo ardiente: la cifra arde (late entre rojo y oro)
+            const f32 k = 0.5f + 0.5f * std::sin(time * 14.0f);
+            return {255, static_cast<u8>(90 + 90 * k), static_cast<u8>(50 + 30 * k), a};
+        }
+        default: return {240, 232, 214, a};
+    }
+}
+
+static void text_shadowed(Renderer& r, const char* t, f32 x, f32 y, Color c, f32 scale) {
+    r.draw_text(t, x + 0.7f, y + 0.7f, {0, 0, 0, static_cast<u8>(c.a * 0.7f)}, scale);
+    r.draw_text(t, x, y, c, scale);
+}
+
+void HUD::draw_zeal(Renderer& renderer, const HUDContext& ctx) {
+    const FloorMap* fm = ctx.floor_map;
+    const f32 right = Config::GAME_WIDTH - 5.0f;
+    f32 y = 52.0f;
+    if (fm && fm->room_count > 0) {
+        const Rect mm = minimap_rect(*fm);
+        y = mm.y + mm.h + 21.0f;     // bajo las dos lineas de draw_objective
+    }
+
+    if (ctx.zeal_count >= Config::Skill::ZEAL_SHOW_AT) {
+        const int tier = std::max(0, std::min(Config::Skill::ZEAL_TIERS, ctx.zeal_tier));
+        // Grado: al subir destella en blanco y se ensancha un instante
+        const char* name = zeal_tier_name(tier);
+        const f32 fl = ctx.zeal_tier_flash;
+        Color nc = zeal_color(tier, ctx.time, 235);
+        if (fl > 0.0f) {
+            nc.r = static_cast<u8>(nc.r + (255 - nc.r) * fl);
+            nc.g = static_cast<u8>(nc.g + (255 - nc.g) * fl);
+            nc.b = static_cast<u8>(nc.b + (255 - nc.b) * fl);
+        }
+        const f32 ns = 0.6f + 0.25f * fl;
+        text_shadowed(renderer, name, right - renderer.measure_text(name, ns), y, nc, ns);
+
+        // La cifra: "x27"
+        char buf[16];
+        snprintf(buf, sizeof(buf), "x%d", ctx.zeal_count);
+        const f32 cs = 1.0f + 0.12f * static_cast<f32>(tier) + 0.35f * ctx.zeal_pop;
+        const f32 cw = renderer.measure_text(buf, cs);
+        text_shadowed(renderer, buf, right - cw, y + 6.5f, zeal_color(tier, ctx.time, 255), cs);
+
+        // La mecha: lo que queda de ventana. En el ultimo tercio parpadea (se va a cerrar).
+        const f32 bw = 34.0f, bh = 2.0f, by = y + 6.5f + 10.0f * cs + 1.0f;
+        const f32 k = std::max(0.0f, std::min(1.0f, ctx.zeal_window));
+        renderer.draw_rect({right - bw - 0.5f, by - 0.5f, bw + 1.0f, bh + 1.0f}, {0, 0, 0, 150});
+        Color mc = zeal_color(tier, ctx.time, 230);
+        if (k < 0.33f && std::fmod(ctx.time, 0.25f) < 0.125f) mc.a = 110;
+        renderer.draw_rect({right - bw * k, by, bw * k, bh}, mc);
+        return;
+    }
+
+    // Rotulo de cierre de la racha anterior
+    if (ctx.zeal_end_t > 0.0f && ctx.zeal_end_count > 0) {
+        const f32 a = std::min(1.0f, ctx.zeal_end_t / 0.5f);
+        const u8 al = static_cast<u8>(255 * a);
+        char buf[48];
+        if (ctx.zeal_end_payout < 0) {
+            snprintf(buf, sizeof(buf), tr("RACHA ROTA x%d", "STREAK BROKEN x%d"), ctx.zeal_end_count);
+            text_shadowed(renderer, buf, right - renderer.measure_text(buf, 0.65f), y + 4.0f,
+                          {215, 120, 110, al}, 0.65f);
+        } else {
+            snprintf(buf, sizeof(buf), tr("RACHA x%d", "STREAK x%d"), ctx.zeal_end_count);
+            text_shadowed(renderer, buf, right - renderer.measure_text(buf, 0.75f), y + 2.0f,
+                          {240, 232, 214, al}, 0.75f);
+            if (ctx.zeal_end_payout > 0) {
+                snprintf(buf, sizeof(buf), ctx.zeal_end_payout == 1 ? tr("+%d ofrenda", "+%d offering")
+                                                                    : tr("+%d ofrendas", "+%d offerings"),
+                         ctx.zeal_end_payout);
+                text_shadowed(renderer, buf, right - renderer.measure_text(buf, 0.65f), y + 11.0f,
+                              {255, 214, 110, al}, 0.65f);
+            }
+        }
+    }
 }
 
 void HUD::draw_boss_bar(Renderer& renderer, const HUDContext& ctx) {

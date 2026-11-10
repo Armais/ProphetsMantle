@@ -430,12 +430,40 @@ struct ECSWorld {
     // `kind`: Damage (blanco / dorado de jefe), Heal (verde "+N"), Faith (oro "+N fe") y
     // Burn (naranja, la quemadura de la Antorcha). Va el ultimo con valor por defecto: los
     // push_back de siempre ({pos, dano, 0, jefe}) siguen siendo dano.
+    // `Crit` (2026-11-10): el critico, mas grande, en oro y con "!". `Dodge`: el rotulo
+    // "ESQUIVA" de la esquiva perfecta sobre el profeta (`amount` no se pinta).
     struct DamagePopup {
-        enum Kind : u8 { Damage, Heal, Faith, Burn };
+        enum Kind : u8 { Damage, Heal, Faith, Burn, Crit, Dodge };
         Vec2 pos; f32 amount; f32 life; bool boss; Kind kind = Damage;
     };
     std::vector<DamagePopup> popups;
     f32 hitstop = 0.0f;       // > 0: freeze the simulation for a couple of frames (impacto)
+
+    // ---- Destreza (Config::Skill, 2026-11-10) ------------------------------------------
+    // El Engine fija `crit_chance` y `zeal_dmg_mult` cada frame (base + grado de Celo) antes
+    // de mover el mundo; combat.cpp los aplica a los tiros del profeta y apunta lo que pasa
+    // en los contadores, que el Engine lee y vacia (sonido, sacudida, racha).
+    f32  crit_chance    = 0.0f;   // 0 = sin criticos (fuera de partida)
+    f32  zeal_dmg_mult  = 1.0f;
+    bool next_crit      = false;  // la esquiva perfecta deja el proximo tiro critico
+    bool crit_pending   = false;  // el golpe en curso es critico (lo lee apply_damage)
+    // Generador PROPIO del critico (xorshift32): tirar del rand() global cambiaria los drops
+    // y los hallazgos de cualquier guion con semilla fija.
+    u32  crit_rng       = 0x2545F491u;
+    u32  crits          = 0;      // criticos que entraron este frame
+    u32  zeal_hits      = 0;      // golpes del profeta (o de los suyos) que entraron este frame
+    u32  zeal_kills     = 0;      // ...y de esos, los que remataron
+    u32  perfect_dodges = 0;      // ataques atravesados EN PLENO dash este frame
+
+    bool roll_crit() {
+        if (next_crit) { next_crit = false; return true; }
+        if (crit_chance <= 0.0f) return false;
+        crit_rng ^= crit_rng << 13; crit_rng ^= crit_rng >> 17; crit_rng ^= crit_rng << 5;
+        return static_cast<f32>(crit_rng & 0xFFFFFFu) / 16777216.0f < crit_chance;
+    }
+    // El profeta esta EN PLENO dash (no en los i-frames que deja despues): la ventana de la
+    // esquiva perfecta es justo eso, los 0,15 s del impulso.
+    bool player_dashing() const;
 
     // Contadores de la sonda de tacto (comando `feel` del autoplay). Solo miden: nada de
     // lo que hay aqui se lee desde el juego, y por eso no van al guardado.

@@ -14,6 +14,11 @@ void ECSWorld::init() {
     clear();
 }
 
+bool ECSWorld::player_dashing() const {
+    return player != ENTITY_NONE && is_alive(player) && has(player, Component::Movement) &&
+           movements[player].is_dashing;
+}
+
 void ECSWorld::clear() {
     entity_count = 0;
     free_list.clear();
@@ -27,6 +32,14 @@ void ECSWorld::clear() {
     consumables_found.clear();
     mods = PlayerMods{};
     hitstop = 0.0f;
+    crit_chance = 0.0f;
+    zeal_dmg_mult = 1.0f;
+    next_crit = false;
+    crit_pending = false;
+    crits = 0;
+    zeal_hits = 0;
+    zeal_kills = 0;
+    perfect_dodges = 0;
     // Estado global de mundo: sin esto, una "Palabra de Sequia" lanzada justo antes de salir
     // al menu seguia ralentizando a los enemigos de la partida siguiente.
     time = 0.0f;

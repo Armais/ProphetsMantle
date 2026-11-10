@@ -775,6 +775,13 @@ void Engine::update(f32 dt) {
                 renderer.update_shake(dt);
                 break;
             }
+            // Esquiva perfecta (Config::Skill): camara lenta. Su reloj corre en tiempo REAL y
+            // todo lo de abajo —mundo, IA, racha, camara— va a la fraccion. `dt` no se usa
+            // despues del switch, asi que reescalarlo aqui no toca nada fuera de Playing.
+            if (slowmo_t > 0.0f) {
+                slowmo_t -= dt;
+                dt *= Config::Skill::DODGE_SLOWMO_SCALE;
+            }
 
             // Age the floating damage numbers (0.7 s each)
             for (size_t i = 0; i < world.popups.size();) {
@@ -951,6 +958,10 @@ void Engine::update(f32 dt) {
                 }
             }
             player.last_event = Player::MiracleEvent::None;
+
+            // Destreza: criticos, esquiva perfecta y Celo. ANTES de que se vacien los eventos
+            // (lee los golpes recibidos de este frame para romper la racha).
+            update_skill(dt);
 
             run_kills += combat_events.enemy_kills;
             player.kills += combat_events.enemy_kills;
@@ -1415,6 +1426,14 @@ void Engine::render() {
             renderer.draw_ring({pp.x, pp.y + 3.0f}, 11.5f + k, {215, 210, 196, static_cast<u8>(90 + 60 * k)});
         }
 
+        // Tiro cargado por la esquiva perfecta: un aro de oro que late a los pies hasta que el
+        // critico sale. Sin el, "el proximo tiro es critico" seria una regla invisible.
+        if (world.next_crit && player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+            const Vec2 pp = world.transforms[player.entity].position;
+            const f32 k = 0.5f + 0.5f * std::sin(world.time * 9.0f);
+            renderer.draw_ring({pp.x, pp.y + 3.0f}, 9.0f + 2.0f * k, {255, 214, 100, static_cast<u8>(140 + 90 * k)});
+        }
+
         // Floating numbers: dano (blanco / oro de jefe), curacion (verde, "+N"), fe (oro,
         // "+N") y quemadura (naranja). Suben y se apagan sobre quien los causa.
         for (const auto& p : world.popups) {
@@ -1428,7 +1447,21 @@ void Engine::render() {
                 case ECSWorld::DamagePopup::Heal:  snprintf(buf, sizeof(buf), "+%d", v); c = {130, 245, 140, a}; scale = 0.75f; break;
                 case ECSWorld::DamagePopup::Faith: snprintf(buf, sizeof(buf), tr("+%d fe", "+%d faith"), v); c = {255, 222, 120, a}; scale = 0.6f; break;
                 case ECSWorld::DamagePopup::Burn:  snprintf(buf, sizeof(buf), "%d", v); c = {255, 150, 70, a}; scale = 0.55f; break;
+                // Critico: oro, con "!" y un golpe de escala al nacer (Config::Skill)
+                case ECSWorld::DamagePopup::Crit:
+                    snprintf(buf, sizeof(buf), "%d!", v); c = {255, 206, 72, a};
+                    scale = (p.boss ? 1.0f : 0.9f) + 0.45f * std::max(0.0f, 1.0f - p.life / 0.12f);
+                    break;
+                case ECSWorld::DamagePopup::Dodge:
+                    snprintf(buf, sizeof(buf), "%s", tr("¡ESQUIVA!", "DODGE!")); c = {255, 250, 228, a};
+                    scale = 0.85f + 0.3f * std::max(0.0f, 1.0f - p.life / 0.15f);
+                    break;
                 default:                           snprintf(buf, sizeof(buf), "%d", v); break;
+            }
+            if (p.kind == ECSWorld::DamagePopup::Crit || p.kind == ECSWorld::DamagePopup::Dodge) {
+                const f32 w2 = renderer.measure_text(buf, scale);
+                renderer.draw_text(buf, p.pos.x - w2 * 0.5f + 0.8f, p.pos.y - 10.0f - 14.0f * p.life + 0.8f,
+                                   {40, 20, 10, static_cast<u8>(a * 0.8f)}, scale);
             }
             f32 w = renderer.measure_text(buf, scale);
             renderer.draw_text(buf, p.pos.x - w * 0.5f, p.pos.y - 10.0f - 14.0f * p.life, c, scale);
@@ -1508,6 +1541,14 @@ void Engine::render() {
         ctx.offerings = tutorial.active ? -1 : progression.offerings;
         ctx.offering_pop = offering_pop;
         ctx.offering_pop_amount = offering_pop_amount;
+        ctx.zeal_count      = zeal.count;
+        ctx.zeal_tier       = zeal.tier;
+        ctx.zeal_window     = zeal.timer / Config::Skill::ZEAL_WINDOW;
+        ctx.zeal_pop        = zeal.pop;
+        ctx.zeal_tier_flash = zeal.tier_flash;
+        ctx.zeal_end_t      = zeal.end_t;
+        ctx.zeal_end_count  = zeal.end_count;
+        ctx.zeal_end_payout = zeal.end_payout;
         ctx.revives = revives_left;
         ctx.prayers = prayers_left;
         ctx.shield  = player.has_shield ? (player.shield_up ? 1 : 0) : -1;
@@ -1749,6 +1790,10 @@ void Engine::start_new_run() {
     state.run_time = 0.0f;
     run_kills = 0;
     run_hits_taken = 0;
+    run_best_zeal = 0;
+    run_perfect_dodges = 0;
+    run_crits = 0;
+    zeal_reset();
     feel_mark = FeelMark{};
     has_revive = false;
     miracle_hint_shown = false;
@@ -1815,6 +1860,7 @@ static int tutorial_count_props(const Room& room) {
 }
 
 void Engine::start_tutorial(TutorialThen then) {
+    zeal_reset();
     tutorial = TutorialSystem{};
     tutorial.active = true;
     tutorial.then   = then;
@@ -2126,6 +2172,7 @@ void Engine::tutorial_back_to_title() {
 }
 
 void Engine::finish_tutorial(bool completed) {
+    zeal_reset();
     const TutorialThen then = tutorial.then;
     SDL_Log("Tutorial: fin (paso %d de %d)", std::min(tutorial.step + 1, TUTORIAL_STEP_COUNT),
             TUTORIAL_STEP_COUNT);
@@ -2156,6 +2203,7 @@ void Engine::finish_tutorial(bool completed) {
 
 void Engine::start_chapter(int chapter, ChapterAnnounce announce) {
     state.current_chapter = chapter;
+    zeal_reset();   // la racha no viaja entre capitulos ni sobrevive a un reintento
     boss_hp_scale = 1.0f;   // el encuentro de cada capitulo se gana de nuevo
     relic_revive_ready = true;   // el Reloj de Acaz perdona una muerte POR capitulo — se
                                  // re-arma aqui para cubrir tambien avanzar y Continuar
@@ -3107,6 +3155,160 @@ void Engine::refill_chapter_gifts() {
 
 // Ingresa ofrendas en el banco, guarda y anima el contador del HUD. `from_pickup` = un
 // hallazgo del suelo (cuenta para el desglose del final como "ya ingresado").
+// =============================================================================
+// Destreza: Celo, critico y esquiva perfecta (Config::Skill, 2026-11-10)
+// =============================================================================
+// El tacto (Config::Feel) hacia que cada golpe pesara; esto hace que jugar BIEN se note.
+// combat.cpp solo cuenta (zeal_hits / zeal_kills / crits / perfect_dodges en ECSWorld) y
+// aqui se decide que significa: sonido, numeros, fe, ofrendas y la camara lenta.
+
+void Engine::zeal_reset() {
+    zeal = Zeal{};
+    slowmo_t = 0.0f;
+    dodge_latched = false;
+    world.next_crit = false;
+}
+
+void Engine::zeal_add(int hits, int kills) {
+    if (hits <= 0 && kills <= 0) return;
+    zeal.count += hits + kills * Config::Skill::ZEAL_KILL_BONUS;
+    zeal.timer = Config::Skill::ZEAL_WINDOW;
+    zeal.pop = 1.0f;
+    zeal.end_t = 0.0f;   // una racha nueva tapa el rotulo de la anterior
+    run_best_zeal = std::max(run_best_zeal, zeal.count);
+    // La racha paga MIENTRAS dura: fe extra por cada baja segun el grado
+    if (kills > 0 && Config::Skill::ZEAL_KILL_FAITH[zeal.tier] > 0.0f)
+        faith.modify(Config::Skill::ZEAL_KILL_FAITH[zeal.tier] * static_cast<f32>(kills));
+
+    int t = zeal.tier;
+    while (t < Config::Skill::ZEAL_TIERS && zeal.count >= Config::Skill::ZEAL_TIER_AT[t + 1]) t++;
+    if (t <= zeal.tier) return;
+    // ---- Sube de grado: se ve, se oye y paga ---------------------------------------------
+    zeal.tier = t;
+    zeal.tier_flash = 1.0f;
+    const f32 fg = Config::Skill::ZEAL_TIER_FAITH[t];
+    const f32 hl = Config::Skill::ZEAL_TIER_HEAL[t];
+    if (fg > 0.0f) faith.modify(fg);
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        const Vec2 pp = world.transforms[player.entity].position;
+        if (hl > 0.0f && world.has(player.entity, Component::Health)) {
+            auto& h = world.healths[player.entity];
+            const f32 before = h.current;
+            h.heal(hl);
+            if (h.current - before >= 1.0f && world.popups.size() < 24)
+                world.popups.push_back({pp + Vec2{8, -4}, h.current - before, 0.0f, false,
+                                        ECSWorld::DamagePopup::Heal});
+        }
+        if (fg > 0.0f && world.popups.size() < 24)
+            world.popups.push_back({pp + Vec2{-8, -8}, fg, 0.0f, false, ECSWorld::DamagePopup::Faith});
+        static const Color ring[Config::Skill::ZEAL_TIERS + 1] = {
+            {255, 240, 210, 230}, {255, 214, 110, 235}, {255, 160, 70, 240}, {255, 96, 60, 245}};
+        spawn_fx(world, pp, FxID::Ring, ring[t], 26.0f + 10.0f * static_cast<f32>(t), 0.45f, 11);
+        spawn_particles(world, pp, ring[t], 10 + 6 * t, 70.0f + 20.0f * static_cast<f32>(t), 0.5f);
+    }
+    audio.play_sfx(t >= 2 ? SfxID::LevelUp : SfxID::FaithGain, 0.45f + 0.15f * static_cast<f32>(t));
+    renderer.shake_camera(t >= 3 ? Config::Feel::SHAKE_ALTAR : Config::Feel::SHAKE_KILL);
+    input.rumble(0.25f + 0.2f * static_cast<f32>(t), 120);
+    SDL_Log("Zeal: grado %d (%s) con %d", t, t == 1 ? "Fervor" : t == 2 ? "Celo" : "Celo Ardiente",
+            zeal.count);
+}
+
+void Engine::zeal_close(bool broken) {
+    const int n = zeal.count;
+    const int tier = zeal.tier;
+    zeal.count = 0;
+    zeal.tier  = 0;
+    zeal.timer = 0.0f;
+    zeal.pop   = 0.0f;
+    if (n < Config::Skill::ZEAL_SHOW_AT) return;   // un par de golpes sueltos no es una racha
+    zeal.end_count = n;
+    zeal.end_t = Config::Skill::ZEAL_END_SHOW;
+    if (broken) {
+        zeal.end_payout = -1;
+        SDL_Log("Zeal: racha ROTA por un golpe (%d, grado %d)", n, tier);
+        return;
+    }
+    int pay = std::min(Config::Skill::ZEAL_PAYOUT_MAX, n / Config::Skill::ZEAL_PAYOUT_PER);
+    // El tutorial no regala moneda meta (ni puede cerrar por su cuenta el paso de la ofrenda)
+    if (tutorial.active) pay = 0;
+    zeal.end_payout = pay;
+    if (pay > 0 && player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        // Las ofrendas SALEN del profeta en corona y el iman las recoge al momento: se ven
+        // llegar al contador del HUD, que es lo que hace que una racha larga se sienta cobrada.
+        const Vec2 pp = world.transforms[player.entity].position;
+        for (int i = 0; i < pay; i++) {
+            const f32 a = 6.2831853f * (static_cast<f32>(i) + 0.5f) / static_cast<f32>(pay);
+            spawn_pickup(world, pp + Vec2{std::cos(a) * 14.0f, std::sin(a) * 9.0f - 4.0f},
+                         ItemComponent::Pickup::Offering, 1.0f);
+        }
+        spawn_fx(world, pp, FxID::Holy, {255, 226, 150, 230}, 34.0f, 0.5f, 11);
+        audio.play_sfx(SfxID::FaithGain, 0.85f);
+    }
+    SDL_Log("Zeal: racha cerrada LIMPIA (%d, grado %d) -> +%d ofrendas", n, tier, pay);
+}
+
+void Engine::on_perfect_dodge() {
+    dodge_latched = true;
+    run_perfect_dodges++;
+    slowmo_t = Config::Skill::DODGE_SLOWMO;
+    world.next_crit = true;
+    faith.modify(Config::Skill::DODGE_FAITH);
+    faith.reset_inactivity();
+    world_flash = std::max(world_flash, Config::Skill::DODGE_FLASH);
+    if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+        const Vec2 pp = world.transforms[player.entity].position;
+        // El dash vuelve en el acto: la esquiva perfecta se ENCADENA, es lo que la hace un arte
+        if (world.has(player.entity, Component::Movement)) world.movements[player.entity].dash_cooldown = 0.0f;
+        if (world.popups.size() < 24)
+            world.popups.push_back({pp + Vec2{0, -16}, 0.0f, 0.0f, false, ECSWorld::DamagePopup::Dodge});
+        if (world.popups.size() < 24)
+            world.popups.push_back({pp + Vec2{10, -6}, Config::Skill::DODGE_FAITH, 0.0f, false,
+                                    ECSWorld::DamagePopup::Faith});
+        spawn_fx(world, pp, FxID::Ring, {255, 248, 225, 240}, 44.0f, 0.38f, 11);
+        spawn_particles(world, pp, {255, 240, 200, 255}, 16, 95.0f, 0.45f);
+    }
+    audio.play_sfx(SfxID::MiracleCastLight, 0.75f);
+    audio.play_sfx(SfxID::DashWoosh, 0.55f);
+    audio.duck_music(0.55f);
+    input.rumble(0.45f, 110);
+    zeal_add(Config::Skill::DODGE_ZEAL, 0);
+    SDL_Log("Perfect dodge #%d: camara lenta, dash recargado, proximo tiro critico", run_perfect_dodges);
+}
+
+void Engine::update_skill(f32 dt) {
+    // Criticos de este frame: un golpe que suena y se siente distinto
+    if (world.crits > 0) {
+        run_crits += static_cast<int>(world.crits);
+        audio.play_sfx(SfxID::CriticalHit, 0.5f);
+        renderer.shake_camera(Config::Feel::SHAKE_BOSS_HIT);
+        input.rumble(0.35f, 70);
+        world.crits = 0;
+    }
+    // Esquiva perfecta: UNA por dash. El cerrojo se suelta cuando el impulso termina.
+    if (!world.player_dashing()) dodge_latched = false;
+    if (world.perfect_dodges > 0) {
+        world.perfect_dodges = 0;
+        if (!dodge_latched) on_perfect_dodge();
+    }
+    // Celo: un golpe recibido la ROMPE (sin paga); lo que entre en el mismo frame ya abre otra
+    if (combat_events.player_hits > 0 && zeal.count > 0) zeal_close(true);
+    const int hits  = static_cast<int>(world.zeal_hits);
+    const int kills = static_cast<int>(world.zeal_kills);
+    world.zeal_hits = 0;
+    world.zeal_kills = 0;
+    zeal_add(hits, kills);
+    if (zeal.count > 0) {
+        zeal.timer -= dt;
+        if (zeal.timer <= 0.0f) zeal_close(false);
+    }
+    zeal.pop        = std::max(0.0f, zeal.pop - dt * 4.0f);
+    zeal.tier_flash = std::max(0.0f, zeal.tier_flash - dt * 1.4f);
+    if (zeal.end_t > 0.0f) zeal.end_t = std::max(0.0f, zeal.end_t - dt);
+    // Para el paso siguiente: lo que el grado de Celo le da a los tiros
+    world.zeal_dmg_mult = Config::Skill::ZEAL_DMG[zeal.tier];
+    world.crit_chance   = Config::Skill::CRIT_BASE + Config::Skill::CRIT_PER_TIER * static_cast<f32>(zeal.tier);
+}
+
 void Engine::bank_offerings(int amount, bool from_pickup) {
     if (amount <= 0) return;
     progression.add_offerings(amount);
@@ -6020,6 +6222,7 @@ bool Autoplay::load(const char* path) {
         else if (c.op == "tutorialask") { }                    // abre la pregunta de Nueva Partida
         else if (c.op == "escena") { ss >> c.num >> c.num2; }  // Scene::* + 1 = avanza sola
         else if (c.op == "spawn") { ss >> c.num >> c.num2; }    // EnemyType + cuantos
+        else if (c.op == "dodgetest") { }                      // un proyectil hostil encima del profeta
         else if (c.op == "give")  { ss >> c.num; }              // id de objeto (items.h)
         else if (c.op == "learn") { ss >> c.num >> c.num2; }    // id de milagro + slot
         else if (c.op == "faith") { ss >> c.num; }              // fijar la fe actual
@@ -6802,6 +7005,19 @@ void Engine::update_autoplay(f32 dt) {
             // Depuracion: sembrar enemigos de un tipo concreto alrededor del jugador.
             // Sin esto, comprobar una conducta del Acto II depende de que el capitulo
             // la sortee (los cuatro tipos se reparten al azar por sala).
+            // Destreza: un proyectil HOSTIL nace encima del profeta y va hacia el. Con `press
+            // dash` en el MISMO tick es una esquiva perfecta segura; sin el, es un golpe
+            // recibido (el control negativo). Es la unica forma de probar la ventana de 0,15 s
+            // del dash sin fiarlo a la punteria de un arquero.
+            if (c.op == "dodgetest") {
+                if (player.entity != ENTITY_NONE && world.has(player.entity, Component::Transform)) {
+                    const Vec2 p = world.transforms[player.entity].position;
+                    spawn_projectile(world, p + Vec2{0, -4.0f}, {0, 1}, 6.0f, false, ProjectileKind::Arrow);
+                    SDL_Log("Autoplay: dodgetest (proyectil hostil sobre el profeta, dashing=%d)",
+                            world.player_dashing() ? 1 : 0);
+                }
+                continue;
+            }
             if (c.op == "spawn") {
                 u32 t = static_cast<u32>(std::max(0.0f, c.num));
                 int n = std::max(1, static_cast<int>(c.num2));
@@ -6926,6 +7142,11 @@ void Engine::update_autoplay(f32 dt) {
                         player.active_slot_count, loadout.c_str(), player.miracle_haste,
                         relic ? relic->name : "-", faith.floor_value, player.miracle_power,
                         faith.current, owned.empty() ? "-" : owned.c_str());
+                // Destreza (Config::Skill): la mejor racha, las esquivas perfectas y los
+                // criticos del intento, y la racha en curso. Gate de destreza_check.
+                SDL_Log("SKILL %s | racha %d (grado %d) | mejor racha %d | esquivas perfectas %d | criticos %d",
+                        c.arg.empty() ? "-" : c.arg.c_str(), zeal.count, zeal.tier, run_best_zeal,
+                        run_perfect_dodges, run_crits);
                 // Tercera linea (2026-10-03): la alforja, los dones del Santuario que quedan y
                 // las cifras que lo comprado cambia. Es el gate de santuario_check / alforja_check.
                 std::string belt;

@@ -224,6 +224,33 @@ struct Engine {
     // El contador de ofrendas del HUD: salta y dice "+N" al ingresar
     f32  offering_pop = 0.0f;
     int  offering_pop_amount = 0;
+
+    // ---- Destreza (Config::Skill, 2026-11-10) -----------------------------------------
+    // CELO: la racha de golpes y bajas encadenados sin que te toquen. Solo corre en Playing
+    // (un dialogo o una carta la congelan, no la enfrian) y no viaja entre capitulos.
+    struct Zeal {
+        int  count = 0;          // golpes + bajas de la racha en curso
+        f32  timer = 0.0f;       // lo que queda de ventana antes de que se cierre
+        int  tier  = 0;          // 0..Config::Skill::ZEAL_TIERS
+        f32  pop   = 0.0f;       // latido del contador al sumar (1 -> 0)
+        f32  tier_flash = 0.0f;  // destello del rotulo al SUBIR de grado (1 -> 0)
+        // El rotulo de cierre: "+N ofrendas" si se enfrio limpia, "Racha perdida" si te
+        // tocaron. `end_payout` -1 = rota.
+        f32  end_t = 0.0f;
+        int  end_count = 0;
+        int  end_payout = 0;
+    };
+    Zeal zeal;
+    int  run_best_zeal = 0;          // la mejor racha del intento (stats / log)
+    int  run_perfect_dodges = 0;     // esquivas perfectas del intento (stats / log)
+    int  run_crits = 0;              // criticos del intento (stats / log)
+    f32  slowmo_t = 0.0f;            // camara lenta de la esquiva perfecta (s reales)
+    bool dodge_latched = false;      // una esquiva perfecta por dash, no una por frame
+    void zeal_add(int hits, int kills);
+    void zeal_close(bool broken);    // se enfria (paga) o se rompe (no paga)
+    void zeal_reset();               // capitulo nuevo / reintento / tutorial: a cero sin rotulo
+    void on_perfect_dodge();
+    void update_skill(f32 dt);       // lo de arriba, una vez por paso de Playing
     f32  belt_full_cd = 0.0f;       // aviso "alforja llena" (uno cada 3 s como mucho)
     // La ficha de "objeto obtenido" del HUD (HUD::draw_pickup_card)
     int         pickup_icon = -1;

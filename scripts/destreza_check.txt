@@ -1,0 +1,65 @@
+# DESTREZA (Config::Skill, 2026-11-10): Celo (la racha), criticos y esquiva perfecta.
+#
+# Uso:  MANTLE --script scripts/destreza_check.txt --shots <dir>
+#
+# Gates (del LOG, no de las capturas):
+#   1. "Perfect dodge #1" tras `press dash` + `dodgetest` en el MISMO tick, y la linea
+#      SKILL "esquiva" con esquivas perfectas 1.
+#   2. Control negativo: `dodgetest` SIN dash no da esquiva (SKILL "golpe" sigue con 1) y,
+#      si habia racha, sale "Zeal: racha ROTA".
+#   3. "Zeal: grado 1 (Fervor)" al pasar de 10 en la pelea contra la tanda grande.
+#   4. "Zeal: racha cerrada LIMPIA (... ) -> +N ofrendas" al enfriarse la racha, y la
+#      SKILL "cierre" con racha 0 y mejor racha > 0.
+#   5. criticos > 0 en la SKILL final (un tiro de cada ~15 con la racha a cero, mas con ella).
+# Capturas: 01 el "¡ESQUIVA!" en camara lenta, 02 el contador de racha, 03 el rotulo de cierre.
+
+defaults
+metareset
+
+# --- Arranque: menu -> prologo -> carta cap 1 -> juego (igual que feel_baseline) ---
+wait 1.0
+press confirm
+wait 3.0
+press confirm
+wait 3.0
+press confirm
+wait 1.5
+
+say ---- 1: esquiva perfecta ----
+killall
+wait 0.6
+stats antes
+press dash
+dodgetest
+wait 0.12
+shot 01_esquiva
+wait 0.1
+wait 0.8
+stats esquiva
+
+say ---- 2: control negativo: sin dash es un golpe ----
+wait 1.5
+dodgetest
+wait 0.4
+stats golpe
+
+say ---- 3: racha contra una tanda grande ----
+wait 1.5
+spawn 0 8
+wait 0.3
+bot 6
+shot 02_racha
+wait 0.1
+bot 14
+stats racha
+wait 0.4
+shot 03_cierre_previo
+wait 0.1
+
+say ---- 4: se enfria y cobra ----
+wait 3.6
+shot 04_cierre
+wait 0.1
+wait 1.0
+stats cierre
+quit
